@@ -18,6 +18,21 @@ This skill contains **no behavioral logic**. It exists solely as a structured li
 | `references/execution/` | Status transitions, child process contracts, run report format | Both executors |
 | `references/project/` | `project.yaml` contract | All four workflow skills |
 
+## Schema Version
+
+**Current: schema_version: 2**
+
+The quest planning family uses integer schema versioning. All skills reference the current version from this central declaration.
+
+| Version | Changes |
+|---------|---------|
+| 1 | Initial schema. workflow is Required Core in both manifest and quest contract, assigned by the cartographer. |
+| 2 | workflow moves from Required Core to Downstream-Stamped. Tacticians and quick stamp workflow in the manifest on first contact. Cartographer produces workflow-agnostic quest contracts. v1 campaigns remain valid; pre-existing workflow values are treated as informational. |
+
+Skills should check schema_version when parsing campaign artifacts and handle both v1 and v2 gracefully.
+
+The declaration must be prominent and unambiguous -- any skill reading quest-core will see the current version immediately after the reference table.
+
 ## Five-Skill Family
 
 | Skill | Role | Reads From Core |

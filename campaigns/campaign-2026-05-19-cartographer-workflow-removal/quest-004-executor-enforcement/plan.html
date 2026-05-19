@@ -1,0 +1,442 @@
+<!--
+---
+plan_id: "p004"
+quest_id: "q004"
+campaign_id: "camp-2026-05-19-cartographer-workflow-removal"
+title: "Executor Campaign-Level Workflow Enforcement"
+workflow: "general"
+difficulty: "easy"
+difficulty_rationale: "Two parallel steps with nearly identical changes in two executor files, both Tier 1 command-verifiable."
+readiness: "ready"
+scout_summary: |
+  Files read:
+  - liang-quest-general-executor/SKILL.md (355 lines): Already campaign-level — reads manifest, builds dependency-ordered queue from status: planned quests. Campaign Intake (Step 5) has NO workflow filtering. Processes all planned quests regardless of workflow tag. Has Tactician Pre-Flight Gate (Step 3) that checks quests are planned and plan.html exists, but does not inspect workflow.
+  - liang-quest-tdd-executor/SKILL.md (559 lines): Same pattern — already campaign-level. Campaign Intake (Step 6) builds queue from status: planned quests with NO workflow filtering. Has identical Tactician Pre-Flight Gate structure.
+
+  Patterns observed:
+  - Both executors share the same Campaign Intake structure: read manifest, collect planned quests, sort by dependency, show table, confirm.
+  - The general executor's queue-building is in Step 5.2: "Collect all quests with status: planned. Sort by dependency order."
+  - The TDD executor's queue-building is in Step 6.2: "Collect all quests with status: planned. Sort by dependency order."
+  - Neither executor currently reads or checks the workflow field at all.
+  - Both have a Boundary about not mutating manifest fields outside their authority — the enforcement is read-only (filtering + error reporting), not a manifest mutation.
+
+  Integration with q002: After q002, tacticians stamp workflow in the manifest. Executors read this stamp to decide which quests to process. The three states: matching workflow (process), mismatched workflow (hard-block + report), absent workflow (distinct error).
+created_at: "2026-05-19T22:50:00+08:00"
+schema_version: 1
+
+steps:
+  - id: "s01"
+    name: "Add workflow enforcement to general executor"
+    description: "Add workflow filtering, mismatch hard-blocking, and planned-but-untagged detection to liang-quest-general-executor/SKILL.md's Campaign Intake section."
+    files: ["liang-quest-general-executor/SKILL.md"]
+    instructions: |
+      Edit liang-quest-general-executor/SKILL.md:
+
+      1. In the Core Contract section (around lines 17-30), add a new bullet:
+         - **Workflow enforcement:** Only process quests with `workflow: "general"` in the manifest. Hard-block and report quests with a mismatched workflow tag. Flag quests that are `planned` but have no workflow tag as a distinct error category.
+
+      2. In Step 5 (Campaign Intake), substep 2 (Build the queue, around line 113):
+
+         Current text: "**Build the queue** — Collect all quests with `status: planned`. Sort by dependency order."
+
+         Replace with:
+         **Build the queue** — Read all quests from the manifest. For each quest with `status: planned`, check the `workflow` field:
+
+         - **`workflow: "general"`** — Add to the execution queue. This executor processes this quest.
+         - **`workflow` is present but not `"general"`** (e.g., `"tdd"`, `"quick"`) — **Hard-block.** Do not add to the queue. Report: "Quest <quest-id> has workflow: <value>, expected: general. Skipping — this quest belongs to a different executor."
+         - **`workflow` is absent or empty** (planned but untagged) — **Distinct error.** Do not add to the queue. Report: "Quest <quest-id> is planned but has no workflow tag. This indicates the tactician did not stamp workflow. Run the tactician on this campaign to stamp workflow before executing."
+
+         Sort the eligible quests by dependency order.
+
+         Display a summary of enforcement results before the queue table:
+         - Eligible: N quests with workflow: general
+         - Skipped (wrong workflow): N quests (list IDs)
+         - Error (untagged): N quests (list IDs)
+
+      3. In Step 5, substep 3 (Show the queue), add a `workflow` column to the queue table.
+
+      4. In the Boundaries section, add a new boundary:
+         **Process quests with workflow other than "general".** This executor only handles general workflow quests. TDD quests belong to liang-quest-tdd-executor; quick quests belong to liang-quest-quick.
+
+      5. In the Failure Modes section, add two new entries:
+         - **Workflow mismatch detected:** Hard-block the mismatched quest. Report which executor should handle it. Continue processing eligible quests.
+         - **Planned but untagged quest detected:** Report the error with guidance to run the tactician. Continue processing eligible quests.
+    preconditions:
+      - "liang-quest-general-executor/SKILL.md exists"
+      - "SKILL.md Campaign Intake (Step 5) collects all planned quests without workflow filtering"
+    postconditions:
+      - "SKILL.md Campaign Intake filters quests by workflow: general"
+      - "SKILL.md contains hard-block logic for workflow mismatches"
+      - "SKILL.md contains distinct error handling for planned-but-untagged quests"
+      - "SKILL.md Core Contract declares workflow enforcement responsibility"
+    verification_tier: 1
+    verification_command: "grep -q \"workflow.*general\" liang-quest-general-executor/SKILL.md && grep -q \"Hard-block\" liang-quest-general-executor/SKILL.md && grep -q \"untagged\" liang-quest-general-executor/SKILL.md && grep -q \"Workflow enforcement\" liang-quest-general-executor/SKILL.md"
+    acceptance_criteria:
+      - "Campaign Intake filters quests by workflow: general"
+      - "Workflow mismatch produces a hard-block with report naming the correct executor"
+      - "Planned-but-untagged quests produce a distinct error recommending the tactician"
+      - "The two error categories are clearly distinguishable in the SKILL.md text"
+
+  - id: "s02"
+    name: "Add workflow enforcement to TDD executor"
+    description: "Add workflow filtering, mismatch hard-blocking, and planned-but-untagged detection to liang-quest-tdd-executor/SKILL.md's Campaign Intake section."
+    files: ["liang-quest-tdd-executor/SKILL.md"]
+    instructions: |
+      Edit liang-quest-tdd-executor/SKILL.md:
+
+      1. In the Core Contract section (around lines 13-25), add a new bullet:
+         - **Workflow enforcement:** Only process quests with `workflow: "tdd"` in the manifest. Hard-block and report quests with a mismatched workflow tag. Flag quests that are `planned` but have no workflow tag as a distinct error category.
+
+      2. In Step 6 (Campaign Intake), substep 2 (Build the queue, around line 137):
+
+         Current text: "**Build the queue** — Collect all quests with `status: planned`. Sort by dependency order: quests whose dependencies are all `passed` (or have no dependencies) come first."
+
+         Replace with:
+         **Build the queue** — Read all quests from the manifest. For each quest with `status: planned`, check the `workflow` field:
+
+         - **`workflow: "tdd"`** — Add to the execution queue. This executor processes this quest.
+         - **`workflow` is present but not `"tdd"`** (e.g., `"general"`, `"quick"`) — **Hard-block.** Do not add to the queue. Report: "Quest <quest-id> has workflow: <value>, expected: tdd. Skipping — this quest belongs to a different executor."
+         - **`workflow` is absent or empty** (planned but untagged) — **Distinct error.** Do not add to the queue. Report: "Quest <quest-id> is planned but has no workflow tag. This indicates the tactician did not stamp workflow. Run the tactician on this campaign to stamp workflow before executing."
+
+         Sort the eligible quests by dependency order: quests whose dependencies are all `passed` (or have no dependencies) come first.
+
+         Display a summary of enforcement results before the queue table:
+         - Eligible: N quests with workflow: tdd
+         - Skipped (wrong workflow): N quests (list IDs)
+         - Error (untagged): N quests (list IDs)
+
+      3. In Step 6, substep 3 (Show the queue), add a `workflow` column to the queue table.
+
+      4. In the Boundaries section, add a new boundary:
+         **Process quests with workflow other than "tdd".** This executor only handles TDD workflow quests. General quests belong to liang-quest-general-executor; quick quests belong to liang-quest-quick.
+
+      5. In the Failure Modes section, add two new entries:
+         - **Workflow mismatch detected:** Hard-block the mismatched quest. Report which executor should handle it. Continue processing eligible quests.
+         - **Planned but untagged quest detected:** Report the error with guidance to run the tactician. Continue processing eligible quests.
+    preconditions:
+      - "liang-quest-tdd-executor/SKILL.md exists"
+      - "SKILL.md Campaign Intake (Step 6) collects all planned quests without workflow filtering"
+    postconditions:
+      - "SKILL.md Campaign Intake filters quests by workflow: tdd"
+      - "SKILL.md contains hard-block logic for workflow mismatches"
+      - "SKILL.md contains distinct error handling for planned-but-untagged quests"
+      - "SKILL.md Core Contract declares workflow enforcement responsibility"
+    verification_tier: 1
+    verification_command: "grep -q \"workflow.*tdd\" liang-quest-tdd-executor/SKILL.md && grep -q \"Hard-block\" liang-quest-tdd-executor/SKILL.md && grep -q \"untagged\" liang-quest-tdd-executor/SKILL.md && grep -q \"Workflow enforcement\" liang-quest-tdd-executor/SKILL.md"
+    acceptance_criteria:
+      - "Campaign Intake filters quests by workflow: tdd"
+      - "Workflow mismatch produces a hard-block with report naming the correct executor"
+      - "Planned-but-untagged quests produce a distinct error recommending the tactician"
+      - "The two error categories are clearly distinguishable in the SKILL.md text"
+---
+-->
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>p004 &mdash; Executor Campaign-Level Workflow Enforcement</title>
+  <style>
+    :root {
+      --bg: #f6f1e8;
+      --paper: #fffaf0;
+      --paper-2: #fffdf8;
+      --ink: #252338;
+      --muted: #6f6984;
+      --line: rgba(45, 40, 70, 0.14);
+      --deep: #17182e;
+      --deep-2: #232245;
+      --gold: #d6a84f;
+      --gold-2: #f3d58b;
+      --blue: #4b7bd8;
+      --violet: #7b5cc8;
+      --danger: #b85757;
+      --ok: #3f8f6b;
+      --warn: #b8872c;
+      --shadow: 0 18px 50px rgba(31, 27, 49, 0.12);
+      --radius: 18px;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      background:
+        radial-gradient(circle at top left, rgba(214, 168, 79, 0.18), transparent 30rem),
+        radial-gradient(circle at top right, rgba(75, 123, 216, 0.16), transparent 28rem),
+        var(--bg);
+      color: var(--ink);
+      font: 16px/1.65 ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    .page { width: min(1120px, calc(100% - 32px)); margin: 0 auto; padding: 32px 0 56px; }
+
+    .hero {
+      position: relative; overflow: hidden; border-radius: 28px; padding: 34px;
+      background: linear-gradient(135deg, rgba(214,168,79,0.16), transparent 28%), linear-gradient(145deg, var(--deep), var(--deep-2));
+      color: #fff8e8; box-shadow: var(--shadow);
+    }
+
+    .eyebrow { margin: 0 0 10px; color: var(--gold-2); font-size: 0.8rem; font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase; }
+    h1, h2, h3 { margin: 0; line-height: 1.2; }
+    h1 { font-size: clamp(1.8rem, 3.5vw, 3.2rem); letter-spacing: -0.04em; }
+
+    .subtitle { max-width: 780px; margin: 14px 0 0; color: rgba(255, 248, 232, 0.82); font-size: 1.05rem; }
+
+    .meta-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-top: 22px; }
+    .meta-card { padding: 14px 16px; border: 1px solid rgba(255,255,255,0.14); border-radius: 16px; background: rgba(255,255,255,0.07); backdrop-filter: blur(8px); }
+    .meta-label { display: block; color: rgba(255,248,232,0.62); font-size: 0.72rem; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; }
+    .meta-value { display: block; margin-top: 4px; font-weight: 800; }
+
+    .section { margin-top: 24px; }
+    .section-title { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin: 34px 0 14px; }
+    .section-title h2 { font-size: 1.45rem; letter-spacing: -0.02em; }
+
+    .card {
+      padding: 22px; margin-bottom: 16px;
+      border: 1px solid var(--line); border-radius: var(--radius);
+      background: linear-gradient(180deg, var(--paper-2), var(--paper));
+      box-shadow: 0 12px 28px rgba(31, 27, 49, 0.07);
+    }
+
+    .card h3 { margin-bottom: 10px; color: var(--deep-2); font-size: 1.05rem; }
+
+    .tier-badge {
+      display: inline-flex; padding: 4px 10px; border-radius: 999px;
+      font-size: 0.75rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em;
+    }
+    .tier-badge.command { background: rgba(63, 143, 107, 0.13); color: #2d6d52; }
+    .tier-badge.checklist { background: rgba(184, 135, 44, 0.15); color: #805d1d; }
+
+    .conditions { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 12px 0; }
+    .conditions-col { padding: 10px 12px; border-radius: 12px; background: rgba(23,24,46,0.04); font-size: 0.88rem; }
+    .conditions-col strong { display: block; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin-bottom: 6px; }
+    .conditions-col ul { margin: 0; padding-left: 1.1rem; }
+    .conditions-col li { margin-bottom: 4px; }
+
+    .criteria { margin: 10px 0 0; padding: 10px 12px; border-radius: 12px; border-left: 4px solid var(--gold); background: rgba(214,168,79,0.06); font-size: 0.88rem; }
+    .criteria strong { display: block; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin-bottom: 6px; }
+
+    .instructions { margin: 10px 0; padding: 14px; border-radius: 12px; background: rgba(23,24,46,0.05); font-size: 0.88rem; white-space: pre-wrap; font-family: ui-monospace, monospace; }
+
+    details { border: 1px solid var(--line); border-radius: 14px; background: rgba(255,255,255,0.66); margin: 10px 0; overflow: hidden; }
+    summary { cursor: pointer; padding: 14px 16px; font-weight: 850; color: var(--deep-2); background: rgba(23,24,46,0.045); }
+    .details-body { padding: 14px 16px 18px; }
+
+    .footer { margin-top: 34px; padding: 20px 0 0; color: var(--muted); font-size: 0.9rem; text-align: center; }
+
+    @media (max-width: 860px) { .meta-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .conditions { grid-template-columns: 1fr; } }
+    @media (max-width: 560px) { .page { width: min(100% - 20px, 1120px); padding-top: 16px; } .hero { padding: 24px; border-radius: 22px; } .meta-grid { grid-template-columns: 1fr; } }
+    @media print { body { background: #fff; } .page { width: 100%; padding: 0; } .hero, .card { box-shadow: none; } }
+  </style>
+</head>
+<body>
+  <main class="page">
+
+    <header class="hero">
+      <p class="eyebrow">General Quest Plan</p>
+      <h1>Executor Campaign-Level Workflow Enforcement</h1>
+      <p class="subtitle">Two parallel steps with nearly identical changes in two executor files, both Tier 1 command-verifiable.</p>
+
+      <section class="meta-grid">
+        <div class="meta-card">
+          <span class="meta-label">Difficulty</span>
+          <span class="meta-value">Easy</span>
+        </div>
+        <div class="meta-card">
+          <span class="meta-label">Steps</span>
+          <span class="meta-value">2</span>
+        </div>
+        <div class="meta-card">
+          <span class="meta-label">Verification</span>
+          <span class="meta-value">2 Command / 0 Checklist</span>
+        </div>
+        <div class="meta-card">
+          <span class="meta-label">Readiness</span>
+          <span class="meta-value">Ready</span>
+        </div>
+      </section>
+    </header>
+
+    <!-- Scout Summary -->
+    <section class="section">
+      <details>
+        <summary>Scout Summary</summary>
+        <div class="details-body">
+          <p><strong>Files read:</strong></p>
+          <ul>
+            <li><code>liang-quest-general-executor/SKILL.md</code> (355 lines): Already campaign-level. Campaign Intake (Step 5) builds queue from <code>status: planned</code> with NO workflow filtering.</li>
+            <li><code>liang-quest-tdd-executor/SKILL.md</code> (559 lines): Same pattern &mdash; campaign-level, no workflow filtering in Campaign Intake (Step 6).</li>
+          </ul>
+          <p><strong>Pattern:</strong> Both executors share identical Campaign Intake structure: read manifest, collect planned quests, sort by dependency, show table, confirm. The workflow enforcement inserts a filtering + error-reporting layer into the queue-building step.</p>
+          <p><strong>Three-state model:</strong> workflow matches (process), workflow mismatches (hard-block + report), workflow absent (distinct error). Hard-block is per-quest, not per-campaign.</p>
+        </div>
+      </details>
+    </section>
+
+    <!-- Steps -->
+    <section class="section">
+      <div class="section-title">
+        <h2>Execution Steps</h2>
+      </div>
+
+      <article class="card">
+        <h3>
+          <span style="color: var(--muted); font-size: 0.8em;">s01</span>
+          Add workflow enforcement to general executor
+          <span class="tier-badge command">Tier 1: Command</span>
+        </h3>
+        <p>Add workflow filtering, mismatch hard-blocking, and planned-but-untagged detection to <code>liang-quest-general-executor/SKILL.md</code>&rsquo;s Campaign Intake section.</p>
+        <p style="font-size: 0.85rem; color: var(--muted);">Files: <code>liang-quest-general-executor/SKILL.md</code></p>
+
+        <div class="conditions">
+          <div class="conditions-col">
+            <strong>Preconditions</strong>
+            <ul>
+              <li>liang-quest-general-executor/SKILL.md exists</li>
+              <li>Campaign Intake collects all planned quests without workflow filtering</li>
+            </ul>
+          </div>
+          <div class="conditions-col">
+            <strong>Postconditions</strong>
+            <ul>
+              <li>Campaign Intake filters quests by workflow: general</li>
+              <li>SKILL.md contains hard-block logic for workflow mismatches</li>
+              <li>SKILL.md contains distinct error handling for planned-but-untagged quests</li>
+              <li>Core Contract declares workflow enforcement responsibility</li>
+            </ul>
+          </div>
+        </div>
+
+        <details>
+          <summary>Implementation Instructions</summary>
+          <div class="details-body">
+            <div class="instructions">Edit liang-quest-general-executor/SKILL.md:
+
+1. In the Core Contract section (around lines 17-30), add a new bullet:
+   - **Workflow enforcement:** Only process quests with workflow: &quot;general&quot; in the manifest. Hard-block and report quests with a mismatched workflow tag. Flag quests that are planned but have no workflow tag as a distinct error category.
+
+2. In Step 5 (Campaign Intake), substep 2 (Build the queue, around line 113):
+
+   Current: &quot;**Build the queue** -- Collect all quests with status: planned. Sort by dependency order.&quot;
+
+   Replace with:
+   **Build the queue** -- Read all quests from the manifest. For each quest with status: planned, check the workflow field:
+
+   - **workflow: &quot;general&quot;** -- Add to the execution queue.
+   - **workflow is present but not &quot;general&quot;** (e.g., &quot;tdd&quot;, &quot;quick&quot;) -- **Hard-block.** Do not add to the queue. Report: &quot;Quest &lt;quest-id&gt; has workflow: &lt;value&gt;, expected: general. Skipping -- this quest belongs to a different executor.&quot;
+   - **workflow is absent or empty** (planned but untagged) -- **Distinct error.** Do not add to the queue. Report: &quot;Quest &lt;quest-id&gt; is planned but has no workflow tag. This indicates the tactician did not stamp workflow. Run the tactician on this campaign to stamp workflow before executing.&quot;
+
+   Sort the eligible quests by dependency order.
+
+   Display a summary of enforcement results before the queue table:
+   - Eligible: N quests with workflow: general
+   - Skipped (wrong workflow): N quests (list IDs)
+   - Error (untagged): N quests (list IDs)
+
+3. In Step 5, substep 3 (Show the queue), add a workflow column to the queue table.
+
+4. In the Boundaries section, add a new boundary:
+   **Process quests with workflow other than &quot;general&quot;.** This executor only handles general workflow quests. TDD quests belong to liang-quest-tdd-executor; quick quests belong to liang-quest-quick.
+
+5. In the Failure Modes section, add two entries:
+   - **Workflow mismatch detected:** Hard-block the mismatched quest. Report which executor should handle it. Continue processing eligible quests.
+   - **Planned but untagged quest detected:** Report the error with guidance to run the tactician. Continue processing eligible quests.</div>
+          </div>
+        </details>
+
+        <div class="criteria">
+          <strong>Acceptance Criteria</strong>
+          <ul>
+            <li>Campaign Intake filters quests by workflow: general</li>
+            <li>Workflow mismatch produces a hard-block with report naming the correct executor</li>
+            <li>Planned-but-untagged quests produce a distinct error recommending the tactician</li>
+            <li>The two error categories are clearly distinguishable</li>
+          </ul>
+        </div>
+      </article>
+
+      <article class="card">
+        <h3>
+          <span style="color: var(--muted); font-size: 0.8em;">s02</span>
+          Add workflow enforcement to TDD executor
+          <span class="tier-badge command">Tier 1: Command</span>
+        </h3>
+        <p>Add workflow filtering, mismatch hard-blocking, and planned-but-untagged detection to <code>liang-quest-tdd-executor/SKILL.md</code>&rsquo;s Campaign Intake section.</p>
+        <p style="font-size: 0.85rem; color: var(--muted);">Files: <code>liang-quest-tdd-executor/SKILL.md</code></p>
+
+        <div class="conditions">
+          <div class="conditions-col">
+            <strong>Preconditions</strong>
+            <ul>
+              <li>liang-quest-tdd-executor/SKILL.md exists</li>
+              <li>Campaign Intake collects all planned quests without workflow filtering</li>
+            </ul>
+          </div>
+          <div class="conditions-col">
+            <strong>Postconditions</strong>
+            <ul>
+              <li>Campaign Intake filters quests by workflow: tdd</li>
+              <li>SKILL.md contains hard-block logic for workflow mismatches</li>
+              <li>SKILL.md contains distinct error handling for planned-but-untagged quests</li>
+              <li>Core Contract declares workflow enforcement responsibility</li>
+            </ul>
+          </div>
+        </div>
+
+        <details>
+          <summary>Implementation Instructions</summary>
+          <div class="details-body">
+            <div class="instructions">Edit liang-quest-tdd-executor/SKILL.md:
+
+1. In the Core Contract section (around lines 13-25), add a new bullet:
+   - **Workflow enforcement:** Only process quests with workflow: &quot;tdd&quot; in the manifest. Hard-block and report quests with a mismatched workflow tag. Flag quests that are planned but have no workflow tag as a distinct error category.
+
+2. In Step 6 (Campaign Intake), substep 2 (Build the queue, around line 137):
+
+   Current: &quot;**Build the queue** -- Collect all quests with status: planned. Sort by dependency order: quests whose dependencies are all passed (or have no dependencies) come first.&quot;
+
+   Replace with:
+   **Build the queue** -- Read all quests from the manifest. For each quest with status: planned, check the workflow field:
+
+   - **workflow: &quot;tdd&quot;** -- Add to the execution queue.
+   - **workflow is present but not &quot;tdd&quot;** (e.g., &quot;general&quot;, &quot;quick&quot;) -- **Hard-block.** Do not add to the queue. Report: &quot;Quest &lt;quest-id&gt; has workflow: &lt;value&gt;, expected: tdd. Skipping -- this quest belongs to a different executor.&quot;
+   - **workflow is absent or empty** (planned but untagged) -- **Distinct error.** Do not add to the queue. Report: &quot;Quest &lt;quest-id&gt; is planned but has no workflow tag. This indicates the tactician did not stamp workflow. Run the tactician on this campaign to stamp workflow before executing.&quot;
+
+   Sort the eligible quests by dependency order: quests whose dependencies are all passed (or have no dependencies) come first.
+
+   Display a summary of enforcement results before the queue table:
+   - Eligible: N quests with workflow: tdd
+   - Skipped (wrong workflow): N quests (list IDs)
+   - Error (untagged): N quests (list IDs)
+
+3. In Step 6, substep 3 (Show the queue), add a workflow column to the queue table.
+
+4. In the Boundaries section, add a new boundary:
+   **Process quests with workflow other than &quot;tdd&quot;.** This executor only handles TDD workflow quests. General quests belong to liang-quest-general-executor; quick quests belong to liang-quest-quick.
+
+5. In the Failure Modes section, add two entries:
+   - **Workflow mismatch detected:** Hard-block the mismatched quest. Report which executor should handle it. Continue processing eligible quests.
+   - **Planned but untagged quest detected:** Report the error with guidance to run the tactician. Continue processing eligible quests.</div>
+          </div>
+        </details>
+
+        <div class="criteria">
+          <strong>Acceptance Criteria</strong>
+          <ul>
+            <li>Campaign Intake filters quests by workflow: tdd</li>
+            <li>Workflow mismatch produces a hard-block with report naming the correct executor</li>
+            <li>Planned-but-untagged quests produce a distinct error recommending the tactician</li>
+            <li>The two error categories are clearly distinguishable</li>
+          </ul>
+        </div>
+      </article>
+
+    </section>
+
+    <footer class="footer">
+      Generated by liang-quest-general-tactician &middot; 2026-05-19T22:50:00+08:00
+    </footer>
+  </main>
+</body>
+</html>

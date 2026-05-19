@@ -63,7 +63,7 @@ quests[]:
   completed_at: string        # ISO 8601; set on passed/failed/skipped transition
 ```
 
-All other manifest fields (id, title, path, priority, readiness, depends_on, workflow, tags, notes) are read-only to executors.
+All other manifest fields (id, title, path, priority, readiness, depends_on, tags, notes) are read-only to executors.
 
 ## Cascade Skip
 

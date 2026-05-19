@@ -1,0 +1,9 @@
+step_id: "s01"
+workflow: "general"
+status: "passed"
+verification_tier: 1
+attempts: 1
+final_attempt_at: "2026-05-19T23:07:00+08:00"
+files_changed:
+  - "liang-quest-general-tactician/SKILL.md"
+verification_command: "grep -q \"workflow.*general\" liang-quest-general-tactician/SKILL.md && grep -q \"post-stamp validation\" liang-quest-general-tactician/SKILL.md && grep -q \"Re-read.*manifest\" liang-quest-general-tactician/SKILL.md"

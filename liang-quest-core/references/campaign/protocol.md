@@ -60,20 +60,6 @@ campaigns/
     run-report-<timestamp>.html  # run results
 ```
 
-## Workflow Routing
-
-Every quest declares its workflow type explicitly. No implicit routing.
-
-```yaml
-workflow: "tdd" | "general"
-```
-
-The Campaign Cartographer assigns the workflow tag based on quest characteristics:
-- **tdd** — quests with testable code deliverables, automated test commands
-- **general** — config, docs, assets, spikes, glue, prompt work, skill creation
-
-The manifest carries the workflow tag per quest. Downstream tools use it to select the correct tactician/executor pair.
-
 ## Quest Dependency Order
 
 Quests declare dependencies via `depends_on: [quest-id, ...]`. The dependency graph must be acyclic. Skills process quests in dependency order:

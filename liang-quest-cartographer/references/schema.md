@@ -36,9 +36,19 @@ quests:                      # ordered list; order communicates recommended prog
     priority: string         # "low" | "medium" | "high"
     readiness: string        # "low" | "medium" | "medium-high" | "high"
     status: string           # see Status Vocabulary below
-    workflow: string         # "tdd" | "general" | "quick"
     depends_on: [string]     # list of quest ids this quest depends on; may be empty
 ```
+
+### Downstream-Stamped Fields (v2)
+
+These fields are NOT written by the cartographer. They are stamped by the downstream skill (tactician or quick) that first plans or processes the quest.
+
+```yaml
+quests[]:
+  workflow: string         # "tdd" | "general" | "quick" -- stamped by tacticians/quick, not by the cartographer
+```
+
+In schema v2, workflow is no longer assigned by the cartographer. It is stamped by the downstream skill that first plans or processes the quest. For v1 campaigns where the cartographer wrote workflow, the field remains valid but is considered informational -- the downstream skill may overwrite it.
 
 ### Optional Extensions
 
@@ -69,8 +79,15 @@ open_questions: [string]     # Fog of War items the planner will need to resolve
 planner_handoff: string      # explicit note to the future planner skill
 readiness: string            # "low" | "medium" | "medium-high" | "high"
 status: string               # see Status Vocabulary below
-workflow: string             # "tdd" | "general" | "quick"
 ```
+
+### Downstream-Stamped Fields (v2)
+
+```yaml
+workflow: string             # stamped by tactician or quick, not by cartographer
+```
+
+In schema v2, quest contracts are workflow-agnostic. The downstream skill stamps workflow in the manifest on first contact.
 
 ### Optional Extensions
 
@@ -120,7 +137,7 @@ Use exactly these values:
 - `general` — config, docs, assets, spikes, glue, prompt work, skill creation, or any quest without meaningful test-first cycles
 - `quick` — simple, narrowly-scoped quests that bypass the tactician+executor pipeline for single-pass scout+execute
 
-The Cartographer assigns workflow based on quest characteristics:
+Downstream skills (tacticians and quick) assign workflow when they first process a quest. The workflow value reflects the planning approach used:
 - Presence of testable code deliverables → `tdd`
 - Simple quests meeting ALL of: two or fewer dependencies, clear victory conditions with no open questions, low risk, scope limited to a single directory or file set → `quick`
 - Config, documentation, asset, spike, or skill creation work that does not meet quick criteria → `general`
@@ -137,7 +154,7 @@ Before any file is written:
 - The `depends_on` graph must be acyclic.
 - All slugs must be lowercase ASCII with hyphens, no spaces or special characters.
 - `created_at` must be a valid ISO 8601 date or datetime.
-- `workflow` must be exactly `"tdd"`, `"general"`, or `"quick"` in both manifest and quest contract.
+- `workflow`, when present, must be exactly `"tdd"`, `"general"`, or `"quick"`. In v2, workflow may be absent from quest contracts (it is stamped downstream).
 
 If any rule fails, the skill must not write files.
 
@@ -154,3 +171,7 @@ If this schema changes:
 
 - Bump `schema_version` in new manifests.
 - Do not retroactively edit existing campaigns; generate new ones instead.
+
+### Backward Compatibility -- v1 to v2
+
+v1 campaigns have workflow in Required Core, assigned by the cartographer. v2 campaigns emit quest contracts without workflow; the downstream skill stamps it in the manifest on first contact. When a v2 tool encounters a v1 campaign with pre-existing workflow values, it treats them as informational -- the downstream skill may overwrite with its own stamp. The schema_version field in the manifest (Optional Extensions) indicates which version generated the campaign. Absence of schema_version implies v1.

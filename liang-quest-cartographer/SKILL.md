@@ -20,6 +20,7 @@ This skill is the bridge between `liang-relentless-brainstorm` (which produces S
 - Never silently modify Git ignore rules.
 - Treat campaigns as private working artifacts unless the user says otherwise.
 - Keep the JRPG vibe in the **HTML view**, not in the machine-readable schema keys.
+- Quest contracts are **workflow-agnostic**. The cartographer does not assign or detect workflow types. Workflow is stamped downstream by the tactician or quick skill that processes the quest.
 
 ## Terminology
 
@@ -29,7 +30,8 @@ This skill is the bridge between `liang-relentless-brainstorm` (which produces S
 - `Manifest` — campaign-level summary, in two formats: `manifest.html` (JRPG quest board for humans) and `manifest.yaml` (structured handoff for tools/agents).
 - `Quest Contract Gate` — the minimum clarity needed in the source report before auto-write is allowed.
 - `Layered Truth` — manifest indexes campaigns and quests; each quest HTML carries its full contract. No duplication.
-- `Workflow` — the execution approach for a quest: `tdd` (test-driven), `general` (step-based), or `quick` (single-pass scout+execute). Determines which tactician/executor pair processes the quest; `quick` quests bypass the tactician entirely.
+- `Outcome Boundary` — the unit of decomposition: one cohesive, independently verifiable outcome.
+- `Exposure Tiebreaker` — ordering heuristic for quests at the same dependency depth: risk_weight x dependency_fan_out. Higher exposure = earlier in the queue.
 
 ## Activation
 
@@ -83,27 +85,24 @@ If the gate fails, **stop and ask** — do not write any files. Use a focused, s
 
 ### 5. Decompose (In Memory)
 
-Apply **dependency-aware hybrid splitting**, dominated by **dependency order**:
+Apply **outcome-boundary decomposition** with **dependency topology** and **exposure tiebreaker**:
 
-- Identify candidate outcomes/decisions/risk areas in the report.
-- Merge items that share an outcome or that cannot be responsibly planned independently.
-- Split items where one must be understood or completed before another can be planned.
+- Identify candidate **outcome boundaries** in the report: each quest should represent one cohesive outcome that can be independently verified.
+- Within each outcome boundary, embed the verification approach: what would confirm this outcome was achieved? This shapes the quest's victory conditions.
+- Merge items that share an outcome boundary or that cannot be responsibly planned independently.
+- Split items where one outcome must be established before another can be planned.
+- **Order by dependency topology**: quests whose dependencies are satisfied come first.
+- **Break ties with the exposure tiebreaker**: among quests at the same dependency depth, order by exposure score = risk_weight x dependency_fan_out. Higher-exposure quests come first (fail-fast principle).
 - Detect cycles in `depends_on`. Cycles are not allowed. If detected, restructure or stop and ask.
 - Target an auto-detected count, typically **2–8 quests**, driven by meaningful decomposition rather than a target number.
+
+Quest contracts produced by the cartographer are **workflow-agnostic**. They describe what to achieve and how to verify it, not which execution approach (TDD, general, or quick) to use. Workflow is assigned downstream by the tactician or quick skill that first processes the quest.
 
 Build a complete in-memory Campaign object:
 
 - Campaign metadata (id, slug, title, created_at, source_report, lens, summary).
 - Ordered quest list with stable IDs (`q001`, `q002`, …).
 - Full Quest Contract for each quest, following the **Tiered Schema** (see `references/schema.md`).
-
-**Assign workflow type** — For each quest, determine which workflow to use based on the quest's content and complexity:
-- Quests with testable code deliverables, automated test commands, or explicit test requirements → `workflow: tdd`
-- Simple, narrowly-scoped quests meeting ALL of: (a) two or fewer dependencies, (b) clear victory conditions with no open questions, (c) low risk, (d) scope limited to a single directory or file set → `workflow: quick`
-- Config changes, documentation, asset work, spikes, glue code, prompt engineering, skill creation that do not meet the quick criteria → `workflow: general`
-- When ambiguous between `quick` and `general`, prefer `general`. Quick is for straightforward work where the tactician+executor ceremony would be overhead.
-
-Include the `workflow` field in both the quest contract YAML and the manifest quest entry.
 
 ### 6. Validate (Still In Memory)
 
@@ -113,7 +112,6 @@ Before any file write, validate:
 - All Required Core fields are present in both the manifest and each Quest Contract.
 - `depends_on` references exist within the Campaign and are acyclic.
 - Quest IDs are unique within the Campaign.
-- `workflow` must be `"tdd"`, `"general"`, or `"quick"` for every quest.
 
 If validation fails, do not write anything. Report the failure and stop or correct.
 
@@ -238,7 +236,7 @@ campaigns/
 Required Core keys:
 
 - `campaign_id`, `slug`, `title`, `created_at`, `source_report`, `lens`, `summary`
-- `quests[]` with `id`, `title`, `path`, `priority`, `readiness`, `status`, `depends_on`
+- `quests[]` with `id`, `title`, `path`, `priority`, `readiness`, `status`, `depends_on` (workflow is not included — it is stamped downstream)
 
 ### Manifest HTML
 
@@ -273,6 +271,8 @@ status: ready_for_planning
 ```
 
 The HTML body presents the quest contract in JRPG dashboard style. See `references/quest-contract-template.html`.
+
+Note: Quest contracts do not include a workflow field. Workflow is assigned downstream by the skill that plans or executes the quest.
 
 ### Tiered Schema
 

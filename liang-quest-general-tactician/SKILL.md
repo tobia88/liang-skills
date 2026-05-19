@@ -24,6 +24,7 @@ You (the smart model) front-load all thinking into **implementation-ready instru
 - Difficulty is **auto-decided** via composite signals with a one-sentence rationale.
 - **Refuse by default** when `plan.html` already exists; explicit re-plan archives then replaces.
 - On successful planning, perform exactly **one narrow manifest mutation**: flip `quests[].status` from `ready_for_planning` to `planned`.
+- On successful planning, also **stamp `workflow: general`** in the manifest's quest entry and **validate the stamp** by re-reading the manifest.
 - Bootstrap `.liang/project.yaml` on **first run only** via an interactive interview; never re-ask.
 - Stop at a step plan. **Never** produce implementation code, task lists, sprint plans, or architecture playbooks.
 
@@ -85,11 +86,11 @@ Then build and confirm the queue:
 
 1. **Read manifest** — Read `manifest.yaml` from the campaign.
 
-2. **Build the queue** — Collect all quests with `status: ready_for_planning` AND `workflow: general`. Sort by dependency order: quests whose dependencies are all `planned` or `passed` (or have no dependencies) come first. Skip `workflow: tdd` quests silently.
+2. **Build the queue** — Collect all quests with `status: ready_for_planning`. Sort by dependency order: quests whose dependencies are all `planned` or `passed` (or have no dependencies) come first.
 
-3. **Show the queue** — Display a numbered table showing quest ID, title, dependencies, and eligibility status. If the queue is empty (no eligible general quests), report this and stop.
+3. **Show the queue** — Display a numbered table showing quest ID, title, dependencies, and eligibility status. If the queue is empty (no eligible quests), report this and stop.
 
-4. **Confirm once** — Ask: "Plan these N general quests in this order?" The user confirms or declines the entire chain.
+4. **Confirm once** — Ask: "Plan these N quests in this order?" The user confirms or declines the entire chain.
 
 5. **Process each quest** — For each quest in the queue, run Steps 4–10. Between quests:
    - Show a **condensed per-quest summary**: quest ID, title, difficulty, step count, Tier 1/Tier 2 split, manifest mutation result.
@@ -175,7 +176,6 @@ Before any file write, validate:
 - Every step has non-empty `instructions` and at least one `files` entry.
 - Difficulty is one of `easy`, `medium`, `hard`.
 - All Required Core plan fields are present (see `liang-quest-core/references/plan-schema/common.md`).
-- `workflow` is `"general"`.
 - `schema_version` is `1`.
 
 If validation fails, do not write anything. Report the failure and stop or correct.
@@ -212,11 +212,17 @@ The file structure:
 
 ### 10. Manifest Mutation
 
-After `plan.html` is successfully written, perform exactly one mutation on the Campaign's `manifest.yaml`:
+After `plan.html` is successfully written, perform these manifest mutations on the Campaign's `manifest.yaml`:
 
-- Find the quest entry whose `id` matches the just-planned quest.
-- Change its `status` from `ready_for_planning` to `planned`.
-- Touch nothing else.
+1. Find the quest entry whose `id` matches the just-planned quest.
+2. Change its `status` from `ready_for_planning` to `planned`.
+3. Write `workflow: "general"` to the quest entry's `workflow` field.
+
+Then perform post-stamp validation:
+
+4. Re-read `manifest.yaml` from disk (do not trust in-memory state).
+5. Confirm the quest entry now has `workflow: "general"`.
+6. If the stamp is missing or incorrect, warn the user with: "Workflow stamp validation failed for `<quest-id>`: expected `workflow: general`, found `<actual-value>`. The plan file is valid but the manifest stamp did not land."
 
 If the status is not `ready_for_planning`, warn and ask before proceeding.
 
@@ -293,13 +299,12 @@ This skill must never:
 3. **Process quests without upfront confirmation.**
 4. **Overwrite `plan.html` silently.** Re-plan requires explicit override with archive.
 5. **Run tests, execute code, install dependencies, or interact with VCS.**
-6. **Mutate `manifest.yaml` outside the one narrow status transition:** `ready_for_planning → planned`.
+6. **Mutate `manifest.yaml` outside the allowed mutations:** status `ready_for_planning → planned` and workflow stamping to `"general"` for the specific quest just planned.
 7. **Silently change Git ignore rules.**
 8. **Read or include secrets, `.env`, `.env.*`, `.git/`, credentials, tokens, dependency folders, build outputs, or large binaries.**
 9. **Use VCS-specific wording in plan content** (commit, PR, branch, changelist, push, submit).
 10. **Skip the scout phase.** Every quest must be scouted before planning.
-11. **Plan `workflow: tdd` quests.** Those belong to `liang-quest-tdd-tactician`.
-12. **Extend `.liang/project.yaml`'s schema** beyond defined fields without a `schema_version` bump.
+11. **Extend `.liang/project.yaml`'s schema** beyond defined fields without a `schema_version` bump.
 
 ## Failure Modes
 
@@ -328,7 +333,7 @@ Match the existing family:
 - **Further upstream:** `liang-relentless-brainstorm` produces Strategy Reports.
 - **Downstream:** `liang-quest-general-executor` consumes `plan.html` and steps through the steps.
 - **Shared foundation:** `liang-quest-core` provides shared reference documents consumed at activation time.
-- **Parallel:** `liang-quest-tdd-tactician` handles `workflow: tdd` quests; this skill handles `workflow: general`.
+- **Parallel:** `liang-quest-tdd-tactician` uses TDD cycles; this skill uses ordered steps.
 - **Shared contracts:**
   - `.liang/project.yaml` — workspace-wide config. The Tactician bootstraps it; both executors read it.
 

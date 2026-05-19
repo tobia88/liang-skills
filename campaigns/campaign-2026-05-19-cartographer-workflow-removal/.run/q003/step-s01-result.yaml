@@ -1,0 +1,9 @@
+step_id: "s01"
+workflow: "general"
+status: "passed"
+verification_tier: 1
+attempts: 1
+final_attempt_at: "2026-05-19T23:13:00+08:00"
+files_changed:
+  - "liang-quest-cartographer/references/quest-contract-template.html"
+verification_command: "! grep -q \"workflow\" liang-quest-cartographer/references/quest-contract-template.html"

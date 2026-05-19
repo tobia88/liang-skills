@@ -1,39 +1,47 @@
 <!--
 ---
-# Quest Contract — Required Core
-# Schema source of truth: references/schema.md
-# All values must be HTML-escaped when also rendered in the body below.
-
-quest_id: "[QUEST_ID]"
-campaign_id: "[CAMPAIGN_ID]"
-title: "[QUEST_TITLE]"
-purpose: "[QUEST_PURPOSE]"
-desired_outcome: "[DESIRED_OUTCOME]"
+quest_id: "q002"
+campaign_id: "camp-2026-05-19-cartographer-workflow-removal"
+title: "Add Workflow Stamping to Downstream Skills"
+purpose: "Move workflow assignment from the cartographer to the downstream skills that actually execute the work, ensuring each tactician and quick stamps its workflow identity in the campaign manifest on first contact."
+desired_outcome: "liang-quest-general-tactician, liang-quest-tdd-tactician, and liang-quest-quick all stamp workflow in the campaign manifest on contact. Tacticians validate their own stamp post-write as defense-in-depth layer 1."
 victory_conditions:
-  - "[VICTORY_CONDITION_1]"
-  - "[VICTORY_CONDITION_2]"
-scope_boundary: "[SCOPE_BOUNDARY]"
+  - "liang-quest-general-tactician/SKILL.md includes instructions to stamp workflow: general in the campaign manifest"
+  - "liang-quest-tdd-tactician/SKILL.md includes instructions to stamp workflow: tdd in the campaign manifest"
+  - "liang-quest-quick/SKILL.md includes instructions to stamp workflow: quick in the campaign manifest"
+  - "All three skills write workflow to the manifest only, never to quest contract files"
+  - "Tacticians include a post-stamp validation step that re-reads the manifest to confirm the stamp landed"
+scope_boundary: "Changes to three SKILL.md files (general-tactician, tdd-tactician, quick). Manifest-level stamping only. No changes to how tacticians plan or how quick scouts and executes."
 depends_on:
-  - "[DEPENDS_ON_QUEST_ID_OR_EMPTY]"
+  - "q001"
 risks:
-  - "[RISK_1]"
+  - "Tactician stamping bug -- quest gets planned but workflow not stamped in manifest. Executor silently skips it. (High risk, mitigated by post-stamp validation)"
+  - "Three files need coordinated updates; partial update leaves inconsistent state"
 open_questions:
-  - "[OPEN_QUESTION_1]"
-planner_handoff: "[PLANNER_HANDOFF_NOTE]"
-readiness: "[low|medium|medium-high|high]"
-status: "[ready_for_planning|needs_clarification|blocked]"
-
-# Optional Extensions (include only when meaningful; remove keys you do not use)
+  - "How the tactician's post-stamp validation should fail (error message format, whether it blocks the next quest or aborts the chain)"
+planner_handoff: "This is the highest-exposure quest in the campaign. The stamping bug risk is the single biggest risk. Read all three SKILL.md files before planning. The post-stamp validation is a critical defense-in-depth requirement, not optional. Stamping writes workflow to the manifest YAML per-quest entry, never to the quest contract HTML files."
+readiness: "medium-high"
+status: "ready_for_planning"
+workflow: "general"
 non_goals:
-  - "[NON_GOAL_1]"
+  - "Changing how tacticians plan quests (TDD cycles, general steps)"
+  - "Changing how quick scouts or executes"
+  - "Adding workflow to quest contract HTML files"
 constraints:
-  - "[CONSTRAINT_1]"
+  - "Workflow stamp goes in manifest.yaml quests[].workflow only"
+  - "Tactician post-stamp validation must re-read the manifest, not trust in-memory state"
+  - "Quick remains a single skill (no tactician/executor split)"
 required_inputs:
-  - "[REQUIRED_INPUT_1]"
-expected_output: "[EXPECTED_OUTPUT]"
+  - "Current liang-quest-general-tactician/SKILL.md content"
+  - "Current liang-quest-tdd-tactician/SKILL.md content"
+  - "Current liang-quest-quick/SKILL.md content"
+  - "Updated schema from q001"
+expected_output: "Three updated SKILL.md files with manifest workflow stamping and post-stamp validation logic"
 source_evidence:
-  - "[SHORT_EVIDENCE_REF_1]"
-notes: "[FREE_FORM_NOTES]"
+  - "Decision Memo: tacticians stamp workflow in the campaign manifest only on first contact"
+  - "Q5: Tacticians and quick will still stamp workflow in the manifest"
+  - "Q13: Defense in depth -- tactician validates its own stamp post-write"
+  - "Q9: Quick stays as-is, stamps workflow: quick"
 ---
 -->
 <!doctype html>
@@ -41,7 +49,7 @@ notes: "[FREE_FORM_NOTES]"
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>[QUEST_ID] — [QUEST_TITLE]</title>
+  <title>q002 &mdash; Add Workflow Stamping to Downstream Skills</title>
   <style>
     :root {
       --bg: #f6f1e8;
@@ -257,30 +265,30 @@ notes: "[FREE_FORM_NOTES]"
   <main class="page">
     <header class="hero">
       <p class="eyebrow">Quest Contract</p>
-      <h1>[QUEST_ID] — [QUEST_TITLE]</h1>
-      <p class="subtitle">[QUEST_PURPOSE]</p>
+      <h1>q002 &mdash; Add Workflow Stamping to Downstream Skills</h1>
+      <p class="subtitle">Move workflow assignment from the cartographer to the downstream skills that actually execute the work, ensuring each tactician and quick stamps its workflow identity in the campaign manifest on first contact.</p>
 
       <section class="meta-grid" aria-label="Quest metadata">
         <div class="meta-card">
           <span class="meta-label">Campaign</span>
-          <span class="meta-value">[CAMPAIGN_ID]</span>
+          <span class="meta-value">camp-2026-05-19-cartographer-workflow-removal</span>
         </div>
         <div class="meta-card">
           <span class="meta-label">Priority</span>
-          <span class="meta-value">[PRIORITY]</span>
+          <span class="meta-value">High</span>
         </div>
         <div class="meta-card">
           <span class="meta-label">Readiness</span>
-          <span class="meta-value">[READINESS]</span>
+          <span class="meta-value">Medium-High</span>
         </div>
         <div class="meta-card">
           <span class="meta-label">Status</span>
-          <span class="meta-value">[STATUS]</span>
+          <span class="meta-value">Ready for Planning</span>
         </div>
       </section>
 
       <div class="pill-row">
-        <span class="pill">Hybrid Quest</span>
+        <span class="pill">Highest Exposure</span>
         <span class="pill">Planner Handoff Ready</span>
         <span class="pill">Static Package</span>
       </div>
@@ -295,45 +303,49 @@ notes: "[FREE_FORM_NOTES]"
       <div class="grid">
         <article class="card full callout">
           <h3>Purpose</h3>
-          <p>[QUEST_PURPOSE]</p>
+          <p>Move workflow assignment from the cartographer to the downstream skills that actually execute the work, ensuring each tactician and quick stamps its workflow identity in the campaign manifest on first contact.</p>
         </article>
 
         <article class="card ok">
           <h3>Desired Outcome</h3>
-          <p>[DESIRED_OUTCOME]</p>
+          <p><code>liang-quest-general-tactician</code>, <code>liang-quest-tdd-tactician</code>, and <code>liang-quest-quick</code> all stamp workflow in the campaign manifest on contact. Tacticians validate their own stamp post-write as defense-in-depth layer 1.</p>
         </article>
 
         <article class="card info">
           <h3>Scope Boundary</h3>
-          <p>[SCOPE_BOUNDARY]</p>
+          <p>Changes to three SKILL.md files (general-tactician, tdd-tactician, quick). Manifest-level stamping only. No changes to how tacticians plan or how quick scouts and executes.</p>
         </article>
 
         <article class="card full">
           <h3>Victory Conditions</h3>
           <ul>
-            <li>[VICTORY_CONDITION_1]</li>
-            <li>[VICTORY_CONDITION_2]</li>
+            <li><code>liang-quest-general-tactician/SKILL.md</code> includes instructions to stamp <code>workflow: general</code> in the campaign manifest</li>
+            <li><code>liang-quest-tdd-tactician/SKILL.md</code> includes instructions to stamp <code>workflow: tdd</code> in the campaign manifest</li>
+            <li><code>liang-quest-quick/SKILL.md</code> includes instructions to stamp <code>workflow: quick</code> in the campaign manifest</li>
+            <li>All three skills write workflow to the manifest only, never to quest contract files</li>
+            <li>Tacticians include a post-stamp validation step that re-reads the manifest to confirm the stamp landed</li>
           </ul>
         </article>
 
         <article class="card">
           <h3>Depends On</h3>
           <ul>
-            <li><code>[DEPENDS_ON_QUEST_ID_OR_NONE]</code></li>
+            <li><code>q001</code> &mdash; Establish Schema v2 in Quest Core</li>
           </ul>
         </article>
 
         <article class="card warn">
           <h3>Boss Board / Risks</h3>
           <ul>
-            <li>[RISK_1]</li>
+            <li><strong>Tactician stamping bug (High)</strong> &mdash; Quest gets planned but workflow not stamped in manifest. Executor silently skips it. Mitigated by post-stamp validation.</li>
+            <li><strong>Coordinated update (Medium)</strong> &mdash; Three files need coordinated updates; partial update leaves inconsistent state.</li>
           </ul>
         </article>
 
         <article class="card full danger">
           <h3>Fog of War / Open Questions</h3>
           <ul>
-            <li>[OPEN_QUESTION_1]</li>
+            <li>How the tactician&#39;s post-stamp validation should fail (error message format, whether it blocks the next quest or aborts the chain)</li>
           </ul>
         </article>
       </div>
@@ -348,39 +360,49 @@ notes: "[FREE_FORM_NOTES]"
       <div class="grid">
         <article class="card full">
           <h3>Handoff Note</h3>
-          <p>[PLANNER_HANDOFF_NOTE]</p>
+          <p>This is the highest-exposure quest in the campaign. The stamping bug risk is the single biggest risk. Read all three SKILL.md files before planning. The post-stamp validation is a critical defense-in-depth requirement, not optional. Stamping writes workflow to the manifest YAML per-quest entry, never to the quest contract HTML files.</p>
         </article>
 
         <article class="card">
           <h3>Required Inputs</h3>
           <ul>
-            <li>[REQUIRED_INPUT_1]</li>
+            <li>Current <code>liang-quest-general-tactician/SKILL.md</code> content</li>
+            <li>Current <code>liang-quest-tdd-tactician/SKILL.md</code> content</li>
+            <li>Current <code>liang-quest-quick/SKILL.md</code> content</li>
+            <li>Updated schema from q001</li>
           </ul>
         </article>
 
         <article class="card">
           <h3>Expected Output</h3>
-          <p>[EXPECTED_OUTPUT]</p>
+          <p>Three updated SKILL.md files with manifest workflow stamping and post-stamp validation logic.</p>
         </article>
 
         <article class="card">
           <h3>Non-Goals</h3>
           <ul>
-            <li>[NON_GOAL_1]</li>
+            <li>Changing how tacticians plan quests (TDD cycles, general steps)</li>
+            <li>Changing how quick scouts or executes</li>
+            <li>Adding workflow to quest contract HTML files</li>
           </ul>
         </article>
 
         <article class="card">
           <h3>Constraints</h3>
           <ul>
-            <li>[CONSTRAINT_1]</li>
+            <li>Workflow stamp goes in <code>manifest.yaml quests[].workflow</code> only</li>
+            <li>Tactician post-stamp validation must re-read the manifest, not trust in-memory state</li>
+            <li>Quick remains a single skill (no tactician/executor split)</li>
           </ul>
         </article>
 
         <article class="card full">
           <h3>Source Evidence</h3>
           <ul>
-            <li>[SHORT_EVIDENCE_REF_1]</li>
+            <li>Decision Memo: tacticians stamp workflow in the campaign manifest only on first contact</li>
+            <li>Q5: Tacticians and quick will still stamp workflow in the manifest</li>
+            <li>Q13: Defense in depth &mdash; tactician validates its own stamp post-write</li>
+            <li>Q9: Quick stays as-is, stamps workflow: quick</li>
           </ul>
         </article>
       </div>

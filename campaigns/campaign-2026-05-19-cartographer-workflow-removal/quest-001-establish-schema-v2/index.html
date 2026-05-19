@@ -1,39 +1,40 @@
 <!--
 ---
-# Quest Contract — Required Core
-# Schema source of truth: references/schema.md
-# All values must be HTML-escaped when also rendered in the body below.
-
-quest_id: "[QUEST_ID]"
-campaign_id: "[CAMPAIGN_ID]"
-title: "[QUEST_TITLE]"
-purpose: "[QUEST_PURPOSE]"
-desired_outcome: "[DESIRED_OUTCOME]"
+quest_id: "q001"
+campaign_id: "camp-2026-05-19-cartographer-workflow-removal"
+title: "Establish Schema v2 in Quest Core"
+purpose: "Define the schema version boundary that all downstream skills reference, making workflow a downstream-stamped field instead of a cartographer-assigned one."
+desired_outcome: "liang-quest-core declares schema_version: 2, and schema.md reflects workflow as a downstream-stamped field rather than Required Core. All quest skills have a shared reference point for the new contract."
 victory_conditions:
-  - "[VICTORY_CONDITION_1]"
-  - "[VICTORY_CONDITION_2]"
-scope_boundary: "[SCOPE_BOUNDARY]"
-depends_on:
-  - "[DEPENDS_ON_QUEST_ID_OR_EMPTY]"
+  - "liang-quest-core/SKILL.md contains a schema_version: 2 declaration with clear semantics"
+  - "references/schema.md moves workflow from Required Core to a new Downstream-Stamped section for both manifest and quest contract schemas"
+  - "schema.md documents that workflow is written by tacticians and quick, not by the cartographer"
+  - "Backward compatibility section explains how v1 campaigns coexist with v2 (version bump makes stale workflow values inert)"
+scope_boundary: "Changes to liang-quest-core/SKILL.md and liang-quest-cartographer/references/schema.md only. No changes to other skills, no changes to template files, no execution logic."
+depends_on: []
 risks:
-  - "[RISK_1]"
+  - "Schema version format not future-proof (low risk -- simple integer versioning is adequate for a single-user pipeline)"
 open_questions:
-  - "[OPEN_QUESTION_1]"
-planner_handoff: "[PLANNER_HANDOFF_NOTE]"
-readiness: "[low|medium|medium-high|high]"
-status: "[ready_for_planning|needs_clarification|blocked]"
-
-# Optional Extensions (include only when meaningful; remove keys you do not use)
+  - "Whether schema_version should be in the manifest YAML, the quest-core SKILL.md, or a separate schema-version file"
+planner_handoff: "This quest establishes the foundation all other quests reference. Read both liang-quest-core/SKILL.md and references/schema.md before making changes. The schema change is conceptual (moving workflow from Required Core to Downstream-Stamped), not a file deletion. Keep the existing schema structure intact while adding the new section."
+readiness: "high"
+status: "ready_for_planning"
+workflow: "general"
 non_goals:
-  - "[NON_GOAL_1]"
+  - "Changing template files (that belongs to q003)"
+  - "Adding stamping logic to tacticians (that belongs to q002)"
+  - "Migrating existing campaign data beyond documenting the version bump contract"
 constraints:
-  - "[CONSTRAINT_1]"
+  - "Must maintain backward compatibility with existing v1 campaigns"
+  - "schema_version must be centralized in liang-quest-core so every quest skill shares it"
 required_inputs:
-  - "[REQUIRED_INPUT_1]"
-expected_output: "[EXPECTED_OUTPUT]"
+  - "Current liang-quest-core/SKILL.md content"
+  - "Current references/schema.md content"
+expected_output: "Updated schema.md with Downstream-Stamped section and updated quest-core with schema_version: 2 declaration"
 source_evidence:
-  - "[SHORT_EVIDENCE_REF_1]"
-notes: "[FREE_FORM_NOTES]"
+  - "Decision Memo: schema_version in quest-core so every quest skill shares it"
+  - "Q10-Q11: Schema version field in quest-core, bump old campaigns to v2, stale values become inert"
+  - "Victory Condition: schema_version: 2 in liang-quest-core; all quest skills read it"
 ---
 -->
 <!doctype html>
@@ -41,7 +42,7 @@ notes: "[FREE_FORM_NOTES]"
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>[QUEST_ID] — [QUEST_TITLE]</title>
+  <title>q001 &mdash; Establish Schema v2 in Quest Core</title>
   <style>
     :root {
       --bg: #f6f1e8;
@@ -257,30 +258,30 @@ notes: "[FREE_FORM_NOTES]"
   <main class="page">
     <header class="hero">
       <p class="eyebrow">Quest Contract</p>
-      <h1>[QUEST_ID] — [QUEST_TITLE]</h1>
-      <p class="subtitle">[QUEST_PURPOSE]</p>
+      <h1>q001 &mdash; Establish Schema v2 in Quest Core</h1>
+      <p class="subtitle">Define the schema version boundary that all downstream skills reference, making workflow a downstream-stamped field instead of a cartographer-assigned one.</p>
 
       <section class="meta-grid" aria-label="Quest metadata">
         <div class="meta-card">
           <span class="meta-label">Campaign</span>
-          <span class="meta-value">[CAMPAIGN_ID]</span>
+          <span class="meta-value">camp-2026-05-19-cartographer-workflow-removal</span>
         </div>
         <div class="meta-card">
           <span class="meta-label">Priority</span>
-          <span class="meta-value">[PRIORITY]</span>
+          <span class="meta-value">High</span>
         </div>
         <div class="meta-card">
           <span class="meta-label">Readiness</span>
-          <span class="meta-value">[READINESS]</span>
+          <span class="meta-value">High</span>
         </div>
         <div class="meta-card">
           <span class="meta-label">Status</span>
-          <span class="meta-value">[STATUS]</span>
+          <span class="meta-value">Ready for Planning</span>
         </div>
       </section>
 
       <div class="pill-row">
-        <span class="pill">Hybrid Quest</span>
+        <span class="pill">Foundation Quest</span>
         <span class="pill">Planner Handoff Ready</span>
         <span class="pill">Static Package</span>
       </div>
@@ -295,45 +296,47 @@ notes: "[FREE_FORM_NOTES]"
       <div class="grid">
         <article class="card full callout">
           <h3>Purpose</h3>
-          <p>[QUEST_PURPOSE]</p>
+          <p>Define the schema version boundary that all downstream skills reference, making workflow a downstream-stamped field instead of a cartographer-assigned one.</p>
         </article>
 
         <article class="card ok">
           <h3>Desired Outcome</h3>
-          <p>[DESIRED_OUTCOME]</p>
+          <p><code>liang-quest-core</code> declares <code>schema_version: 2</code>, and <code>schema.md</code> reflects workflow as a downstream-stamped field rather than Required Core. All quest skills have a shared reference point for the new contract.</p>
         </article>
 
         <article class="card info">
           <h3>Scope Boundary</h3>
-          <p>[SCOPE_BOUNDARY]</p>
+          <p>Changes to <code>liang-quest-core/SKILL.md</code> and <code>liang-quest-cartographer/references/schema.md</code> only. No changes to other skills, no changes to template files, no execution logic.</p>
         </article>
 
         <article class="card full">
           <h3>Victory Conditions</h3>
           <ul>
-            <li>[VICTORY_CONDITION_1]</li>
-            <li>[VICTORY_CONDITION_2]</li>
+            <li><code>liang-quest-core/SKILL.md</code> contains a <code>schema_version: 2</code> declaration with clear semantics</li>
+            <li><code>references/schema.md</code> moves workflow from Required Core to a new Downstream-Stamped section for both manifest and quest contract schemas</li>
+            <li><code>schema.md</code> documents that workflow is written by tacticians and quick, not by the cartographer</li>
+            <li>Backward compatibility section explains how v1 campaigns coexist with v2 (version bump makes stale workflow values inert)</li>
           </ul>
         </article>
 
         <article class="card">
           <h3>Depends On</h3>
           <ul>
-            <li><code>[DEPENDS_ON_QUEST_ID_OR_NONE]</code></li>
+            <li>None &mdash; this is the foundation quest</li>
           </ul>
         </article>
 
         <article class="card warn">
           <h3>Boss Board / Risks</h3>
           <ul>
-            <li>[RISK_1]</li>
+            <li>Schema version format not future-proof (low risk &mdash; simple integer versioning is adequate for a single-user pipeline)</li>
           </ul>
         </article>
 
         <article class="card full danger">
           <h3>Fog of War / Open Questions</h3>
           <ul>
-            <li>[OPEN_QUESTION_1]</li>
+            <li>Whether <code>schema_version</code> should be in the manifest YAML, the quest-core SKILL.md, or a separate schema-version file</li>
           </ul>
         </article>
       </div>
@@ -348,39 +351,45 @@ notes: "[FREE_FORM_NOTES]"
       <div class="grid">
         <article class="card full">
           <h3>Handoff Note</h3>
-          <p>[PLANNER_HANDOFF_NOTE]</p>
+          <p>This quest establishes the foundation all other quests reference. Read both <code>liang-quest-core/SKILL.md</code> and <code>references/schema.md</code> before making changes. The schema change is conceptual (moving workflow from Required Core to Downstream-Stamped), not a file deletion. Keep the existing schema structure intact while adding the new section.</p>
         </article>
 
         <article class="card">
           <h3>Required Inputs</h3>
           <ul>
-            <li>[REQUIRED_INPUT_1]</li>
+            <li>Current <code>liang-quest-core/SKILL.md</code> content</li>
+            <li>Current <code>references/schema.md</code> content</li>
           </ul>
         </article>
 
         <article class="card">
           <h3>Expected Output</h3>
-          <p>[EXPECTED_OUTPUT]</p>
+          <p>Updated <code>schema.md</code> with Downstream-Stamped section and updated quest-core with <code>schema_version: 2</code> declaration.</p>
         </article>
 
         <article class="card">
           <h3>Non-Goals</h3>
           <ul>
-            <li>[NON_GOAL_1]</li>
+            <li>Changing template files (that belongs to q003)</li>
+            <li>Adding stamping logic to tacticians (that belongs to q002)</li>
+            <li>Migrating existing campaign data beyond documenting the version bump contract</li>
           </ul>
         </article>
 
         <article class="card">
           <h3>Constraints</h3>
           <ul>
-            <li>[CONSTRAINT_1]</li>
+            <li>Must maintain backward compatibility with existing v1 campaigns</li>
+            <li><code>schema_version</code> must be centralized in <code>liang-quest-core</code> so every quest skill shares it</li>
           </ul>
         </article>
 
         <article class="card full">
           <h3>Source Evidence</h3>
           <ul>
-            <li>[SHORT_EVIDENCE_REF_1]</li>
+            <li>Decision Memo: schema_version in quest-core so every quest skill shares it</li>
+            <li>Q10&ndash;Q11: Schema version field in quest-core, bump old campaigns to v2, stale values become inert</li>
+            <li>Victory Condition: schema_version: 2 in liang-quest-core; all quest skills read it</li>
           </ul>
         </article>
       </div>

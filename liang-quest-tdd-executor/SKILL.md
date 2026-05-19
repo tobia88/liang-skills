@@ -23,6 +23,7 @@ Your job is to take executable TDD plans (produced by `liang-quest-tdd-tactician
 - On dependency failure, cascade-skip all downstream quests.
 - On crash or interruption, detect incomplete runs from manifest state and offer to resume.
 - Produce an HTML run report at campaign root on completion.
+- **Workflow enforcement:** Only process quests with `workflow: "tdd"` in the manifest. Hard-block and report quests with a mismatched workflow tag. Flag quests that are `planned` but have no workflow tag as a distinct error category.
 
 ## Terminology
 
@@ -134,9 +135,20 @@ Then build and confirm the queue:
 
 1. **Read manifest** — Read `manifest.yaml` from the campaign.
 
-2. **Build the queue** — Collect all quests with `status: planned`. Sort by dependency order: quests whose dependencies are all `passed` (or have no dependencies) come first.
+2. **Build the queue** — Read all quests from the manifest. For each quest with `status: planned`, check the `workflow` field:
 
-3. **Show the queue** — Display a numbered table showing quest ID, title, difficulty, cycle count, **spine type** (TDD or verify-only, from plan readiness), dependencies, and eligibility status. If the queue is empty (no `planned` quests), report this and stop.
+      - **`workflow: "tdd"`** — Add to the execution queue. This executor processes this quest.
+      - **`workflow` is present but not `"tdd"`** (e.g., `"general"`, `"quick"`) — **Hard-block.** Do not add to the queue. Report: "Quest <quest-id> has workflow: <value>, expected: tdd. Skipping — this quest belongs to a different executor."
+      - **`workflow` is absent or empty** (planned but untagged) — **Distinct error.** Do not add to the queue. Report: "Quest <quest-id> is planned but has no workflow tag. This indicates the tactician did not stamp workflow. Run the tactician on this campaign to stamp workflow before executing."
+
+      Sort the eligible quests by dependency order: quests whose dependencies are all `passed` (or have no dependencies) come first.
+
+      Display a summary of enforcement results before the queue table:
+      - Eligible: N quests with workflow: tdd
+      - Skipped (wrong workflow): N quests (list IDs)
+      - Error (untagged): N quests (list IDs)
+
+3. **Show the queue** — Display a numbered table showing quest ID, title, difficulty, cycle count, workflow, **spine type** (TDD or verify-only, from plan readiness), dependencies, and eligibility status. If the queue is empty (no `planned` quests), report this and stop.
 
 4. **Confirm once** — Ask: "Execute these N quests in this order?" The user confirms or declines the entire chain.
 
@@ -473,7 +485,7 @@ Additional manifest fields managed by the Executor:
 - `total_cycles: integer` — total cycle count from the plan.
 - `skip_reason: string` — present when status is `skipped`; references the failed dependency.
 
-## Boundaries — Hard Stops (17)
+## Boundaries — Hard Stops (18)
 
 This skill must never:
 
@@ -494,6 +506,7 @@ This skill must never:
 15. **Execute a campaign where any quest has not been planned by the Tactician.** If any quest is `ready_for_planning` or any `planned` quest is missing its `plan.html`, hard-block the entire campaign — no partial execution.
 16. **Halt or fail a verify-only quest based on low confidence score.** The Executor always continues; low-confidence cycles are flagged in the run report for user review post-run.
 17. **Apply the TDD retry loop to verify-only cycles.** Verify-only cycles use hybrid verification, not test-based verification. They do not enter the retry loop.
+18. **Process quests with workflow other than "tdd".** This executor only handles TDD workflow quests. General quests belong to liang-quest-general-executor; quick quests belong to liang-quest-quick.
 
 If the user asks for any of the above, decline and explain the boundary, then offer the closest in-scope alternative.
 
@@ -510,6 +523,8 @@ If the user asks for any of the above, decline and explain the boundary, then of
 - **project.yaml missing or incomplete:** Stop and direct the user to the Tactician for bootstrapping.
 - **Spine-vs-registry mismatch:** Warn but proceed. The plan's spine type is authoritative.
 - **Hybrid verification cannot run mechanical checks (missing registry fields):** Degrade gracefully — skip mechanical checks, rely on LLM judgment only, and set confidence to `medium` at best.
+- **Workflow mismatch detected:** Hard-block the mismatched quest. Report which executor should handle it. Continue processing eligible quests.
+- **Planned but untagged quest detected:** Report the error with guidance to run the tactician. Continue processing eligible quests.
 
 ## Visual Tone (Run Report)
 

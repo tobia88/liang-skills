@@ -1,6 +1,6 @@
 ---
 name: liang-quest-quick
-description: Single-pass execution skill for the JRPG quest planning family. Consumes campaign manifests with workflow:quick quests and executes them directly via scout+execute without the tactician+executor pipeline. Reads quest contracts from index.html, scouts the codebase, executes in a single context, verifies victory conditions, and produces a JRPG-style run report. No planning artifacts, no child processes, no retries, no .run/ directories. Status path: ready_for_planning to in_progress to passed/failed/skipped. project.yaml optional.
+description: Single-pass execution skill for the JRPG quest planning family. Consumes campaign manifests and executes quests directly via scout+execute without the tactician+executor pipeline. Reads quest contracts from index.html, scouts the codebase, executes in a single context, verifies victory conditions, and produces a JRPG-style run report. No planning artifacts, no child processes, no retries, no .run/ directories. Status path: ready_for_planning to in_progress to passed/failed/skipped. project.yaml optional.
 ---
 
 # Liang Quest Quick
@@ -15,8 +15,9 @@ No planning layer. No child processes. No retries. Read the quest contract, scou
 
 ## Core Contract
 
-- **Campaign chain mode:** Read manifest, queue all `workflow: quick` quests with `status: ready_for_planning`, confirm once, process the entire queue in dependency order.
+- **Campaign chain mode:** Read manifest, queue all quests with `status: ready_for_planning`, confirm once, process the entire queue in dependency order.
 - **Status path:** `ready_for_planning` -> `in_progress` -> `passed`/`failed`/`skipped`. No `planned` step — this skill IS the planner and executor combined.
+- **Workflow stamping:** On first contact with a quest, stamp `workflow: "quick"` in the manifest's quest entry alongside the status transition to `in_progress`.
 - **Single-context execution:** Reads, scouts, edits, and verifies within one context window. No child Pi processes, no I/O files, no `.run/` directory.
 - **Direct codebase editing:** Unlike general/TDD executors (which delegate to children), this skill edits files directly.
 - **Mandatory scout phase:** Before executing each quest, read relevant codebase files to understand current state.
@@ -25,7 +26,6 @@ No planning layer. No child processes. No retries. Read the quest contract, scou
 - **No retries.** No re-planning. No escalation. A failed quest stays failed for this run.
 - **project.yaml is optional:** If present, read VCS config. If absent, auto-detect VCS by checking for `.git` directory; default to `"none"`. Do not require `project.yaml` to be bootstrapped.
 - **Produce a run report** in the family JRPG dashboard style at campaign root.
-- **Only process quests with `workflow: quick`.** Skip other workflow types silently.
 
 ## Terminology
 
@@ -56,7 +56,7 @@ Run these steps in order. Do not skip ahead.
 
 State that this skill will:
 
-- Read all `workflow: quick` quests from a Campaign manifest.
+- Read all eligible quests from a Campaign manifest.
 - Scout the codebase and execute each quest directly in a single pass.
 - Verify victory conditions after each quest.
 - Track status in the manifest, extract lessons on failure, and produce a run report.
@@ -83,7 +83,7 @@ Identify the target Campaign:
 Then build and confirm the queue:
 
 1. **Read manifest** — Read `manifest.yaml` from the campaign.
-2. **Build the queue** — Collect all quests with `workflow: quick` and `status: ready_for_planning`. Sort by dependency order: quests whose dependencies are all `passed` (or have no dependencies) come first.
+2. **Build the queue** — Collect all quests with `status: ready_for_planning`. Sort by dependency order: quests whose dependencies are all `passed` (or have no dependencies) come first.
 3. **Show the queue** — Display a numbered table showing quest ID, title, dependencies, and eligibility status.
 4. **Confirm once** — Ask: "Execute these N quick quests in this order?" The user confirms or declines the entire chain.
 
@@ -93,8 +93,10 @@ For each quest in the queue:
 
 #### 4a. Pre-Quest Setup
 
-1. **Read quest contract** — Parse `index.html` from the quest directory. Extract YAML from the opening HTML comment. Validate the quest has `workflow: quick`.
-2. **Manifest mutation** — Set quest status to `in_progress`. Record `started_at` timestamp.
+1. **Read quest contract** — Parse `index.html` from the quest directory. Extract YAML from the opening HTML comment.
+2. **Manifest mutation** — Set quest status to `in_progress`. Write `workflow: "quick"` to the quest entry's `workflow` field. Record `started_at` timestamp.
+
+   Note: Quick does not require post-stamp validation (no separate planning and execution phases). The stamp is written at the same time as the status transition.
 
 #### 4b. Scout Phase (Mandatory)
 
@@ -225,6 +227,8 @@ Additional manifest fields managed by this skill:
 - `completed_at: string` — ISO-8601 timestamp when quest execution finished.
 - `skip_reason: string` — present when status is `skipped`; references the failed dependency.
 
+In addition to status transitions, this skill also writes `workflow: "quick"` to the quest entry during the `ready_for_planning` to `in_progress` transition. Workflow is written to the manifest only, never to quest contract files.
+
 ## Boundaries — Hard Stops (12)
 
 This skill must never:
@@ -234,13 +238,13 @@ This skill must never:
 3. **Implement retry loops, re-plan mechanisms, or escalation.**
 4. **Create `.run/` directories or checkpoint state files.**
 5. **Process quests without upfront confirmation.**
-6. **Process quests with workflow other than `quick`.**
-7. **Modify, overwrite, or delete `plan.html` files.**
+6. **Modify, overwrite, or delete `plan.html` files.**
 8. **Silently change Git ignore rules.**
 9. **Read or include secrets, `.env`, `.env.*`, `.git/`, credentials, tokens, dependency folders, build outputs, or large binaries.**
 10. **Use VCS-specific wording in YAML keys.**
 11. **Execute quests whose dependencies have not all passed.**
 12. **Silently resume an interrupted run.**
+13. **Write workflow to quest contract HTML files.** Workflow stamp writes to `manifest.yaml` `quests[].workflow` only. Never write workflow to quest contract HTML files.
 
 If the user asks for any of the above, decline and explain the boundary, then offer the closest in-scope alternative.
 
@@ -267,8 +271,8 @@ Match the existing family style, plus Quick-specific elements:
 
 ## Relationship to Other Skills
 
-- **Upstream:** `liang-quest-cartographer` assigns `workflow: quick` to quests during campaign creation.
-- **Parallel:** `liang-quest-general-executor` handles `workflow: general` quests; `liang-quest-tdd-executor` handles `workflow: tdd` quests. This skill handles `workflow: quick`.
+- **Upstream:** `liang-quest-cartographer` produces Campaign manifests and Quest Contracts.
+- **Parallel:** `liang-quest-general-executor` handles general step plans; `liang-quest-tdd-executor` handles TDD cycle plans. This skill bypasses the tactician+executor pipeline entirely.
 - **Shared foundation:** `liang-quest-core` provides shared reference documents consumed at activation time.
 - **Shared contracts:** `.liang/project.yaml` — workspace-wide config. Optional for Quick (unlike general/TDD which require it).
 - **Not downstream of any tactician.** This skill bypasses the tactician+executor pipeline entirely. There is no `liang-quest-quick-tactician`.

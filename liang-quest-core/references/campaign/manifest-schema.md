@@ -25,7 +25,6 @@ quests:                      # ordered list; order communicates recommended prog
     readiness: string        # "low" | "medium" | "medium-high" | "high"
     status: string           # see Status Vocabulary
     depends_on: [string]     # quest IDs; may be empty
-    workflow: string          # "tdd" | "general" | "quick"
 ```
 
 ### Optional Extensions
@@ -70,7 +69,6 @@ open_questions: [string]     # Fog of War items
 planner_handoff: string      # explicit note to the planner skill
 readiness: string            # "low" | "medium" | "medium-high" | "high"
 status: string               # see Status Vocabulary
-workflow: string              # "tdd" | "general" | "quick"
 ```
 
 ### Optional Extensions
@@ -108,4 +106,3 @@ Before writing any campaign files:
 - The `depends_on` graph must be acyclic.
 - All slugs must be lowercase ASCII with hyphens, no spaces or special characters.
 - `created_at` must be valid ISO 8601.
-- `workflow` must be exactly `"tdd"`, `"general"`, or `"quick"`.

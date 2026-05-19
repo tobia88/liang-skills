@@ -23,6 +23,7 @@ Your job is to take planner-ready Quest Contracts from a Campaign and turn each 
 - The hybrid **TDD Readiness Gate** refuses quests with zero testable victory conditions unless the user gives a one-shot override.
 - **Refuse by default** when `plan.html` already exists; explicit re-plan archives then replaces.
 - On successful planning, perform exactly **one narrow manifest mutation**: flip `quests[].status` from `ready_for_planning` to `planned` for the just-planned quest.
+- On successful planning, also **stamp `workflow: tdd`** in the manifest's quest entry and **validate the stamp** by re-reading the manifest.
 - Bootstrap `.liang/project.yaml` on **first run only** via an interactive interview; never re-ask.
 - Stop at a TDD plan. **Never** produce implementation code, task lists, sprint plans, milestone plans, or architecture playbooks.
 
@@ -256,13 +257,19 @@ The file follows `references/plan-template.html`:
 
 ### 11. Manifest Mutation
 
-After `plan.html` is successfully written, perform exactly one mutation on the Campaign's `manifest.yaml`:
+After `plan.html` is successfully written, perform these manifest mutations on the Campaign's `manifest.yaml`:
 
-- Find the quest entry whose `id` matches the just-planned quest.
-- Change its `status` from `ready_for_planning` to `planned`.
-- **Touch nothing else.** No other field, no other quest, no campaign-level metadata.
+1. Find the quest entry whose `id` matches the just-planned quest.
+2. Change its `status` from `ready_for_planning` to `planned`.
+3. Write `workflow: "tdd"` to the quest entry's `workflow` field.
 
-If the status is not `ready_for_planning`, warn and ask the user before proceeding with the mutation.
+Then perform post-stamp validation:
+
+4. Re-read `manifest.yaml` from disk (do not trust in-memory state).
+5. Confirm the quest entry now has `workflow: "tdd"`.
+6. If the stamp is missing or incorrect, warn the user with: "Workflow stamp validation failed for `<quest-id>`: expected `workflow: tdd`, found `<actual-value>`. The plan file is valid but the manifest stamp did not land."
+
+If the status is not `ready_for_planning`, warn and ask before proceeding.
 
 ### 12. Chat Summary
 
@@ -401,7 +408,7 @@ This skill must never:
 3. **Process quests without upfront confirmation.** The queue must be shown and confirmed once before any planning begins.
 4. **Overwrite `plan.html` silently.** Re-plan requires an explicit, named override and uses archive-then-replace (`plan.archive-<ts>.html`).
 5. **Run tests, execute code, install dependencies, or interact with VCS.**
-6. **Mutate `manifest.yaml` outside the one narrow status transition:** `ready_for_planning → planned`, for the specific quest just planned. All other manifest edits are violations.
+6. **Mutate `manifest.yaml` outside the allowed mutations:** status `ready_for_planning → planned` and workflow stamping to `"tdd"` for the specific quest just planned. All other manifest edits are violations.
 7. **Silently change Git ignore rules.** Ask at finalization, Cartographer-style.
 8. **Read or include secrets, `.env`, `.env.*`, `.git/`, credentials, tokens, dependency folders, build outputs, or large binaries.**
 9. **Use VCS-specific wording in plan content** (commit, PR, branch, changelist, push, submit). VCS belongs only in `.liang/project.yaml`.

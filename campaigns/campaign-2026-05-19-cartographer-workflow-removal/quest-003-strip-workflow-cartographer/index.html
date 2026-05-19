@@ -1,39 +1,47 @@
 <!--
 ---
-# Quest Contract — Required Core
-# Schema source of truth: references/schema.md
-# All values must be HTML-escaped when also rendered in the body below.
-
-quest_id: "[QUEST_ID]"
-campaign_id: "[CAMPAIGN_ID]"
-title: "[QUEST_TITLE]"
-purpose: "[QUEST_PURPOSE]"
-desired_outcome: "[DESIRED_OUTCOME]"
+quest_id: "q003"
+campaign_id: "camp-2026-05-19-cartographer-workflow-removal"
+title: "Strip Workflow from Cartographer"
+purpose: "Remove all workflow assignment logic from the cartographer, making quest contracts workflow-agnostic. Contracts describe what to achieve and how to verify it, not which execution approach to use."
+desired_outcome: "The cartographer produces quest contracts with no workflow field. Decomposition uses outcome boundaries with embedded verification. Quest ordering uses dependency topology with exposure tiebreaker."
 victory_conditions:
-  - "[VICTORY_CONDITION_1]"
-  - "[VICTORY_CONDITION_2]"
-scope_boundary: "[SCOPE_BOUNDARY]"
+  - "liang-quest-cartographer/SKILL.md contains no workflow assignment logic (no workflow detection, no workflow field in decomposition or validation)"
+  - "Quest contract template (references/quest-contract-template.html) has no workflow field in the YAML comment block"
+  - "Manifest template (references/manifest-template.html) does not include workflow pills for cartographer-generated output"
+  - "Decomposition logic uses outcome boundaries with embedded verification instead of workflow-based splitting"
+  - "Quest ordering uses dependency topology + exposure tiebreaker (risk x dependency fan-out)"
+  - "Generated quest contracts are workflow-agnostic -- any tactician or quick can plan them"
+scope_boundary: "Changes to liang-quest-cartographer/SKILL.md and its references/ directory only. No changes to tacticians, executors, or quest-core."
 depends_on:
-  - "[DEPENDS_ON_QUEST_ID_OR_EMPTY]"
+  - "q001"
 risks:
-  - "[RISK_1]"
+  - "SKILL.md consistency -- the cartographer file is large and workflow references are scattered throughout multiple sections (Medium risk)"
 open_questions:
-  - "[OPEN_QUESTION_1]"
-planner_handoff: "[PLANNER_HANDOFF_NOTE]"
-readiness: "[low|medium|medium-high|high]"
-status: "[ready_for_planning|needs_clarification|blocked]"
-
-# Optional Extensions (include only when meaningful; remove keys you do not use)
+  - "Exact computation formula for the exposure tiebreaker (risk weight x dependency fan-out) -- to be refined during implementation"
+planner_handoff: "This is a thorough edit of a large SKILL.md file. Workflow references appear in multiple sections: Terminology, Decomposition (Step 5), Validation (Step 6), Output Shape, and the Tiered Schema references. Also update template files in references/. Read the entire SKILL.md before editing to find all workflow touchpoints. The decomposition change (outcome boundaries + exposure tiebreaker) replaces the existing workflow-aware hybrid splitting."
+readiness: "high"
+status: "ready_for_planning"
+workflow: "general"
 non_goals:
-  - "[NON_GOAL_1]"
+  - "Adding workflow stamping to tacticians (that belongs to q002)"
+  - "Changing executor enforcement logic (that belongs to q004)"
+  - "Changing the visual style of generated HTML"
 constraints:
-  - "[CONSTRAINT_1]"
+  - "Must preserve all non-workflow cartographer functionality intact"
+  - "Template files must remain valid HTML with YAML-in-comment convention"
+  - "Decomposition must produce quests that any workflow can consume"
 required_inputs:
-  - "[REQUIRED_INPUT_1]"
-expected_output: "[EXPECTED_OUTPUT]"
+  - "Current liang-quest-cartographer/SKILL.md content"
+  - "Current references/quest-contract-template.html content"
+  - "Current references/manifest-template.html content"
+  - "Updated schema from q001"
+expected_output: "Updated cartographer SKILL.md, quest contract template, and manifest template -- all workflow-free"
 source_evidence:
-  - "[SHORT_EVIDENCE_REF_1]"
-notes: "[FREE_FORM_NOTES]"
+  - "Decision Memo: quest contracts become workflow-agnostic -- they describe outcomes and verification, not execution approach"
+  - "Q3: Decomposition by outcome boundaries with embedded verification"
+  - "Q6-Q7: Quest ordering by dependency topology + exposure tiebreaker"
+  - "Victory Condition: cartographer produces quest contracts with no workflow field"
 ---
 -->
 <!doctype html>
@@ -41,7 +49,7 @@ notes: "[FREE_FORM_NOTES]"
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>[QUEST_ID] — [QUEST_TITLE]</title>
+  <title>q003 &mdash; Strip Workflow from Cartographer</title>
   <style>
     :root {
       --bg: #f6f1e8;
@@ -257,30 +265,30 @@ notes: "[FREE_FORM_NOTES]"
   <main class="page">
     <header class="hero">
       <p class="eyebrow">Quest Contract</p>
-      <h1>[QUEST_ID] — [QUEST_TITLE]</h1>
-      <p class="subtitle">[QUEST_PURPOSE]</p>
+      <h1>q003 &mdash; Strip Workflow from Cartographer</h1>
+      <p class="subtitle">Remove all workflow assignment logic from the cartographer, making quest contracts workflow-agnostic. Contracts describe what to achieve and how to verify it, not which execution approach to use.</p>
 
       <section class="meta-grid" aria-label="Quest metadata">
         <div class="meta-card">
           <span class="meta-label">Campaign</span>
-          <span class="meta-value">[CAMPAIGN_ID]</span>
+          <span class="meta-value">camp-2026-05-19-cartographer-workflow-removal</span>
         </div>
         <div class="meta-card">
           <span class="meta-label">Priority</span>
-          <span class="meta-value">[PRIORITY]</span>
+          <span class="meta-value">High</span>
         </div>
         <div class="meta-card">
           <span class="meta-label">Readiness</span>
-          <span class="meta-value">[READINESS]</span>
+          <span class="meta-value">High</span>
         </div>
         <div class="meta-card">
           <span class="meta-label">Status</span>
-          <span class="meta-value">[STATUS]</span>
+          <span class="meta-value">Ready for Planning</span>
         </div>
       </section>
 
       <div class="pill-row">
-        <span class="pill">Hybrid Quest</span>
+        <span class="pill">Core Refactor</span>
         <span class="pill">Planner Handoff Ready</span>
         <span class="pill">Static Package</span>
       </div>
@@ -295,45 +303,49 @@ notes: "[FREE_FORM_NOTES]"
       <div class="grid">
         <article class="card full callout">
           <h3>Purpose</h3>
-          <p>[QUEST_PURPOSE]</p>
+          <p>Remove all workflow assignment logic from the cartographer, making quest contracts workflow-agnostic. Contracts describe what to achieve and how to verify it, not which execution approach to use.</p>
         </article>
 
         <article class="card ok">
           <h3>Desired Outcome</h3>
-          <p>[DESIRED_OUTCOME]</p>
+          <p>The cartographer produces quest contracts with no <code>workflow</code> field. Decomposition uses outcome boundaries with embedded verification. Quest ordering uses dependency topology with exposure tiebreaker.</p>
         </article>
 
         <article class="card info">
           <h3>Scope Boundary</h3>
-          <p>[SCOPE_BOUNDARY]</p>
+          <p>Changes to <code>liang-quest-cartographer/SKILL.md</code> and its <code>references/</code> directory only. No changes to tacticians, executors, or quest-core.</p>
         </article>
 
         <article class="card full">
           <h3>Victory Conditions</h3>
           <ul>
-            <li>[VICTORY_CONDITION_1]</li>
-            <li>[VICTORY_CONDITION_2]</li>
+            <li><code>liang-quest-cartographer/SKILL.md</code> contains no workflow assignment logic (no workflow detection, no workflow field in decomposition or validation)</li>
+            <li>Quest contract template (<code>references/quest-contract-template.html</code>) has no <code>workflow</code> field in the YAML comment block</li>
+            <li>Manifest template (<code>references/manifest-template.html</code>) does not include workflow pills for cartographer-generated output</li>
+            <li>Decomposition logic uses outcome boundaries with embedded verification instead of workflow-based splitting</li>
+            <li>Quest ordering uses dependency topology + exposure tiebreaker (risk &times; dependency fan-out)</li>
+            <li>Generated quest contracts are workflow-agnostic &mdash; any tactician or quick can plan them</li>
           </ul>
         </article>
 
         <article class="card">
           <h3>Depends On</h3>
           <ul>
-            <li><code>[DEPENDS_ON_QUEST_ID_OR_NONE]</code></li>
+            <li><code>q001</code> &mdash; Establish Schema v2 in Quest Core</li>
           </ul>
         </article>
 
         <article class="card warn">
           <h3>Boss Board / Risks</h3>
           <ul>
-            <li>[RISK_1]</li>
+            <li><strong>SKILL.md consistency (Medium)</strong> &mdash; The cartographer file is large and workflow references are scattered throughout multiple sections. Missing a reference leaves inconsistent behavior.</li>
           </ul>
         </article>
 
         <article class="card full danger">
           <h3>Fog of War / Open Questions</h3>
           <ul>
-            <li>[OPEN_QUESTION_1]</li>
+            <li>Exact computation formula for the exposure tiebreaker (risk weight &times; dependency fan-out) &mdash; to be refined during implementation</li>
           </ul>
         </article>
       </div>
@@ -348,39 +360,49 @@ notes: "[FREE_FORM_NOTES]"
       <div class="grid">
         <article class="card full">
           <h3>Handoff Note</h3>
-          <p>[PLANNER_HANDOFF_NOTE]</p>
+          <p>This is a thorough edit of a large SKILL.md file. Workflow references appear in multiple sections: Terminology, Decomposition (Step 5), Validation (Step 6), Output Shape, and the Tiered Schema references. Also update template files in <code>references/</code>. Read the entire SKILL.md before editing to find all workflow touchpoints. The decomposition change (outcome boundaries + exposure tiebreaker) replaces the existing workflow-aware hybrid splitting.</p>
         </article>
 
         <article class="card">
           <h3>Required Inputs</h3>
           <ul>
-            <li>[REQUIRED_INPUT_1]</li>
+            <li>Current <code>liang-quest-cartographer/SKILL.md</code> content</li>
+            <li>Current <code>references/quest-contract-template.html</code> content</li>
+            <li>Current <code>references/manifest-template.html</code> content</li>
+            <li>Updated schema from q001</li>
           </ul>
         </article>
 
         <article class="card">
           <h3>Expected Output</h3>
-          <p>[EXPECTED_OUTPUT]</p>
+          <p>Updated cartographer SKILL.md, quest contract template, and manifest template &mdash; all workflow-free.</p>
         </article>
 
         <article class="card">
           <h3>Non-Goals</h3>
           <ul>
-            <li>[NON_GOAL_1]</li>
+            <li>Adding workflow stamping to tacticians (that belongs to q002)</li>
+            <li>Changing executor enforcement logic (that belongs to q004)</li>
+            <li>Changing the visual style of generated HTML</li>
           </ul>
         </article>
 
         <article class="card">
           <h3>Constraints</h3>
           <ul>
-            <li>[CONSTRAINT_1]</li>
+            <li>Must preserve all non-workflow cartographer functionality intact</li>
+            <li>Template files must remain valid HTML with YAML-in-comment convention</li>
+            <li>Decomposition must produce quests that any workflow can consume</li>
           </ul>
         </article>
 
         <article class="card full">
           <h3>Source Evidence</h3>
           <ul>
-            <li>[SHORT_EVIDENCE_REF_1]</li>
+            <li>Decision Memo: quest contracts become workflow-agnostic &mdash; they describe outcomes and verification, not execution approach</li>
+            <li>Q3: Decomposition by outcome boundaries with embedded verification</li>
+            <li>Q6&ndash;Q7: Quest ordering by dependency topology + exposure tiebreaker</li>
+            <li>Victory Condition: cartographer produces quest contracts with no workflow field</li>
           </ul>
         </article>
       </div>

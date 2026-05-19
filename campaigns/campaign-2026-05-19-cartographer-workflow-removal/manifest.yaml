@@ -1,0 +1,75 @@
+campaign_id: "camp-2026-05-19-cartographer-workflow-removal"
+slug: "cartographer-workflow-removal"
+title: "Cartographer Workflow Removal"
+created_at: "2026-05-19"
+source_report: "brainstorm-reports/2026-05-19-cartographer-workflow-removal.html"
+lens: "Skill Creation"
+summary: >
+  Remove workflow assignment from the quest cartographer, make quest contracts
+  workflow-agnostic, move workflow stamping to downstream tactician and quick
+  skills, and enforce workflow matching at the executor level. Schema versioning
+  in liang-quest-core handles backward compatibility with existing campaigns.
+
+quests:
+  - id: "q001"
+    title: "Establish Schema v2 in Quest Core"
+    path: "quest-001-establish-schema-v2/index.html"
+    priority: "high"
+    readiness: "high"
+    status: "passed"
+    workflow: "general"
+    depends_on: []
+    current_cycle: 2
+    total_cycles: 2
+    started_at: "2026-05-19T23:00:00+08:00"
+    completed_at: "2026-05-19T23:04:00+08:00"
+
+  - id: "q002"
+    title: "Add Workflow Stamping to Downstream Skills"
+    path: "quest-002-workflow-stamping-downstream/index.html"
+    priority: "high"
+    readiness: "medium-high"
+    status: "passed"
+    workflow: "general"
+    depends_on:
+      - "q001"
+    current_cycle: 3
+    total_cycles: 3
+    started_at: "2026-05-19T23:05:00+08:00"
+    completed_at: "2026-05-19T23:11:00+08:00"
+
+  - id: "q003"
+    title: "Strip Workflow from Cartographer"
+    path: "quest-003-strip-workflow-cartographer/index.html"
+    priority: "high"
+    readiness: "high"
+    status: "passed"
+    workflow: "general"
+    depends_on:
+      - "q001"
+    current_cycle: 3
+    total_cycles: 3
+    started_at: "2026-05-19T23:12:00+08:00"
+    completed_at: "2026-05-19T23:17:00+08:00"
+
+  - id: "q004"
+    title: "Executor Campaign-Level Enforcement"
+    path: "quest-004-executor-enforcement/index.html"
+    priority: "high"
+    readiness: "medium-high"
+    status: "passed"
+    workflow: "general"
+    depends_on:
+      - "q002"
+    current_cycle: 2
+    total_cycles: 2
+    started_at: "2026-05-19T23:18:00+08:00"
+    completed_at: "2026-05-19T23:22:00+08:00"
+
+notes: "Generated as a static handoff; regenerate instead of editing."
+tags:
+  - "skill-creation"
+  - "workflow-removal"
+  - "quest-pipeline"
+generated_by: "liang-quest-cartographer"
+schema_version: "1"

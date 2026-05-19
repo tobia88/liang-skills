@@ -1,6 +1,6 @@
 ---
 name: liang-quest-general-executor
-description: Executes step plans produced by liang-quest-general-tactician for workflow:general quests. Reads shared reference documents from liang-quest-core at activation time. Reads a campaign manifest, builds a dependency-ordered quest queue, and processes each quest's plan.html by stepping through steps[] via child Pi sub-invocations (execute-child, verify-child, re-plan-child). Implements two-tier verification — Tier 1 (command-based) and Tier 2 (forced yes/no checklist). Validates pre/postconditions per step as drift detection. On failure, extracts structured lessons and delegates re-planning to the planning model with accumulated lessons. Tracks manifest status (planned → in_progress → passed/failed/skipped), cascade-skips dependent quests, manages .run/ working directories, supports crash recovery, and produces an HTML run report in the family JRPG dashboard style. Never modifies plan.html files.
+description: Executes step plans produced by liang-quest-general-tactician. Reads shared reference documents from liang-quest-core at activation time. Reads a campaign manifest, builds a dependency-ordered quest queue, and processes each quest's plan.html by stepping through steps[] via child Pi sub-invocations (execute-child, verify-child, re-plan-child). Implements two-tier verification — Tier 1 (command-based) and Tier 2 (forced yes/no checklist). Validates pre/postconditions per step as drift detection. On failure, extracts structured lessons and delegates re-planning to the planning model with accumulated lessons. Tracks manifest status (planned → in_progress → passed/failed/skipped), cascade-skips dependent quests, manages .run/ working directories, supports crash recovery, and produces an HTML run report in the family JRPG dashboard style. Never modifies plan.html files.
 ---
 
 # Liang Quest Executor
@@ -28,7 +28,7 @@ The tactician (smart model) has already front-loaded all thinking into implement
 - On dependency failure, cascade-skip all downstream quests.
 - On crash or interruption, detect incomplete runs from manifest state and offer to resume.
 - Produce an HTML run report at campaign root on completion.
-- Only process quests tagged with `workflow: general`. Skip `workflow: tdd` quests silently.
+- **Workflow enforcement:** Only process quests with `workflow: "general"` in the manifest. Hard-block and report quests with a mismatched workflow tag. Flag quests that are `planned` but have no workflow tag as a distinct error category.
 
 ## Terminology
 
@@ -90,18 +90,18 @@ Check for `max_step_retries` (or `executor.max_cycle_retries`) in project config
 
 ### 3. Tactician Pre-Flight Gate
 
-Before touching any execution state, verify the Tactician has processed the campaign. Read `manifest.yaml` and check every quest entry with `workflow: general`:
+Before touching any execution state, verify the Tactician has processed the campaign. Read `manifest.yaml` and check every quest entry:
 
-1. **Manifest status check** — If any general quest has `status: ready_for_planning`, the Tactician hasn't run.
-2. **Plan file existence check** — For every general quest with `status: planned`, verify `plan.html` exists on disk.
+1. **Manifest status check** — If any quest has `status: ready_for_planning`, the Tactician hasn't run.
+2. **Plan file existence check** — For every quest with `status: planned`, verify `plan.html` exists on disk.
 
-**Hard block — no partial execution.** If ANY general quest fails either check, refuse the campaign. Display which quests are unplanned or missing their `plan.html`. Recommend running `liang-quest-general-tactician`.
+**Hard block — no partial execution.** If ANY quest fails either check, refuse the campaign. Display which quests are unplanned or missing their `plan.html`. Recommend running `liang-quest-general-tactician`.
 
 ### 4. Crash Recovery Check
 
 Examine the manifest for signs of an interrupted previous run:
 
-- Any general quest with `status: in_progress`.
+- Any quest with `status: in_progress`.
 - Any `.run/` directories without a completion marker.
 
 If detected, show which quests were interrupted and at which step. Offer: **Resume** from last checkpoint, or **Restart** (reset to planned, clean .run/).
@@ -111,9 +111,21 @@ If detected, show which quests were interrupted and at which step. Offer: **Resu
 Identify the target Campaign. Build and confirm the queue:
 
 1. **Read manifest** — Read `manifest.yaml`.
-2. **Build the queue** — Collect all general quests with `status: planned`. Sort by dependency order.
-3. **Show the queue** — Table with quest ID, title, difficulty, step count, verification tier split, dependencies, eligibility.
-4. **Confirm once** — "Execute these N general quests in this order?"
+2. **Build the queue** — Read all quests from the manifest. For each quest with `status: planned`, check the `workflow` field:
+
+   - **`workflow: "general"`** — Add to the execution queue. This executor processes this quest.
+   - **`workflow` is present but not `"general"`** (e.g., `"tdd"`, `"quick"`) — **Hard-block.** Do not add to the queue. Report: "Quest <quest-id> has workflow: <value>, expected: general. Skipping — this quest belongs to a different executor."
+   - **`workflow` is absent or empty** (planned but untagged) — **Distinct error.** Do not add to the queue. Report: "Quest <quest-id> is planned but has no workflow tag. This indicates the tactician did not stamp workflow. Run the tactician on this campaign to stamp workflow before executing."
+
+   Sort the eligible quests by dependency order.
+
+   Display a summary of enforcement results before the queue table:
+   - Eligible: N quests with workflow: general
+   - Skipped (wrong workflow): N quests (list IDs)
+   - Error (untagged): N quests (list IDs)
+
+3. **Show the queue** — Table with quest ID, title, workflow, difficulty, step count, verification tier split, dependencies, eligibility.
+4. **Confirm once** — "Execute these N quests in this order?"
 
 ### 6. Quest Execution Loop
 
@@ -121,7 +133,7 @@ For each quest in the queue:
 
 #### 6a. Pre-Quest Setup
 
-1. **Read plan** — Parse `plan.html`. Extract YAML from opening HTML comment. Validate `schema_version`, `workflow: general`.
+1. **Read plan** — Parse `plan.html`. Extract YAML from opening HTML comment. Validate `schema_version`.
 2. **Create .run/ directory** — Create `.run/<quest-id>/` in the campaign directory.
 3. **Manifest mutation** — Set quest status to `in_progress`. Set `current_cycle: 0`, `total_cycles: <step-count>`.
 
@@ -282,7 +294,7 @@ The executor validates conditions mechanically before and after each step:
 | `in_progress` | `failed` | Any step exhausts retries |
 | `planned` | `skipped` | Dependency failed (cascade) |
 
-## Boundaries — Hard Stops (15)
+## Boundaries — Hard Stops (16)
 
 This skill must never:
 
@@ -300,7 +312,7 @@ This skill must never:
 12. **Delete lessons.yaml, run reports, or completion markers during cleanup.**
 13. **Execute quests whose dependencies have not all passed.**
 14. **Silently resume an interrupted run.** Always ask on crash recovery.
-15. **Execute `workflow: tdd` quests.** Those belong to `liang-quest-tdd-executor`.
+15. **Process quests with workflow other than "general".** This executor only handles general workflow quests. TDD quests belong to liang-quest-tdd-executor; quick quests belong to liang-quest-quick.
 
 ## Failure Modes
 
@@ -316,6 +328,8 @@ This skill must never:
 - **All quests skipped or failed:** Produce run report anyway.
 - **Mid-run interruption:** Manifest state + .run/ files enable crash recovery.
 - **project.yaml missing or incomplete:** Stop, direct to Tactician.
+- **Workflow mismatch detected:** Hard-block the mismatched quest. Report which executor should handle it. Continue processing eligible quests.
+- **Planned but untagged quest detected:** Report the error with guidance to run the tactician. Continue processing eligible quests.
 
 ## Visual Tone (Run Report)
 
@@ -334,7 +348,7 @@ Match the existing family:
 - **Upstream:** `liang-quest-general-tactician` produces the `plan.html` files this skill consumes.
 - **Shared foundation:** `liang-quest-core` provides shared reference documents consumed at activation time.
 - **Further upstream:** `liang-quest-cartographer` produces Campaign manifests and Quest Contracts.
-- **Parallel:** `liang-quest-tdd-executor` handles `workflow: tdd` quests; this skill handles `workflow: general`.
+- **Parallel:** `liang-quest-tdd-executor` handles TDD cycle plans; this skill handles general step plans.
 - **Shared contracts:**
   - `.liang/project.yaml` — workspace-wide config. The Tactician bootstraps it; this skill reads it.
 

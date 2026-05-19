@@ -1,0 +1,531 @@
+<!--
+---
+plan_id: "p002"
+quest_id: "q002"
+campaign_id: "camp-2026-05-19-cartographer-workflow-removal"
+title: "Add Workflow Stamping to Downstream Skills"
+workflow: "general"
+difficulty: "medium"
+difficulty_rationale: "Three coordinated edits across three skill directories; post-stamp validation is a critical defense-in-depth requirement flagged as the campaign's highest-exposure risk."
+readiness: "ready"
+scout_summary: |
+  Files read:
+  - liang-quest-general-tactician/SKILL.md (352 lines): Manifest Mutation section (Step 10) currently only flips quests[].status from ready_for_planning to planned. No workflow stamping logic. Core Contract mentions plan YAML has workflow: general but no manifest stamping.
+  - liang-quest-tdd-tactician/SKILL.md (469 lines): Manifest Mutation section (Step 11) currently only flips quests[].status. No workflow stamping logic. Similar structure to general tactician.
+  - liang-quest-quick/SKILL.md (290 lines): Pre-Quest Setup (Step 4a) sets status to in_progress. Reads workflow: quick for filtering but never writes it. Status transitions section documents owned transitions but not workflow writes.
+
+  Patterns observed:
+  - Both tacticians share the same manifest mutation pattern: find quest by ID, change status, touch nothing else.
+  - The quick skill has a different lifecycle: ready_for_planning -> in_progress -> passed/failed/skipped (no planned step).
+  - All three skills already read manifest.yaml as part of campaign chain mode.
+  - Tacticians have explicit "Touch nothing else" language in their mutation sections that must be updated.
+
+  Constraints:
+  - Workflow stamp goes to manifest.yaml quests[].workflow only, never to quest contract HTML files.
+  - Post-stamp validation (tacticians only) must re-read the manifest, not trust in-memory state.
+  - Quick remains a single skill with no separate validation step.
+created_at: "2026-05-19T22:40:00+08:00"
+schema_version: 1
+
+steps:
+  - id: "s01"
+    name: "Add workflow stamping to general tactician"
+    description: "Add workflow: general stamping and post-stamp validation to liang-quest-general-tactician/SKILL.md's Manifest Mutation section, and update the Core Contract to declare this responsibility."
+    files: ["liang-quest-general-tactician/SKILL.md"]
+    instructions: |
+      Edit liang-quest-general-tactician/SKILL.md:
+
+      1. In the Core Contract section (around line 19-29), add a new bullet after the manifest mutation bullet:
+         - On successful planning, also **stamp `workflow: general`** in the manifest's quest entry and **validate the stamp** by re-reading the manifest.
+
+      2. In Step 10 (Manifest Mutation, around lines 216-220), expand the section:
+
+         Current text says to perform exactly one mutation (status flip) and touch nothing else.
+
+         Replace with:
+         After plan.html is successfully written, perform these manifest mutations on the Campaign's manifest.yaml:
+
+         1. Find the quest entry whose id matches the just-planned quest.
+         2. Change its status from ready_for_planning to planned.
+         3. Write workflow: "general" to the quest entry's workflow field.
+
+         Then perform post-stamp validation:
+
+         4. Re-read manifest.yaml from disk (do not trust in-memory state).
+         5. Confirm the quest entry now has workflow: "general".
+         6. If the stamp is missing or incorrect, warn the user with: "Workflow stamp validation failed for <quest-id>: expected workflow: general, found <actual-value>. The plan file is valid but the manifest stamp did not land."
+
+         If the status is not ready_for_planning, warn and ask before proceeding.
+
+      3. In the Boundaries section, update boundary #6:
+         From: Mutate manifest.yaml outside the one narrow status transition: ready_for_planning to planned.
+         To: Mutate manifest.yaml outside the allowed mutations: status ready_for_planning to planned and workflow stamping to "general" for the specific quest just planned.
+    preconditions:
+      - "liang-quest-general-tactician/SKILL.md exists"
+      - "SKILL.md contains a Manifest Mutation section (Step 10)"
+      - "SKILL.md does not already contain workflow stamping logic"
+    postconditions:
+      - "SKILL.md contains instructions to stamp workflow: general in the manifest"
+      - "SKILL.md contains post-stamp validation that re-reads the manifest"
+      - "SKILL.md Core Contract mentions workflow stamping responsibility"
+    verification_tier: 1
+    verification_command: "grep -q \"workflow.*general\" liang-quest-general-tactician/SKILL.md && grep -q \"post-stamp validation\" liang-quest-general-tactician/SKILL.md && grep -q \"Re-read manifest\" liang-quest-general-tactician/SKILL.md"
+    acceptance_criteria:
+      - "Manifest Mutation section stamps workflow: general alongside the status transition"
+      - "Post-stamp validation re-reads manifest from disk and confirms the stamp"
+      - "Core Contract updated to declare stamping responsibility"
+      - "Boundary #6 updated to allow the workflow stamping mutation"
+
+  - id: "s02"
+    name: "Add workflow stamping to TDD tactician"
+    description: "Add workflow: tdd stamping and post-stamp validation to liang-quest-tdd-tactician/SKILL.md's Manifest Mutation section, and update the Core Contract to declare this responsibility."
+    files: ["liang-quest-tdd-tactician/SKILL.md"]
+    instructions: |
+      Edit liang-quest-tdd-tactician/SKILL.md:
+
+      1. In the Core Contract section (around lines 13-27), add a new bullet after the manifest mutation bullet:
+         - On successful planning, also **stamp `workflow: tdd`** in the manifest's quest entry and **validate the stamp** by re-reading the manifest.
+
+      2. In Step 11 (Manifest Mutation, around lines 257-265), expand the section:
+
+         Current text says to perform exactly one mutation (status flip) and touch nothing else.
+
+         Replace with:
+         After plan.html is successfully written, perform these manifest mutations on the Campaign's manifest.yaml:
+
+         1. Find the quest entry whose id matches the just-planned quest.
+         2. Change its status from ready_for_planning to planned.
+         3. Write workflow: "tdd" to the quest entry's workflow field.
+
+         Then perform post-stamp validation:
+
+         4. Re-read manifest.yaml from disk (do not trust in-memory state).
+         5. Confirm the quest entry now has workflow: "tdd".
+         6. If the stamp is missing or incorrect, warn the user with: "Workflow stamp validation failed for <quest-id>: expected workflow: tdd, found <actual-value>. The plan file is valid but the manifest stamp did not land."
+
+         If the status is not ready_for_planning, warn and ask before proceeding.
+
+      3. In the Boundaries section, update boundary #6:
+         From: Mutate manifest.yaml outside the one narrow status transition: ready_for_planning to planned, for the specific quest just planned. All other manifest edits are violations.
+         To: Mutate manifest.yaml outside the allowed mutations: status ready_for_planning to planned and workflow stamping to "tdd" for the specific quest just planned. All other manifest edits are violations.
+    preconditions:
+      - "liang-quest-tdd-tactician/SKILL.md exists"
+      - "SKILL.md contains a Manifest Mutation section (Step 11)"
+      - "SKILL.md does not already contain workflow stamping logic"
+    postconditions:
+      - "SKILL.md contains instructions to stamp workflow: tdd in the manifest"
+      - "SKILL.md contains post-stamp validation that re-reads the manifest"
+      - "SKILL.md Core Contract mentions workflow stamping responsibility"
+    verification_tier: 1
+    verification_command: "grep -q \"workflow.*tdd\" liang-quest-tdd-tactician/SKILL.md && grep -q \"post-stamp validation\" liang-quest-tdd-tactician/SKILL.md && grep -q \"Re-read manifest\" liang-quest-tdd-tactician/SKILL.md"
+    acceptance_criteria:
+      - "Manifest Mutation section stamps workflow: tdd alongside the status transition"
+      - "Post-stamp validation re-reads manifest from disk and confirms the stamp"
+      - "Core Contract updated to declare stamping responsibility"
+      - "Boundary #6 updated to allow the workflow stamping mutation"
+
+  - id: "s03"
+    name: "Add workflow stamping to quick executor"
+    description: "Add workflow: quick stamping to liang-quest-quick/SKILL.md's Pre-Quest Setup section, and update the Core Contract and status transitions to declare this responsibility."
+    files: ["liang-quest-quick/SKILL.md"]
+    instructions: |
+      Edit liang-quest-quick/SKILL.md:
+
+      1. In the Core Contract section (around lines 17-29), add a new bullet after the status path bullet:
+         - **Workflow stamping:** On first contact with a quest, stamp `workflow: "quick"` in the manifest's quest entry alongside the status transition to `in_progress`.
+
+      2. In Step 4a (Pre-Quest Setup, around lines 96-98), expand the manifest mutation substep:
+
+         Current text: Set quest status to in_progress. Record started_at timestamp.
+
+         Replace with:
+         Set quest status to in_progress. Write workflow: "quick" to the quest entry's workflow field. Record started_at timestamp.
+
+         Note: Quick does not require post-stamp validation (no separate planning and execution phases). The stamp is written at the same time as the status transition.
+
+      3. In the Manifest Status Transitions table (around lines 213-226), add a note:
+         In addition to status transitions, this skill also writes workflow: "quick" to the quest entry during the ready_for_planning to in_progress transition. Workflow is written to the manifest only, never to quest contract files.
+
+      4. In the Boundaries section, add a clarifying note to boundary #6 equivalent if one exists about manifest mutations, or add a new entry:
+         Workflow stamp writes to manifest.yaml quests[].workflow only. Never write workflow to quest contract HTML files.
+    preconditions:
+      - "liang-quest-quick/SKILL.md exists"
+      - "SKILL.md contains a Pre-Quest Setup section (Step 4a)"
+      - "SKILL.md does not already contain workflow stamping logic"
+    postconditions:
+      - "SKILL.md contains instructions to stamp workflow: quick in the manifest"
+      - "SKILL.md Core Contract mentions workflow stamping responsibility"
+      - "SKILL.md Pre-Quest Setup includes workflow write alongside status transition"
+    verification_tier: 1
+    verification_command: "grep -q \"stamp.*workflow.*quick\" liang-quest-quick/SKILL.md && grep -q \"workflow.*quick.*manifest\" liang-quest-quick/SKILL.md"
+    acceptance_criteria:
+      - "Pre-Quest Setup stamps workflow: quick alongside status transition to in_progress"
+      - "Core Contract updated to declare stamping responsibility"
+      - "Workflow is written to manifest only, never to quest contract files"
+---
+-->
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>p002 &mdash; Add Workflow Stamping to Downstream Skills</title>
+  <style>
+    :root {
+      --bg: #f6f1e8;
+      --paper: #fffaf0;
+      --paper-2: #fffdf8;
+      --ink: #252338;
+      --muted: #6f6984;
+      --line: rgba(45, 40, 70, 0.14);
+      --deep: #17182e;
+      --deep-2: #232245;
+      --gold: #d6a84f;
+      --gold-2: #f3d58b;
+      --blue: #4b7bd8;
+      --violet: #7b5cc8;
+      --danger: #b85757;
+      --ok: #3f8f6b;
+      --warn: #b8872c;
+      --shadow: 0 18px 50px rgba(31, 27, 49, 0.12);
+      --radius: 18px;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      background:
+        radial-gradient(circle at top left, rgba(214, 168, 79, 0.18), transparent 30rem),
+        radial-gradient(circle at top right, rgba(75, 123, 216, 0.16), transparent 28rem),
+        var(--bg);
+      color: var(--ink);
+      font: 16px/1.65 ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    .page { width: min(1120px, calc(100% - 32px)); margin: 0 auto; padding: 32px 0 56px; }
+
+    .hero {
+      position: relative; overflow: hidden; border-radius: 28px; padding: 34px;
+      background: linear-gradient(135deg, rgba(214,168,79,0.16), transparent 28%), linear-gradient(145deg, var(--deep), var(--deep-2));
+      color: #fff8e8; box-shadow: var(--shadow);
+    }
+
+    .eyebrow { margin: 0 0 10px; color: var(--gold-2); font-size: 0.8rem; font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase; }
+    h1, h2, h3 { margin: 0; line-height: 1.2; }
+    h1 { font-size: clamp(1.8rem, 3.5vw, 3.2rem); letter-spacing: -0.04em; }
+
+    .subtitle { max-width: 780px; margin: 14px 0 0; color: rgba(255, 248, 232, 0.82); font-size: 1.05rem; }
+
+    .meta-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-top: 22px; }
+    .meta-card { padding: 14px 16px; border: 1px solid rgba(255,255,255,0.14); border-radius: 16px; background: rgba(255,255,255,0.07); backdrop-filter: blur(8px); }
+    .meta-label { display: block; color: rgba(255,248,232,0.62); font-size: 0.72rem; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; }
+    .meta-value { display: block; margin-top: 4px; font-weight: 800; }
+
+    .section { margin-top: 24px; }
+    .section-title { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin: 34px 0 14px; }
+    .section-title h2 { font-size: 1.45rem; letter-spacing: -0.02em; }
+
+    .card {
+      padding: 22px; margin-bottom: 16px;
+      border: 1px solid var(--line); border-radius: var(--radius);
+      background: linear-gradient(180deg, var(--paper-2), var(--paper));
+      box-shadow: 0 12px 28px rgba(31, 27, 49, 0.07);
+    }
+
+    .card h3 { margin-bottom: 10px; color: var(--deep-2); font-size: 1.05rem; }
+
+    .tier-badge {
+      display: inline-flex; padding: 4px 10px; border-radius: 999px;
+      font-size: 0.75rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em;
+    }
+    .tier-badge.command { background: rgba(63, 143, 107, 0.13); color: #2d6d52; }
+    .tier-badge.checklist { background: rgba(184, 135, 44, 0.15); color: #805d1d; }
+
+    .conditions { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 12px 0; }
+    .conditions-col { padding: 10px 12px; border-radius: 12px; background: rgba(23,24,46,0.04); font-size: 0.88rem; }
+    .conditions-col strong { display: block; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin-bottom: 6px; }
+    .conditions-col ul { margin: 0; padding-left: 1.1rem; }
+    .conditions-col li { margin-bottom: 4px; }
+
+    .criteria { margin: 10px 0 0; padding: 10px 12px; border-radius: 12px; border-left: 4px solid var(--gold); background: rgba(214,168,79,0.06); font-size: 0.88rem; }
+    .criteria strong { display: block; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin-bottom: 6px; }
+
+    .instructions { margin: 10px 0; padding: 14px; border-radius: 12px; background: rgba(23,24,46,0.05); font-size: 0.88rem; white-space: pre-wrap; font-family: ui-monospace, monospace; }
+
+    details { border: 1px solid var(--line); border-radius: 14px; background: rgba(255,255,255,0.66); margin: 10px 0; overflow: hidden; }
+    summary { cursor: pointer; padding: 14px 16px; font-weight: 850; color: var(--deep-2); background: rgba(23,24,46,0.045); }
+    .details-body { padding: 14px 16px 18px; }
+
+    .footer { margin-top: 34px; padding: 20px 0 0; color: var(--muted); font-size: 0.9rem; text-align: center; }
+
+    @media (max-width: 860px) { .meta-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .conditions { grid-template-columns: 1fr; } }
+    @media (max-width: 560px) { .page { width: min(100% - 20px, 1120px); padding-top: 16px; } .hero { padding: 24px; border-radius: 22px; } .meta-grid { grid-template-columns: 1fr; } }
+    @media print { body { background: #fff; } .page { width: 100%; padding: 0; } .hero, .card { box-shadow: none; } }
+  </style>
+</head>
+<body>
+  <main class="page">
+
+    <header class="hero">
+      <p class="eyebrow">General Quest Plan</p>
+      <h1>Add Workflow Stamping to Downstream Skills</h1>
+      <p class="subtitle">Three coordinated edits across three skill directories; post-stamp validation is a critical defense-in-depth requirement flagged as the campaign&rsquo;s highest-exposure risk.</p>
+
+      <section class="meta-grid">
+        <div class="meta-card">
+          <span class="meta-label">Difficulty</span>
+          <span class="meta-value">Medium</span>
+        </div>
+        <div class="meta-card">
+          <span class="meta-label">Steps</span>
+          <span class="meta-value">3</span>
+        </div>
+        <div class="meta-card">
+          <span class="meta-label">Verification</span>
+          <span class="meta-value">3 Command / 0 Checklist</span>
+        </div>
+        <div class="meta-card">
+          <span class="meta-label">Readiness</span>
+          <span class="meta-value">Ready</span>
+        </div>
+      </section>
+    </header>
+
+    <!-- Scout Summary -->
+    <section class="section">
+      <details>
+        <summary>Scout Summary</summary>
+        <div class="details-body">
+          <p><strong>Files read:</strong></p>
+          <ul>
+            <li><code>liang-quest-general-tactician/SKILL.md</code> (352 lines): Manifest Mutation (Step 10) only flips <code>status</code>. No workflow stamping logic. &ldquo;Touch nothing else&rdquo; language needs updating.</li>
+            <li><code>liang-quest-tdd-tactician/SKILL.md</code> (469 lines): Manifest Mutation (Step 11) only flips <code>status</code>. Same pattern as general tactician.</li>
+            <li><code>liang-quest-quick/SKILL.md</code> (290 lines): Pre-Quest Setup sets status to <code>in_progress</code>. Reads <code>workflow: quick</code> for filtering but never writes it.</li>
+          </ul>
+          <p><strong>Patterns:</strong> Both tacticians share the same manifest mutation pattern. Quick has a different lifecycle (no <code>planned</code> step). All three already read <code>manifest.yaml</code> during campaign chain mode.</p>
+        </div>
+      </details>
+    </section>
+
+    <!-- Steps -->
+    <section class="section">
+      <div class="section-title">
+        <h2>Execution Steps</h2>
+      </div>
+
+      <article class="card">
+        <h3>
+          <span style="color: var(--muted); font-size: 0.8em;">s01</span>
+          Add workflow stamping to general tactician
+          <span class="tier-badge command">Tier 1: Command</span>
+        </h3>
+        <p>Add <code>workflow: general</code> stamping and post-stamp validation to the general tactician&rsquo;s Manifest Mutation section, and update the Core Contract to declare this responsibility.</p>
+        <p style="font-size: 0.85rem; color: var(--muted);">Files: <code>liang-quest-general-tactician/SKILL.md</code></p>
+
+        <div class="conditions">
+          <div class="conditions-col">
+            <strong>Preconditions</strong>
+            <ul>
+              <li>liang-quest-general-tactician/SKILL.md exists</li>
+              <li>SKILL.md contains a Manifest Mutation section (Step 10)</li>
+              <li>SKILL.md does not already contain workflow stamping logic</li>
+            </ul>
+          </div>
+          <div class="conditions-col">
+            <strong>Postconditions</strong>
+            <ul>
+              <li>SKILL.md contains instructions to stamp workflow: general in the manifest</li>
+              <li>SKILL.md contains post-stamp validation that re-reads the manifest</li>
+              <li>SKILL.md Core Contract mentions workflow stamping responsibility</li>
+            </ul>
+          </div>
+        </div>
+
+        <details>
+          <summary>Implementation Instructions</summary>
+          <div class="details-body">
+            <div class="instructions">Edit liang-quest-general-tactician/SKILL.md:
+
+1. In the Core Contract section (around line 19-29), add a new bullet after the manifest mutation bullet:
+   - On successful planning, also **stamp `workflow: general`** in the manifest&#39;s quest entry and **validate the stamp** by re-reading the manifest.
+
+2. In Step 10 (Manifest Mutation, around lines 216-220), expand the section:
+
+   Current text says to perform exactly one mutation (status flip) and touch nothing else.
+
+   Replace with:
+   After plan.html is successfully written, perform these manifest mutations on the Campaign&#39;s manifest.yaml:
+
+   1. Find the quest entry whose id matches the just-planned quest.
+   2. Change its status from ready_for_planning to planned.
+   3. Write workflow: &quot;general&quot; to the quest entry&#39;s workflow field.
+
+   Then perform post-stamp validation:
+
+   4. Re-read manifest.yaml from disk (do not trust in-memory state).
+   5. Confirm the quest entry now has workflow: &quot;general&quot;.
+   6. If the stamp is missing or incorrect, warn the user with: &quot;Workflow stamp validation failed for &lt;quest-id&gt;: expected workflow: general, found &lt;actual-value&gt;. The plan file is valid but the manifest stamp did not land.&quot;
+
+   If the status is not ready_for_planning, warn and ask before proceeding.
+
+3. In the Boundaries section, update boundary #6:
+   From: Mutate manifest.yaml outside the one narrow status transition: ready_for_planning to planned.
+   To: Mutate manifest.yaml outside the allowed mutations: status ready_for_planning to planned and workflow stamping to &quot;general&quot; for the specific quest just planned.</div>
+          </div>
+        </details>
+
+        <div class="criteria">
+          <strong>Acceptance Criteria</strong>
+          <ul>
+            <li>Manifest Mutation section stamps workflow: general alongside the status transition</li>
+            <li>Post-stamp validation re-reads manifest from disk and confirms the stamp</li>
+            <li>Core Contract updated to declare stamping responsibility</li>
+            <li>Boundary #6 updated to allow the workflow stamping mutation</li>
+          </ul>
+        </div>
+      </article>
+
+      <article class="card">
+        <h3>
+          <span style="color: var(--muted); font-size: 0.8em;">s02</span>
+          Add workflow stamping to TDD tactician
+          <span class="tier-badge command">Tier 1: Command</span>
+        </h3>
+        <p>Add <code>workflow: tdd</code> stamping and post-stamp validation to the TDD tactician&rsquo;s Manifest Mutation section, and update the Core Contract to declare this responsibility.</p>
+        <p style="font-size: 0.85rem; color: var(--muted);">Files: <code>liang-quest-tdd-tactician/SKILL.md</code></p>
+
+        <div class="conditions">
+          <div class="conditions-col">
+            <strong>Preconditions</strong>
+            <ul>
+              <li>liang-quest-tdd-tactician/SKILL.md exists</li>
+              <li>SKILL.md contains a Manifest Mutation section (Step 11)</li>
+              <li>SKILL.md does not already contain workflow stamping logic</li>
+            </ul>
+          </div>
+          <div class="conditions-col">
+            <strong>Postconditions</strong>
+            <ul>
+              <li>SKILL.md contains instructions to stamp workflow: tdd in the manifest</li>
+              <li>SKILL.md contains post-stamp validation that re-reads the manifest</li>
+              <li>SKILL.md Core Contract mentions workflow stamping responsibility</li>
+            </ul>
+          </div>
+        </div>
+
+        <details>
+          <summary>Implementation Instructions</summary>
+          <div class="details-body">
+            <div class="instructions">Edit liang-quest-tdd-tactician/SKILL.md:
+
+1. In the Core Contract section (around lines 13-27), add a new bullet after the manifest mutation bullet:
+   - On successful planning, also **stamp `workflow: tdd`** in the manifest&#39;s quest entry and **validate the stamp** by re-reading the manifest.
+
+2. In Step 11 (Manifest Mutation, around lines 257-265), expand the section:
+
+   Current text says to perform exactly one mutation (status flip) and touch nothing else.
+
+   Replace with:
+   After plan.html is successfully written, perform these manifest mutations on the Campaign&#39;s manifest.yaml:
+
+   1. Find the quest entry whose id matches the just-planned quest.
+   2. Change its status from ready_for_planning to planned.
+   3. Write workflow: &quot;tdd&quot; to the quest entry&#39;s workflow field.
+
+   Then perform post-stamp validation:
+
+   4. Re-read manifest.yaml from disk (do not trust in-memory state).
+   5. Confirm the quest entry now has workflow: &quot;tdd&quot;.
+   6. If the stamp is missing or incorrect, warn the user with: &quot;Workflow stamp validation failed for &lt;quest-id&gt;: expected workflow: tdd, found &lt;actual-value&gt;. The plan file is valid but the manifest stamp did not land.&quot;
+
+   If the status is not ready_for_planning, warn and ask before proceeding.
+
+3. In the Boundaries section, update boundary #6:
+   From: Mutate manifest.yaml outside the one narrow status transition: ready_for_planning to planned, for the specific quest just planned. All other manifest edits are violations.
+   To: Mutate manifest.yaml outside the allowed mutations: status ready_for_planning to planned and workflow stamping to &quot;tdd&quot; for the specific quest just planned. All other manifest edits are violations.</div>
+          </div>
+        </details>
+
+        <div class="criteria">
+          <strong>Acceptance Criteria</strong>
+          <ul>
+            <li>Manifest Mutation section stamps workflow: tdd alongside the status transition</li>
+            <li>Post-stamp validation re-reads manifest from disk and confirms the stamp</li>
+            <li>Core Contract updated to declare stamping responsibility</li>
+            <li>Boundary #6 updated to allow the workflow stamping mutation</li>
+          </ul>
+        </div>
+      </article>
+
+      <article class="card">
+        <h3>
+          <span style="color: var(--muted); font-size: 0.8em;">s03</span>
+          Add workflow stamping to quick executor
+          <span class="tier-badge command">Tier 1: Command</span>
+        </h3>
+        <p>Add <code>workflow: quick</code> stamping to the quick executor&rsquo;s Pre-Quest Setup section, and update the Core Contract and status transitions to declare this responsibility.</p>
+        <p style="font-size: 0.85rem; color: var(--muted);">Files: <code>liang-quest-quick/SKILL.md</code></p>
+
+        <div class="conditions">
+          <div class="conditions-col">
+            <strong>Preconditions</strong>
+            <ul>
+              <li>liang-quest-quick/SKILL.md exists</li>
+              <li>SKILL.md contains a Pre-Quest Setup section (Step 4a)</li>
+              <li>SKILL.md does not already contain workflow stamping logic</li>
+            </ul>
+          </div>
+          <div class="conditions-col">
+            <strong>Postconditions</strong>
+            <ul>
+              <li>SKILL.md contains instructions to stamp workflow: quick in the manifest</li>
+              <li>SKILL.md Core Contract mentions workflow stamping responsibility</li>
+              <li>SKILL.md Pre-Quest Setup includes workflow write alongside status transition</li>
+            </ul>
+          </div>
+        </div>
+
+        <details>
+          <summary>Implementation Instructions</summary>
+          <div class="details-body">
+            <div class="instructions">Edit liang-quest-quick/SKILL.md:
+
+1. In the Core Contract section (around lines 17-29), add a new bullet after the status path bullet:
+   - **Workflow stamping:** On first contact with a quest, stamp workflow: &quot;quick&quot; in the manifest&#39;s quest entry alongside the status transition to in_progress.
+
+2. In Step 4a (Pre-Quest Setup, around lines 96-98), expand the manifest mutation substep:
+
+   Current text: Set quest status to in_progress. Record started_at timestamp.
+
+   Replace with:
+   Set quest status to in_progress. Write workflow: &quot;quick&quot; to the quest entry&#39;s workflow field. Record started_at timestamp.
+
+   Note: Quick does not require post-stamp validation (no separate planning and execution phases). The stamp is written at the same time as the status transition.
+
+3. In the Manifest Status Transitions table (around lines 213-226), add a note:
+   In addition to status transitions, this skill also writes workflow: &quot;quick&quot; to the quest entry during the ready_for_planning to in_progress transition. Workflow is written to the manifest only, never to quest contract files.
+
+4. In the Boundaries section, add a clarifying note:
+   Workflow stamp writes to manifest.yaml quests[].workflow only. Never write workflow to quest contract HTML files.</div>
+          </div>
+        </details>
+
+        <div class="criteria">
+          <strong>Acceptance Criteria</strong>
+          <ul>
+            <li>Pre-Quest Setup stamps workflow: quick alongside status transition to in_progress</li>
+            <li>Core Contract updated to declare stamping responsibility</li>
+            <li>Workflow is written to manifest only, never to quest contract files</li>
+          </ul>
+        </div>
+      </article>
+
+    </section>
+
+    <footer class="footer">
+      Generated by liang-quest-general-tactician &middot; 2026-05-19T22:40:00+08:00
+    </footer>
+  </main>
+</body>
+</html>

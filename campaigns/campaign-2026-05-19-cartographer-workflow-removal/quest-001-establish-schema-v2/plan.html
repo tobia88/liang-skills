@@ -1,0 +1,421 @@
+<!--
+---
+plan_id: "p001"
+quest_id: "q001"
+campaign_id: "camp-2026-05-19-cartographer-workflow-removal"
+title: "Establish Schema v2 — Workflow Becomes Downstream-Stamped"
+workflow: "general"
+difficulty: "easy"
+difficulty_rationale: "Two steps, both Tier 1 command-verifiable, scoped to two files in two directories."
+readiness: "ready"
+scout_summary: |
+  Files read:
+  - liang-quest-core/SKILL.md (75 lines): Pure reference library, no schema_version declaration. Has reference index to subdirectories.
+  - liang-quest-cartographer/references/schema.md (157 lines): Source of truth for manifest and quest contract schema. workflow is Required Core in both manifest (line 38) and quest contract (line 73). Contains Workflow Vocabulary section with tdd/general/quick definitions and cartographer assignment logic. Has Schema Versioning section at bottom.
+
+  Patterns observed:
+  - Both schemas (manifest + quest contract) have Required Core and Optional Extensions sections.
+  - Workflow Vocabulary section documents assignment logic.
+  - Schema versioning section notes bumping schema_version for changes.
+
+  Key finding: liang-quest-core/references/campaign/manifest-schema.md (112 lines, NOT in scope) also has workflow as Required Core in both schemas. Will become inconsistent after this quest. Future quests or maintenance should align it.
+created_at: "2026-05-19T22:35:00+08:00"
+schema_version: 1
+
+steps:
+  - id: "s01"
+    name: "Move workflow to Downstream-Stamped in schema.md"
+    description: "Restructure liang-quest-cartographer/references/schema.md to move workflow from Required Core to a new Downstream-Stamped Fields section in both manifest and quest contract schemas, add documentation that workflow is written by tacticians and quick, and add a backward compatibility section for v1/v2 coexistence."
+    files: ["liang-quest-cartographer/references/schema.md"]
+    instructions: |
+      Edit liang-quest-cartographer/references/schema.md:
+
+      1. In the Manifest YAML - Required Core section (around line 23-41):
+         - Remove the line: workflow: string         # "tdd" | "general" | "quick"
+         from the quests[] block inside Required Core.
+
+      2. Add a new section AFTER the Manifest Required Core block (after the closing ```) called:
+         ### Downstream-Stamped Fields (v2)
+         With this content:
+         These fields are NOT written by the cartographer. They are stamped by the downstream skill (tactician or quick) that first plans or processes the quest.
+         ```yaml
+         quests[]:
+           workflow: string         # "tdd" | "general" | "quick" -- stamped by tacticians/quick, not by the cartographer
+         ```
+         In schema v2, workflow is no longer assigned by the cartographer. It is stamped by the downstream skill that first plans or processes the quest. For v1 campaigns where the cartographer wrote workflow, the field remains valid but is considered informational -- the downstream skill may overwrite it.
+
+      3. In the Quest Contract YAML - Required Core section (around lines 58-73):
+         - Remove the line: workflow: string             # "tdd" | "general" | "quick"
+
+      4. Add a new section AFTER the Quest Contract Required Core block called:
+         ### Downstream-Stamped Fields (v2)
+         With this content:
+         ```yaml
+         workflow: string             # stamped by tactician or quick, not by cartographer
+         ```
+         In schema v2, quest contracts are workflow-agnostic. The downstream skill stamps workflow in the manifest on first contact.
+
+      5. Update the Workflow Vocabulary section (around lines 115-128):
+         - Change the introductory paragraph: replace "The Cartographer assigns workflow based on quest characteristics:" with "Downstream skills (tacticians and quick) assign workflow when they first process a quest. The workflow value reflects the planning approach used:"
+         - Keep the tdd/general/quick definitions and the selection criteria bullet list intact.
+
+      6. In the Schema Versioning section at the bottom, add a new subsection:
+         ### Backward Compatibility -- v1 to v2
+         v1 campaigns have workflow in Required Core, assigned by the cartographer. v2 campaigns emit quest contracts without workflow; the downstream skill stamps it in the manifest on first contact. When a v2 tool encounters a v1 campaign with pre-existing workflow values, it treats them as informational -- the downstream skill may overwrite with its own stamp. The schema_version field in the manifest (Optional Extensions) indicates which version generated the campaign. Absence of schema_version implies v1.
+
+      7. Update the Validation Rules section:
+         - Change the last validation rule from: workflow must be exactly "tdd", "general", or "quick" in both manifest and quest contract.
+         - To: workflow, when present, must be exactly "tdd", "general", or "quick". In v2, workflow may be absent from quest contracts (it is stamped downstream).
+    preconditions:
+      - "liang-quest-cartographer/references/schema.md exists and contains workflow in Required Core for both manifest and quest contract"
+    postconditions:
+      - "schema.md does not contain workflow in any Required Core code block"
+      - "schema.md contains a Downstream-Stamped Fields section for manifest quests"
+      - "schema.md contains a Downstream-Stamped Fields section for quest contract"
+      - "schema.md contains text indicating workflow is written by tacticians and quick"
+      - "schema.md contains a Backward Compatibility section for v1 to v2"
+    verification_tier: 1
+    verification_command: "grep -c \"Downstream-Stamped\" liang-quest-cartographer/references/schema.md && grep -q \"Backward Compatibility\" liang-quest-cartographer/references/schema.md && grep -q \"tacticians\" liang-quest-cartographer/references/schema.md"
+    acceptance_criteria:
+      - "workflow removed from Required Core in both manifest and quest contract schemas"
+      - "New Downstream-Stamped Fields section documents workflow as downstream-assigned"
+      - "Backward Compatibility section explains v1/v2 coexistence"
+      - "Validation rules updated to allow absent workflow in v2"
+
+  - id: "s02"
+    name: "Declare schema_version 2 in quest-core SKILL.md"
+    description: "Add a schema_version: 2 declaration to liang-quest-core/SKILL.md with clear semantics explaining the version bump and what changed."
+    files: ["liang-quest-core/SKILL.md"]
+    instructions: |
+      Edit liang-quest-core/SKILL.md:
+
+      Add a new section AFTER the "## What This Skill Provides" table (after line 19) and BEFORE "## Five-Skill Family" called:
+
+      ## Schema Version
+
+      **Current: schema_version: 2**
+
+      The quest planning family uses integer schema versioning. All skills reference the current version from this central declaration.
+
+      | Version | Changes |
+      |---------|---------|
+      | 1 | Initial schema. workflow is Required Core in both manifest and quest contract, assigned by the cartographer. |
+      | 2 | workflow moves from Required Core to Downstream-Stamped. Tacticians and quick stamp workflow in the manifest on first contact. Cartographer produces workflow-agnostic quest contracts. v1 campaigns remain valid; pre-existing workflow values are treated as informational. |
+
+      Skills should check schema_version when parsing campaign artifacts and handle both v1 and v2 gracefully.
+
+      The declaration must be prominent and unambiguous -- any skill reading quest-core will see the current version immediately after the reference table.
+    preconditions:
+      - "liang-quest-core/SKILL.md exists"
+      - "s01 is complete (schema.md has been updated with the v2 changes)"
+    postconditions:
+      - "liang-quest-core/SKILL.md contains the text schema_version: 2"
+      - "liang-quest-core/SKILL.md contains a version history table with v1 and v2 entries"
+    verification_tier: 1
+    verification_command: "grep -q \"schema_version: 2\" liang-quest-core/SKILL.md && grep -q \"Downstream-Stamped\" liang-quest-core/SKILL.md"
+    acceptance_criteria:
+      - "schema_version: 2 declaration present with clear semantics"
+      - "Version history table documents what changed from v1 to v2"
+      - "Declaration is prominent and easily discoverable by other skills"
+---
+-->
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>p001 &mdash; Establish Schema v2 &mdash; Workflow Becomes Downstream-Stamped</title>
+  <style>
+    :root {
+      --bg: #f6f1e8;
+      --paper: #fffaf0;
+      --paper-2: #fffdf8;
+      --ink: #252338;
+      --muted: #6f6984;
+      --line: rgba(45, 40, 70, 0.14);
+      --deep: #17182e;
+      --deep-2: #232245;
+      --gold: #d6a84f;
+      --gold-2: #f3d58b;
+      --blue: #4b7bd8;
+      --violet: #7b5cc8;
+      --danger: #b85757;
+      --ok: #3f8f6b;
+      --warn: #b8872c;
+      --shadow: 0 18px 50px rgba(31, 27, 49, 0.12);
+      --radius: 18px;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      background:
+        radial-gradient(circle at top left, rgba(214, 168, 79, 0.18), transparent 30rem),
+        radial-gradient(circle at top right, rgba(75, 123, 216, 0.16), transparent 28rem),
+        var(--bg);
+      color: var(--ink);
+      font: 16px/1.65 ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    .page { width: min(1120px, calc(100% - 32px)); margin: 0 auto; padding: 32px 0 56px; }
+
+    .hero {
+      position: relative; overflow: hidden; border-radius: 28px; padding: 34px;
+      background: linear-gradient(135deg, rgba(214,168,79,0.16), transparent 28%), linear-gradient(145deg, var(--deep), var(--deep-2));
+      color: #fff8e8; box-shadow: var(--shadow);
+    }
+
+    .eyebrow { margin: 0 0 10px; color: var(--gold-2); font-size: 0.8rem; font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase; }
+    h1, h2, h3 { margin: 0; line-height: 1.2; }
+    h1 { font-size: clamp(1.8rem, 3.5vw, 3.2rem); letter-spacing: -0.04em; }
+
+    .subtitle { max-width: 780px; margin: 14px 0 0; color: rgba(255, 248, 232, 0.82); font-size: 1.05rem; }
+
+    .meta-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-top: 22px; }
+    .meta-card { padding: 14px 16px; border: 1px solid rgba(255,255,255,0.14); border-radius: 16px; background: rgba(255,255,255,0.07); backdrop-filter: blur(8px); }
+    .meta-label { display: block; color: rgba(255,248,232,0.62); font-size: 0.72rem; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; }
+    .meta-value { display: block; margin-top: 4px; font-weight: 800; }
+
+    .section { margin-top: 24px; }
+    .section-title { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin: 34px 0 14px; }
+    .section-title h2 { font-size: 1.45rem; letter-spacing: -0.02em; }
+
+    .card {
+      padding: 22px; margin-bottom: 16px;
+      border: 1px solid var(--line); border-radius: var(--radius);
+      background: linear-gradient(180deg, var(--paper-2), var(--paper));
+      box-shadow: 0 12px 28px rgba(31, 27, 49, 0.07);
+    }
+
+    .card h3 { margin-bottom: 10px; color: var(--deep-2); font-size: 1.05rem; }
+
+    .tier-badge {
+      display: inline-flex; padding: 4px 10px; border-radius: 999px;
+      font-size: 0.75rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em;
+    }
+    .tier-badge.command { background: rgba(63, 143, 107, 0.13); color: #2d6d52; }
+    .tier-badge.checklist { background: rgba(184, 135, 44, 0.15); color: #805d1d; }
+
+    .conditions { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 12px 0; }
+    .conditions-col { padding: 10px 12px; border-radius: 12px; background: rgba(23,24,46,0.04); font-size: 0.88rem; }
+    .conditions-col strong { display: block; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin-bottom: 6px; }
+    .conditions-col ul { margin: 0; padding-left: 1.1rem; }
+    .conditions-col li { margin-bottom: 4px; }
+
+    .criteria { margin: 10px 0 0; padding: 10px 12px; border-radius: 12px; border-left: 4px solid var(--gold); background: rgba(214,168,79,0.06); font-size: 0.88rem; }
+    .criteria strong { display: block; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin-bottom: 6px; }
+
+    .instructions { margin: 10px 0; padding: 14px; border-radius: 12px; background: rgba(23,24,46,0.05); font-size: 0.88rem; white-space: pre-wrap; font-family: ui-monospace, monospace; }
+
+    details { border: 1px solid var(--line); border-radius: 14px; background: rgba(255,255,255,0.66); margin: 10px 0; overflow: hidden; }
+    summary { cursor: pointer; padding: 14px 16px; font-weight: 850; color: var(--deep-2); background: rgba(23,24,46,0.045); }
+    .details-body { padding: 14px 16px 18px; }
+
+    .footer { margin-top: 34px; padding: 20px 0 0; color: var(--muted); font-size: 0.9rem; text-align: center; }
+
+    @media (max-width: 860px) { .meta-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .conditions { grid-template-columns: 1fr; } }
+    @media (max-width: 560px) { .page { width: min(100% - 20px, 1120px); padding-top: 16px; } .hero { padding: 24px; border-radius: 22px; } .meta-grid { grid-template-columns: 1fr; } }
+    @media print { body { background: #fff; } .page { width: 100%; padding: 0; } .hero, .card { box-shadow: none; } }
+  </style>
+</head>
+<body>
+  <main class="page">
+
+    <header class="hero">
+      <p class="eyebrow">General Quest Plan</p>
+      <h1>Establish Schema v2 &mdash; Workflow Becomes Downstream-Stamped</h1>
+      <p class="subtitle">Two steps, both Tier 1 command-verifiable, scoped to two files in two directories.</p>
+
+      <section class="meta-grid">
+        <div class="meta-card">
+          <span class="meta-label">Difficulty</span>
+          <span class="meta-value">Easy</span>
+        </div>
+        <div class="meta-card">
+          <span class="meta-label">Steps</span>
+          <span class="meta-value">2</span>
+        </div>
+        <div class="meta-card">
+          <span class="meta-label">Verification</span>
+          <span class="meta-value">2 Command / 0 Checklist</span>
+        </div>
+        <div class="meta-card">
+          <span class="meta-label">Readiness</span>
+          <span class="meta-value">Ready</span>
+        </div>
+      </section>
+    </header>
+
+    <!-- Scout Summary -->
+    <section class="section">
+      <details>
+        <summary>Scout Summary</summary>
+        <div class="details-body">
+          <p><strong>Files read:</strong></p>
+          <ul>
+            <li><code>liang-quest-core/SKILL.md</code> (75 lines): Pure reference library, no schema_version declaration. Has reference index to subdirectories.</li>
+            <li><code>liang-quest-cartographer/references/schema.md</code> (157 lines): Source of truth for manifest and quest contract schema. <code>workflow</code> is Required Core in both manifest and quest contract. Contains Workflow Vocabulary section with tdd/general/quick definitions and cartographer assignment logic.</li>
+          </ul>
+          <p><strong>Key finding:</strong> <code>liang-quest-core/references/campaign/manifest-schema.md</code> (112 lines, NOT in scope) also has workflow as Required Core. Will become inconsistent after this quest. Future quests or maintenance should align it.</p>
+        </div>
+      </details>
+    </section>
+
+    <!-- Steps -->
+    <section class="section">
+      <div class="section-title">
+        <h2>Execution Steps</h2>
+      </div>
+
+      <article class="card">
+        <h3>
+          <span style="color: var(--muted); font-size: 0.8em;">s01</span>
+          Move workflow to Downstream-Stamped in schema.md
+          <span class="tier-badge command">Tier 1: Command</span>
+        </h3>
+        <p>Restructure <code>liang-quest-cartographer/references/schema.md</code> to move workflow from Required Core to a new Downstream-Stamped Fields section in both manifest and quest contract schemas, add documentation that workflow is written by tacticians and quick, and add a backward compatibility section for v1/v2 coexistence.</p>
+        <p style="font-size: 0.85rem; color: var(--muted);">Files: <code>liang-quest-cartographer/references/schema.md</code></p>
+
+        <div class="conditions">
+          <div class="conditions-col">
+            <strong>Preconditions</strong>
+            <ul>
+              <li>liang-quest-cartographer/references/schema.md exists and contains workflow in Required Core for both manifest and quest contract</li>
+            </ul>
+          </div>
+          <div class="conditions-col">
+            <strong>Postconditions</strong>
+            <ul>
+              <li>schema.md does not contain workflow in any Required Core code block</li>
+              <li>schema.md contains a Downstream-Stamped Fields section for manifest quests</li>
+              <li>schema.md contains a Downstream-Stamped Fields section for quest contract</li>
+              <li>schema.md contains text indicating workflow is written by tacticians and quick</li>
+              <li>schema.md contains a Backward Compatibility section for v1 to v2</li>
+            </ul>
+          </div>
+        </div>
+
+        <details>
+          <summary>Implementation Instructions</summary>
+          <div class="details-body">
+            <div class="instructions">Edit liang-quest-cartographer/references/schema.md:
+
+1. In the Manifest YAML &rarr; Required Core section (around line 23-41):
+   - Remove the line: workflow: string         # &quot;tdd&quot; | &quot;general&quot; | &quot;quick&quot;
+   from the quests[] block inside Required Core.
+
+2. Add a new section AFTER the Manifest Required Core block (after the closing ```) called:
+   ### Downstream-Stamped Fields (v2)
+   With content:
+   These fields are NOT written by the cartographer. They are stamped by the downstream skill (tactician or quick) that first plans or processes the quest.
+   ```yaml
+   quests[]:
+     workflow: string         # &quot;tdd&quot; | &quot;general&quot; | &quot;quick&quot; -- stamped by tacticians/quick, not by the cartographer
+   ```
+   In schema v2, workflow is no longer assigned by the cartographer. It is stamped by the downstream skill that first plans or processes the quest. For v1 campaigns where the cartographer wrote workflow, the field remains valid but is considered informational -- the downstream skill may overwrite it.
+
+3. In the Quest Contract YAML &rarr; Required Core section (around lines 58-73):
+   - Remove the line: workflow: string             # &quot;tdd&quot; | &quot;general&quot; | &quot;quick&quot;
+
+4. Add a new section AFTER the Quest Contract Required Core block called:
+   ### Downstream-Stamped Fields (v2)
+   With content:
+   ```yaml
+   workflow: string             # stamped by tactician or quick, not by cartographer
+   ```
+   In schema v2, quest contracts are workflow-agnostic. The downstream skill stamps workflow in the manifest on first contact.
+
+5. Update the Workflow Vocabulary section (around lines 115-128):
+   - Change intro from &quot;The Cartographer assigns workflow based on quest characteristics:&quot; to &quot;Downstream skills (tacticians and quick) assign workflow when they first process a quest. The workflow value reflects the planning approach used:&quot;
+   - Keep the tdd/general/quick definitions and selection criteria intact.
+
+6. In the Schema Versioning section at the bottom, add a new subsection:
+   ### Backward Compatibility -- v1 to v2
+   v1 campaigns have workflow in Required Core, assigned by the cartographer. v2 campaigns emit quest contracts without workflow; the downstream skill stamps it in the manifest on first contact. When a v2 tool encounters a v1 campaign with pre-existing workflow values, it treats them as informational -- the downstream skill may overwrite with its own stamp. The schema_version field in the manifest (Optional Extensions) indicates which version generated the campaign. Absence of schema_version implies v1.
+
+7. Update the Validation Rules section:
+   - Change the last validation rule from: &quot;workflow must be exactly &#39;tdd&#39;, &#39;general&#39;, or &#39;quick&#39; in both manifest and quest contract.&quot;
+   - To: &quot;workflow, when present, must be exactly &#39;tdd&#39;, &#39;general&#39;, or &#39;quick&#39;. In v2, workflow may be absent from quest contracts (it is stamped downstream).&quot;</div>
+          </div>
+        </details>
+
+        <div class="criteria">
+          <strong>Acceptance Criteria</strong>
+          <ul>
+            <li>workflow removed from Required Core in both manifest and quest contract schemas</li>
+            <li>New Downstream-Stamped Fields section documents workflow as downstream-assigned</li>
+            <li>Backward Compatibility section explains v1/v2 coexistence</li>
+            <li>Validation rules updated to allow absent workflow in v2</li>
+          </ul>
+        </div>
+      </article>
+
+      <article class="card">
+        <h3>
+          <span style="color: var(--muted); font-size: 0.8em;">s02</span>
+          Declare schema_version 2 in quest-core SKILL.md
+          <span class="tier-badge command">Tier 1: Command</span>
+        </h3>
+        <p>Add a <code>schema_version: 2</code> declaration to <code>liang-quest-core/SKILL.md</code> with clear semantics explaining the version bump and what changed.</p>
+        <p style="font-size: 0.85rem; color: var(--muted);">Files: <code>liang-quest-core/SKILL.md</code></p>
+
+        <div class="conditions">
+          <div class="conditions-col">
+            <strong>Preconditions</strong>
+            <ul>
+              <li>liang-quest-core/SKILL.md exists</li>
+              <li>s01 is complete (schema.md has been updated with the v2 changes)</li>
+            </ul>
+          </div>
+          <div class="conditions-col">
+            <strong>Postconditions</strong>
+            <ul>
+              <li>liang-quest-core/SKILL.md contains the text &quot;schema_version: 2&quot;</li>
+              <li>liang-quest-core/SKILL.md contains a version history table with v1 and v2 entries</li>
+            </ul>
+          </div>
+        </div>
+
+        <details>
+          <summary>Implementation Instructions</summary>
+          <div class="details-body">
+            <div class="instructions">Edit liang-quest-core/SKILL.md:
+
+Add a new section AFTER the &quot;## What This Skill Provides&quot; table (after line 19) and BEFORE &quot;## Five-Skill Family&quot; called:
+
+## Schema Version
+
+**Current: schema_version: 2**
+
+The quest planning family uses integer schema versioning. All skills reference the current version from this central declaration.
+
+| Version | Changes |
+|---------|---------|
+| 1 | Initial schema. workflow is Required Core in both manifest and quest contract, assigned by the cartographer. |
+| 2 | workflow moves from Required Core to Downstream-Stamped. Tacticians and quick stamp workflow in the manifest on first contact. Cartographer produces workflow-agnostic quest contracts. v1 campaigns remain valid; pre-existing workflow values are treated as informational. |
+
+Skills should check schema_version when parsing campaign artifacts and handle both v1 and v2 gracefully.
+
+The declaration must be prominent and unambiguous -- any skill reading quest-core will see the current version immediately after the reference table.</div>
+          </div>
+        </details>
+
+        <div class="criteria">
+          <strong>Acceptance Criteria</strong>
+          <ul>
+            <li>schema_version: 2 declaration present with clear semantics</li>
+            <li>Version history table documents what changed from v1 to v2</li>
+            <li>Declaration is prominent and easily discoverable by other skills</li>
+          </ul>
+        </div>
+      </article>
+
+    </section>
+
+    <footer class="footer">
+      Generated by liang-quest-general-tactician &middot; 2026-05-19T22:35:00+08:00
+    </footer>
+  </main>
+</body>
+</html>
