@@ -1,0 +1,312 @@
+<!--
+---
+plan_id: "p001"
+quest_id: "q001"
+campaign_id: "camp-2026-05-19-example"
+title: "Create Logging Configuration and Migration Guide"
+workflow: "general"
+difficulty: "easy"
+difficulty_rationale: "Two steps, single directory scope, one Tier 1 and one Tier 2 verification — straightforward config and docs work."
+readiness: "ready"
+scout_summary: "Scouted src/config/ — directory exists, contains app-config.json (v1 format). No existing logging config. docs/ directory exists with README.md and api-reference.md. Migration guide will be a new file."
+created_at: "2026-05-19T10:00:00Z"
+schema_version: 1
+
+steps:
+  - id: "s01"
+    name: "Create logging config"
+    description: "Create the logging configuration file with structured JSON output format"
+    files: ["src/config/logging.json"]
+    instructions: |
+      Create src/config/logging.json with the following content:
+      {
+        "format": "structured",
+        "level": "info",
+        "outputs": ["stdout"],
+        "timestamp": true,
+        "fields": {
+          "service": "my-app",
+          "version": "2.0"
+        }
+      }
+
+      This replaces the implicit logging defaults from v1. The "structured" format
+      enables JSON log lines instead of plain text. Match the indentation style
+      from the existing app-config.json (2-space indent).
+    preconditions:
+      - "directory src/config/ exists"
+      - "file src/config/logging.json does not exist"
+    postconditions:
+      - "file src/config/logging.json exists"
+      - "file src/config/logging.json contains \"structured\""
+      - "file src/config/logging.json is valid JSON"
+    verification_tier: 1
+    verification_command: "test -f src/config/logging.json && python -c \"import json; json.load(open('src/config/logging.json'))\" && grep -q structured src/config/logging.json"
+    acceptance_criteria:
+      - "Logging config exists at src/config/logging.json"
+      - "Output format is set to structured JSON"
+      - "File is valid JSON"
+
+  - id: "s02"
+    name: "Write migration guide"
+    description: "Document the migration steps from v1 to v2 logging format"
+    files: ["docs/migration-v2.md"]
+    instructions: |
+      Create docs/migration-v2.md with the following structure:
+
+      # Logging Migration Guide: v1 → v2
+
+      ## Overview
+      Brief paragraph explaining the move from implicit defaults to explicit config.
+
+      ## Changed Config Keys
+      Table with columns: v1 Key | v2 Key | Notes
+      - (implicit) → format: "structured"
+      - (implicit) → level: "info"
+      - console output → outputs: ["stdout"]
+
+      ## Before/After Example
+      Show a v1 log line (plain text) and a v2 log line (JSON structured).
+
+      ## Migration Checklist
+      - [ ] Create src/config/logging.json
+      - [ ] Update application bootstrap to load logging config
+      - [ ] Verify structured output in development
+      - [ ] Update log parsing in monitoring tools
+
+      Match the heading style from the existing docs/README.md (ATX headers, no
+      trailing hashes). Use the same markdown conventions observed in api-reference.md.
+    preconditions:
+      - "file src/config/logging.json exists"
+      - "directory docs/ exists"
+    postconditions:
+      - "file docs/migration-v2.md exists"
+      - "file docs/migration-v2.md contains \"v1\""
+      - "file docs/migration-v2.md contains \"v2\""
+    verification_tier: 2
+    verification_command: null
+    acceptance_criteria:
+      - "Does the guide cover all v1 config keys that changed? (yes/no)"
+      - "Does the guide include a before/after example? (yes/no)"
+      - "Is the guide self-contained without requiring external references? (yes/no)"
+      - "Does the guide follow the existing docs/ markdown conventions? (yes/no)"
+---
+-->
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>p001 &mdash; Create Logging Configuration and Migration Guide</title>
+  <style>
+    :root {
+      --bg: #f6f1e8; --paper: #fffaf0; --paper-2: #fffdf8; --ink: #252338;
+      --muted: #6f6984; --line: rgba(45, 40, 70, 0.14); --deep: #17182e;
+      --deep-2: #232245; --gold: #d6a84f; --gold-2: #f3d58b; --blue: #4b7bd8;
+      --violet: #7b5cc8; --danger: #b85757; --ok: #3f8f6b; --warn: #b8872c;
+      --shadow: 0 18px 50px rgba(31, 27, 49, 0.12); --radius: 18px;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: radial-gradient(circle at top left, rgba(214,168,79,0.18), transparent 30rem), radial-gradient(circle at top right, rgba(75,123,216,0.16), transparent 28rem), var(--bg); color: var(--ink); font: 16px/1.65 ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    .page { width: min(1120px, calc(100% - 32px)); margin: 0 auto; padding: 32px 0 56px; }
+    .hero { position: relative; overflow: hidden; border-radius: 28px; padding: 34px; background: linear-gradient(135deg, rgba(214,168,79,0.16), transparent 28%), linear-gradient(145deg, var(--deep), var(--deep-2)); color: #fff8e8; box-shadow: var(--shadow); }
+    .eyebrow { margin: 0 0 10px; color: var(--gold-2); font-size: 0.8rem; font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase; }
+    h1, h2, h3 { margin: 0; line-height: 1.2; }
+    h1 { font-size: clamp(1.8rem, 3.5vw, 3.2rem); letter-spacing: -0.04em; }
+    .subtitle { max-width: 780px; margin: 14px 0 0; color: rgba(255,248,232,0.82); font-size: 1.05rem; }
+    .meta-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-top: 22px; }
+    .meta-card { padding: 14px 16px; border: 1px solid rgba(255,255,255,0.14); border-radius: 16px; background: rgba(255,255,255,0.07); }
+    .meta-label { display: block; color: rgba(255,248,232,0.62); font-size: 0.72rem; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; }
+    .meta-value { display: block; margin-top: 4px; font-weight: 800; }
+    .section { margin-top: 24px; }
+    .section-title { display: flex; align-items: center; gap: 16px; margin: 34px 0 14px; }
+    .section-title h2 { font-size: 1.45rem; letter-spacing: -0.02em; }
+    .card { padding: 22px; margin-bottom: 16px; border: 1px solid var(--line); border-radius: var(--radius); background: linear-gradient(180deg, var(--paper-2), var(--paper)); box-shadow: 0 12px 28px rgba(31,27,49,0.07); }
+    .card h3 { margin-bottom: 10px; color: var(--deep-2); font-size: 1.05rem; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .step-id { color: var(--muted); font-size: 0.8em; font-weight: 700; }
+    .tier-badge { display: inline-flex; padding: 4px 10px; border-radius: 999px; font-size: 0.72rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; }
+    .tier-badge.command { background: rgba(63,143,107,0.13); color: #2d6d52; }
+    .tier-badge.checklist { background: rgba(184,135,44,0.15); color: #805d1d; }
+    .files { font-size: 0.85rem; color: var(--muted); margin: 4px 0 10px; }
+    .files code { background: rgba(23,24,46,0.06); padding: 2px 6px; border-radius: 4px; font-size: 0.85em; }
+    .conditions { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 12px 0; }
+    .conditions-col { padding: 10px 12px; border-radius: 12px; background: rgba(23,24,46,0.04); font-size: 0.88rem; }
+    .conditions-col strong { display: block; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin-bottom: 6px; }
+    .conditions-col ul { margin: 0; padding-left: 1.1rem; }
+    .conditions-col li { margin-bottom: 4px; }
+    .criteria { margin: 10px 0 0; padding: 10px 12px; border-radius: 12px; border-left: 4px solid var(--gold); background: rgba(214,168,79,0.06); font-size: 0.88rem; }
+    .criteria strong { display: block; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin-bottom: 6px; }
+    .criteria ul { margin: 0; padding-left: 1.1rem; }
+    .criteria li { margin-bottom: 4px; }
+    details { border: 1px solid var(--line); border-radius: 14px; background: rgba(255,255,255,0.66); margin: 10px 0; overflow: hidden; }
+    summary { cursor: pointer; padding: 14px 16px; font-weight: 850; color: var(--deep-2); background: rgba(23,24,46,0.045); }
+    .details-body { padding: 14px 16px 18px; }
+    .instructions { padding: 14px; border-radius: 12px; background: rgba(23,24,46,0.05); font-size: 0.85rem; white-space: pre-wrap; font-family: ui-monospace, monospace; line-height: 1.5; }
+    .verification-cmd { margin: 8px 0; padding: 8px 12px; border-radius: 8px; background: rgba(63,143,107,0.08); font-family: ui-monospace, monospace; font-size: 0.82rem; color: #2d6d52; word-break: break-all; }
+    .footer { margin-top: 34px; padding: 20px 0 0; color: var(--muted); font-size: 0.9rem; text-align: center; }
+    @media (max-width: 860px) { .meta-grid { grid-template-columns: repeat(2, minmax(0,1fr)); } .conditions { grid-template-columns: 1fr; } }
+    @media (max-width: 560px) { .page { width: min(100% - 20px, 1120px); padding-top: 16px; } .hero { padding: 24px; border-radius: 22px; } .meta-grid { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <main class="page">
+
+    <header class="hero">
+      <p class="eyebrow">General Quest Plan</p>
+      <h1>Create Logging Configuration and Migration Guide</h1>
+      <p class="subtitle">Two steps, single directory scope, one Tier 1 and one Tier 2 verification &mdash; straightforward config and docs work.</p>
+      <section class="meta-grid">
+        <div class="meta-card"><span class="meta-label">Difficulty</span><span class="meta-value">Easy</span></div>
+        <div class="meta-card"><span class="meta-label">Steps</span><span class="meta-value">2</span></div>
+        <div class="meta-card"><span class="meta-label">Verification</span><span class="meta-value">1 Command / 1 Checklist</span></div>
+        <div class="meta-card"><span class="meta-label">Readiness</span><span class="meta-value">Ready</span></div>
+      </section>
+    </header>
+
+    <section class="section">
+      <details>
+        <summary>Scout Summary</summary>
+        <div class="details-body">
+          <p>Scouted <code>src/config/</code> &mdash; directory exists, contains <code>app-config.json</code> (v1 format, 2-space indent). No existing logging config. <code>docs/</code> directory exists with <code>README.md</code> (ATX headers) and <code>api-reference.md</code>. Migration guide will be a new file.</p>
+        </div>
+      </details>
+    </section>
+
+    <section class="section">
+      <div class="section-title"><h2>Execution Steps</h2></div>
+
+      <article class="card">
+        <h3>
+          <span class="step-id">s01</span>
+          Create logging config
+          <span class="tier-badge command">Tier 1: Command</span>
+        </h3>
+        <p>Create the logging configuration file with structured JSON output format.</p>
+        <p class="files">Files: <code>src/config/logging.json</code></p>
+
+        <div class="conditions">
+          <div class="conditions-col">
+            <strong>Preconditions</strong>
+            <ul>
+              <li>directory <code>src/config/</code> exists</li>
+              <li>file <code>src/config/logging.json</code> does not exist</li>
+            </ul>
+          </div>
+          <div class="conditions-col">
+            <strong>Postconditions</strong>
+            <ul>
+              <li>file <code>src/config/logging.json</code> exists</li>
+              <li>file contains <code>&quot;structured&quot;</code></li>
+              <li>file is valid JSON</li>
+            </ul>
+          </div>
+        </div>
+
+        <details>
+          <summary>Implementation Instructions</summary>
+          <div class="details-body">
+            <div class="instructions">Create src/config/logging.json with the following content:
+{
+  "format": "structured",
+  "level": "info",
+  "outputs": ["stdout"],
+  "timestamp": true,
+  "fields": {
+    "service": "my-app",
+    "version": "2.0"
+  }
+}
+
+This replaces the implicit logging defaults from v1. The "structured" format
+enables JSON log lines instead of plain text. Match the indentation style
+from the existing app-config.json (2-space indent).</div>
+          </div>
+        </details>
+
+        <div class="verification-cmd">test -f src/config/logging.json &amp;&amp; python -c "import json; json.load(open('src/config/logging.json'))" &amp;&amp; grep -q structured src/config/logging.json</div>
+
+        <div class="criteria">
+          <strong>Acceptance Criteria</strong>
+          <ul>
+            <li>Logging config exists at src/config/logging.json</li>
+            <li>Output format is set to structured JSON</li>
+            <li>File is valid JSON</li>
+          </ul>
+        </div>
+      </article>
+
+      <article class="card">
+        <h3>
+          <span class="step-id">s02</span>
+          Write migration guide
+          <span class="tier-badge checklist">Tier 2: Checklist</span>
+        </h3>
+        <p>Document the migration steps from v1 to v2 logging format.</p>
+        <p class="files">Files: <code>docs/migration-v2.md</code></p>
+
+        <div class="conditions">
+          <div class="conditions-col">
+            <strong>Preconditions</strong>
+            <ul>
+              <li>file <code>src/config/logging.json</code> exists</li>
+              <li>directory <code>docs/</code> exists</li>
+            </ul>
+          </div>
+          <div class="conditions-col">
+            <strong>Postconditions</strong>
+            <ul>
+              <li>file <code>docs/migration-v2.md</code> exists</li>
+              <li>file contains &ldquo;v1&rdquo;</li>
+              <li>file contains &ldquo;v2&rdquo;</li>
+            </ul>
+          </div>
+        </div>
+
+        <details>
+          <summary>Implementation Instructions</summary>
+          <div class="details-body">
+            <div class="instructions">Create docs/migration-v2.md with the following structure:
+
+# Logging Migration Guide: v1 &rarr; v2
+
+## Overview
+Brief paragraph explaining the move from implicit defaults to explicit config.
+
+## Changed Config Keys
+Table with columns: v1 Key | v2 Key | Notes
+- (implicit) &rarr; format: "structured"
+- (implicit) &rarr; level: "info"
+- console output &rarr; outputs: ["stdout"]
+
+## Before/After Example
+Show a v1 log line (plain text) and a v2 log line (JSON structured).
+
+## Migration Checklist
+- [ ] Create src/config/logging.json
+- [ ] Update application bootstrap to load logging config
+- [ ] Verify structured output in development
+- [ ] Update log parsing in monitoring tools
+
+Match the heading style from the existing docs/README.md.</div>
+          </div>
+        </details>
+
+        <div class="criteria">
+          <strong>Acceptance Criteria (Yes/No Checklist)</strong>
+          <ul>
+            <li>Does the guide cover all v1 config keys that changed? (yes/no)</li>
+            <li>Does the guide include a before/after example? (yes/no)</li>
+            <li>Is the guide self-contained without requiring external references? (yes/no)</li>
+            <li>Does the guide follow the existing docs/ markdown conventions? (yes/no)</li>
+          </ul>
+        </div>
+      </article>
+
+    </section>
+
+    <footer class="footer">
+      Generated by liang-quest-tactician &middot; 2026-05-19T10:00:00Z
+    </footer>
+  </main>
+</body>
+</html>

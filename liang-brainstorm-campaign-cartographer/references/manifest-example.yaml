@@ -1,0 +1,52 @@
+# Canonical example of a Campaign manifest.yaml.
+# This file is illustrative; the skill generates real values per Campaign.
+# Schema source of truth: references/schema.md
+
+campaign_id: "camp-2026-05-17-example-campaign"
+slug: "example-campaign"
+title: "Example Campaign: Decompose Example Strategy Report"
+created_at: "2026-05-17"
+source_report: "brainstorm-reports/2026-05-17-example-strategy-report.html"
+lens: "Skill Creation"
+summary: >
+  Decompose the Example Strategy Report into a planner-ready set of Quests
+  covering scope confirmation, schema design, and downstream integration.
+  Static handoff package; no execution tracking.
+
+quests:
+  - id: "q001"
+    title: "Confirm Scope and Boundaries"
+    path: "quest-001-confirm-scope-and-boundaries/index.html"
+    priority: "high"
+    readiness: "high"
+    status: "ready_for_planning"
+    workflow: "general"
+    depends_on: []
+
+  - id: "q002"
+    title: "Lock Core Data Schema"
+    path: "quest-002-lock-core-data-schema/index.html"
+    priority: "high"
+    readiness: "medium-high"
+    status: "ready_for_planning"
+    workflow: "tdd"
+    depends_on:
+      - "q001"
+
+  - id: "q003"
+    title: "Design Downstream Integration Contract"
+    path: "quest-003-design-downstream-integration-contract/index.html"
+    priority: "medium"
+    readiness: "medium"
+    status: "needs_clarification"
+    workflow: "general"
+    depends_on:
+      - "q002"
+
+# Optional extensions
+notes: "Generated as a static handoff; regenerate instead of editing."
+tags:
+  - "example"
+  - "skill-creation"
+generated_by: "liang-brainstorm-campaign-cartographer"
+schema_version: "1"

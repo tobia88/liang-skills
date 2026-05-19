@@ -1,0 +1,192 @@
+<!--
+---
+run_id: "[run-id]"
+campaign_id: "[campaign-id]"
+workflow: "general"
+started_at: "[iso-8601]"
+completed_at: "[iso-8601]"
+duration_seconds: [integer]
+
+quests:
+  - quest_id: "[quest-id]"
+    title: "[title]"
+    workflow: "general"
+    difficulty: "[easy|medium|hard]"
+    status: "[passed|failed|skipped]"
+    steps_completed: [integer]
+    steps_total: [integer]
+    step_retries_used: [integer]
+    step_results:
+      - step_id: "[step-id]"
+        status: "[passed|failed]"
+        verification_tier: [1|2]
+        attempts: [integer]
+    skip_reason: "[only when skipped]"
+
+totals:
+  passed: [integer]
+  failed: [integer]
+  skipped: [integer]
+  tier2_failures: [integer]
+
+lessons_count: [integer]
+---
+-->
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Run Report &mdash; [campaign-title]</title>
+  <style>
+    :root {
+      --bg: #f6f1e8; --paper: #fffaf0; --paper-2: #fffdf8; --ink: #252338;
+      --muted: #6f6984; --line: rgba(45, 40, 70, 0.14); --deep: #17182e;
+      --deep-2: #232245; --gold: #d6a84f; --gold-2: #f3d58b; --blue: #4b7bd8;
+      --violet: #7b5cc8; --danger: #b85757; --ok: #3f8f6b; --warn: #b8872c;
+      --shadow: 0 18px 50px rgba(31, 27, 49, 0.12); --radius: 18px;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: radial-gradient(circle at top left, rgba(214,168,79,0.18), transparent 30rem), radial-gradient(circle at top right, rgba(75,123,216,0.16), transparent 28rem), var(--bg); color: var(--ink); font: 16px/1.65 ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    .page { width: min(1120px, calc(100% - 32px)); margin: 0 auto; padding: 32px 0 56px; }
+
+    .hero { position: relative; overflow: hidden; border-radius: 28px; padding: 34px; background: linear-gradient(135deg, rgba(214,168,79,0.16), transparent 28%), linear-gradient(145deg, var(--deep), var(--deep-2)); color: #fff8e8; box-shadow: var(--shadow); }
+    .eyebrow { margin: 0 0 10px; color: var(--gold-2); font-size: 0.8rem; font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase; }
+    h1, h2, h3 { margin: 0; line-height: 1.2; }
+    h1 { font-size: clamp(1.8rem, 3.5vw, 3.2rem); letter-spacing: -0.04em; }
+    .subtitle { max-width: 780px; margin: 14px 0 0; color: rgba(255,248,232,0.82); font-size: 1.05rem; }
+
+    .totals-bar { display: flex; gap: 16px; margin-top: 22px; }
+    .total-pill { padding: 10px 18px; border-radius: 14px; font-weight: 800; font-size: 1.1rem; }
+    .total-pill.passed { background: rgba(63,143,107,0.2); color: #7fffba; }
+    .total-pill.failed { background: rgba(184,87,87,0.2); color: #ffaaaa; }
+    .total-pill.skipped { background: rgba(184,135,44,0.2); color: #f3d58b; }
+
+    .meta-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-top: 18px; }
+    .meta-card { padding: 12px 14px; border: 1px solid rgba(255,255,255,0.14); border-radius: 14px; background: rgba(255,255,255,0.07); }
+    .meta-label { display: block; color: rgba(255,248,232,0.62); font-size: 0.72rem; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; }
+    .meta-value { display: block; margin-top: 4px; font-weight: 800; }
+
+    .section { margin-top: 24px; }
+    .section-title { display: flex; align-items: center; gap: 16px; margin: 34px 0 14px; }
+    .section-title h2 { font-size: 1.45rem; letter-spacing: -0.02em; }
+
+    .quest-card { padding: 22px; margin-bottom: 16px; border: 1px solid var(--line); border-radius: var(--radius); background: linear-gradient(180deg, var(--paper-2), var(--paper)); box-shadow: 0 12px 28px rgba(31,27,49,0.07); }
+    .quest-card h3 { margin-bottom: 10px; color: var(--deep-2); font-size: 1.05rem; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+
+    .status-badge { display: inline-flex; padding: 4px 10px; border-radius: 999px; font-size: 0.75rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; }
+    .status-badge.passed { background: rgba(63,143,107,0.13); color: #2d6d52; }
+    .status-badge.failed { background: rgba(184,87,87,0.13); color: #8d3f3f; }
+    .status-badge.skipped { background: rgba(184,135,44,0.15); color: #805d1d; }
+
+    .tier-badge { display: inline-flex; padding: 3px 8px; border-radius: 999px; font-size: 0.7rem; font-weight: 800; text-transform: uppercase; }
+    .tier-badge.command { background: rgba(63,143,107,0.1); color: #2d6d52; }
+    .tier-badge.checklist { background: rgba(184,135,44,0.1); color: #805d1d; }
+
+    .step-table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 0.88rem; }
+    .step-table th { background: rgba(23,24,46,0.06); padding: 8px 12px; text-align: left; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
+    .step-table td { padding: 8px 12px; border-bottom: 1px solid var(--line); }
+    .step-table tr:last-child td { border-bottom: 0; }
+
+    .criteria-detail { margin: 6px 0; padding: 8px 12px; border-radius: 10px; background: rgba(23,24,46,0.03); font-size: 0.84rem; }
+    .criteria-detail .yes { color: var(--ok); font-weight: 700; }
+    .criteria-detail .no { color: var(--danger); font-weight: 700; }
+
+    .lesson-card { padding: 16px; margin-bottom: 12px; border: 1px solid var(--line); border-left: 4px solid var(--danger); border-radius: 14px; background: rgba(184,87,87,0.04); font-size: 0.88rem; }
+    .lesson-card strong { color: var(--deep-2); }
+    .lesson-meta { color: var(--muted); font-size: 0.78rem; margin-top: 6px; }
+
+    .footer { margin-top: 34px; padding: 20px 0 0; color: var(--muted); font-size: 0.9rem; text-align: center; }
+
+    @media (max-width: 860px) { .meta-grid { grid-template-columns: 1fr 1fr; } .totals-bar { flex-wrap: wrap; } }
+    @media (max-width: 560px) { .page { width: min(100% - 20px, 1120px); padding-top: 16px; } .hero { padding: 24px; border-radius: 22px; } .meta-grid { grid-template-columns: 1fr; } }
+    @media print { body { background: #fff; } .hero, .quest-card { box-shadow: none; } }
+  </style>
+</head>
+<body>
+  <main class="page">
+
+    <header class="hero">
+      <p class="eyebrow">General Quest Run Report</p>
+      <h1>[campaign-title]</h1>
+      <p class="subtitle">Executed [quest-count] general quests &middot; [duration] &middot; [date]</p>
+
+      <div class="totals-bar">
+        <span class="total-pill passed">[passed-count] Passed</span>
+        <span class="total-pill failed">[failed-count] Failed</span>
+        <span class="total-pill skipped">[skipped-count] Skipped</span>
+      </div>
+
+      <section class="meta-grid">
+        <div class="meta-card"><span class="meta-label">Started</span><span class="meta-value">[started_at]</span></div>
+        <div class="meta-card"><span class="meta-label">Completed</span><span class="meta-value">[completed_at]</span></div>
+        <div class="meta-card"><span class="meta-label">Lessons</span><span class="meta-value">[lessons_count]</span></div>
+      </section>
+    </header>
+
+    <!-- Quest Results -->
+    <section class="section">
+      <div class="section-title"><h2>Quest Results</h2></div>
+
+      <!-- Repeat per quest -->
+      <article class="quest-card">
+        <h3>
+          <span style="color: var(--muted); font-size: 0.8em;">[quest-id]</span>
+          [quest-title]
+          <span class="status-badge [passed|failed|skipped]">[status]</span>
+        </h3>
+        <p style="font-size: 0.85rem; color: var(--muted);">Difficulty: [difficulty] &middot; [steps-completed]/[steps-total] steps &middot; [retries] retries</p>
+
+        <table class="step-table">
+          <thead>
+            <tr>
+              <th>Step</th>
+              <th>Verification</th>
+              <th>Status</th>
+              <th>Attempts</th>
+            </tr>
+          </thead>
+          <tbody>
+            <!-- Repeat per step -->
+            <tr>
+              <td>[step-id] [step-name]</td>
+              <td><span class="tier-badge [command|checklist]">[Tier 1|Tier 2]</span></td>
+              <td><span class="status-badge [passed|failed]">[status]</span></td>
+              <td>[attempts]</td>
+            </tr>
+            <!-- End repeat -->
+          </tbody>
+        </table>
+
+        <!-- Tier 2 detail (if applicable) -->
+        <div class="criteria-detail">
+          <strong>Tier 2 Verification Detail:</strong>
+          <ul>
+            <li><span class="[yes|no]">[yes/no]</span> — [criterion text] — [justification]</li>
+          </ul>
+        </div>
+      </article>
+      <!-- End repeat -->
+    </section>
+
+    <!-- Lessons -->
+    <section class="section">
+      <div class="section-title"><h2>Lessons Learned</h2></div>
+
+      <!-- Repeat per lesson -->
+      <article class="lesson-card">
+        <strong>[quest-id] / [step-id] (attempt [n]):</strong> [error_summary]
+        <div class="lesson-meta">[failure_type] &middot; [timestamp]</div>
+      </article>
+      <!-- End repeat -->
+
+      <!-- If no lessons -->
+      <p style="color: var(--muted); font-style: italic;">No failures recorded. All steps passed on first attempt.</p>
+    </section>
+
+    <footer class="footer">
+      Generated by liang-quest-executor &middot; [completed_at]
+    </footer>
+  </main>
+</body>
+</html>

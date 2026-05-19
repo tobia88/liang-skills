@@ -1,0 +1,602 @@
+<!--
+---
+plan_id: "p001"
+quest_id: "q001"
+campaign_id: "camp-2026-01-15-fizzbuzz-kata"
+title: "Add a fizzbuzz function with full TDD coverage"
+difficulty: "easy"
+difficulty_rationale: "Narrow scope with 3 clear assertions, no risks, no open questions, and only 3 cycles needed."
+readiness: "ready"
+created_at: "2026-01-15T14:30:00Z"
+schema_version: 1
+
+non_test_checks:
+  - "Verify the function's JSDoc comment matches the implemented behavior."
+
+cycles:
+  - cycle_id: "c01"
+    test:
+      name: "fizzbuzz returns 'Fizz' for multiples of 3"
+      asserts: "fizzbuzz(3) returns 'Fizz'; fizzbuzz(9) returns 'Fizz'."
+    checklist:
+      - write_failing_test
+      - run_tests
+      - confirm_test_fails
+      - confirm_fails_for_right_reason
+      - implement_minimal
+      - run_tests_and_confirm_passes
+      - confirm_no_regression
+      - refactor_and_confirm_still_green
+      - checkpoint
+    extra_checks: []
+
+  - cycle_id: "c02"
+    test:
+      name: "fizzbuzz returns 'Buzz' for multiples of 5"
+      asserts: "fizzbuzz(5) returns 'Buzz'; fizzbuzz(10) returns 'Buzz'."
+    checklist:
+      - write_failing_test
+      - run_tests
+      - confirm_test_fails
+      - confirm_fails_for_right_reason
+      - implement_minimal
+      - run_tests_and_confirm_passes
+      - confirm_no_regression
+      - refactor_and_confirm_still_green
+      - checkpoint
+    extra_checks:
+      - "Confirm that multiples of 3 (but not 15) still return 'Fizz' after adding Buzz logic."
+
+  - cycle_id: "c03"
+    test:
+      name: "fizzbuzz returns 'FizzBuzz' for multiples of 15"
+      asserts: "fizzbuzz(15) returns 'FizzBuzz'; fizzbuzz(30) returns 'FizzBuzz'."
+    checklist:
+      - write_failing_test
+      - run_tests
+      - confirm_test_fails
+      - confirm_fails_for_right_reason
+      - implement_minimal
+      - run_tests_and_confirm_passes
+      - confirm_no_regression
+      - refactor_and_confirm_still_green
+      - checkpoint
+    extra_checks:
+      - "Confirm that non-multiples (e.g., 7) still return the number as a string."
+      - "Confirm edge case: fizzbuzz(0) behaves as expected (multiple of both 3 and 5)."
+---
+-->
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>q001 — TDD Plan: Add a fizzbuzz function</title>
+  <style>
+    :root {
+      --bg: #f6f1e8;
+      --paper: #fffaf0;
+      --paper-2: #fffdf8;
+      --ink: #252338;
+      --muted: #6f6984;
+      --line: rgba(45, 40, 70, 0.14);
+      --deep: #17182e;
+      --deep-2: #232245;
+      --gold: #d6a84f;
+      --gold-2: #f3d58b;
+      --blue: #4b7bd8;
+      --violet: #7b5cc8;
+      --danger: #b85757;
+      --ok: #3f8f6b;
+      --warn: #b8872c;
+      --shadow: 0 18px 50px rgba(31, 27, 49, 0.12);
+      --radius: 18px;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      background:
+        radial-gradient(circle at top left, rgba(214, 168, 79, 0.18), transparent 30rem),
+        radial-gradient(circle at top right, rgba(75, 123, 216, 0.16), transparent 28rem),
+        var(--bg);
+      color: var(--ink);
+      font: 16px/1.65 ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    a { color: var(--blue); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    .page {
+      width: min(960px, calc(100% - 32px));
+      margin: 0 auto;
+      padding: 32px 0 56px;
+    }
+
+    /* ── Hero ── */
+    .hero {
+      position: relative;
+      overflow: hidden;
+      border-radius: 28px;
+      padding: 30px 34px;
+      background:
+        linear-gradient(135deg, rgba(214,168,79,0.16), transparent 28%),
+        linear-gradient(145deg, var(--deep), var(--deep-2));
+      color: #fff8e8;
+      box-shadow: var(--shadow);
+    }
+
+    .hero::after {
+      content: "";
+      position: absolute;
+      inset: auto -80px -120px auto;
+      width: 260px;
+      height: 260px;
+      border-radius: 999px;
+      background: rgba(123, 92, 200, 0.22);
+      filter: blur(4px);
+    }
+
+    .eyebrow {
+      margin: 0 0 8px;
+      color: var(--gold-2);
+      font-size: 0.78rem;
+      font-weight: 800;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+    }
+
+    h1, h2, h3 { margin: 0; line-height: 1.2; }
+
+    h1 {
+      position: relative;
+      z-index: 1;
+      max-width: 760px;
+      font-size: clamp(1.8rem, 3.2vw, 2.6rem);
+      letter-spacing: -0.035em;
+    }
+
+    .subtitle {
+      position: relative;
+      z-index: 1;
+      max-width: 720px;
+      margin: 12px 0 0;
+      color: rgba(255, 248, 232, 0.82);
+      font-size: 1rem;
+    }
+
+    .meta-grid {
+      position: relative;
+      z-index: 1;
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px;
+      margin-top: 22px;
+    }
+
+    .meta-card {
+      padding: 12px 14px;
+      border: 1px solid rgba(255,255,255,0.14);
+      border-radius: 14px;
+      background: rgba(255,255,255,0.07);
+      backdrop-filter: blur(8px);
+    }
+
+    .meta-label {
+      display: block;
+      color: rgba(255,248,232,0.62);
+      font-size: 0.68rem;
+      font-weight: 800;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+    }
+
+    .meta-value {
+      display: block;
+      margin-top: 4px;
+      font-weight: 800;
+      word-break: break-word;
+    }
+
+    .difficulty-banner {
+      position: relative;
+      z-index: 1;
+      margin-top: 18px;
+      padding: 14px 18px;
+      border-radius: 16px;
+      border: 1px solid rgba(214, 168, 79, 0.35);
+      background: rgba(214, 168, 79, 0.12);
+    }
+
+    .difficulty-banner .diff-label {
+      display: block;
+      color: var(--gold-2);
+      font-size: 0.72rem;
+      font-weight: 800;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+    }
+
+    .difficulty-banner .diff-value {
+      display: block;
+      margin-top: 4px;
+      font-size: 1.2rem;
+      font-weight: 900;
+      color: #fff8e8;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+
+    .difficulty-banner .diff-rationale {
+      display: block;
+      margin-top: 6px;
+      color: rgba(255, 248, 232, 0.78);
+      font-size: 0.92rem;
+      font-style: italic;
+    }
+
+    .pill-row {
+      position: relative;
+      z-index: 1;
+      margin-top: 16px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .pill {
+      display: inline-flex;
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: 0.76rem;
+      font-weight: 800;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      background: rgba(255,255,255,0.11);
+      color: rgba(255, 248, 232, 0.9);
+      border: 1px solid rgba(255,255,255,0.16);
+    }
+
+    .pill.ready { background: rgba(63, 143, 107, 0.18); border-color: rgba(63, 143, 107, 0.3); }
+
+    /* ── Sections ── */
+    .section { margin-top: 24px; }
+
+    .section-title {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      margin: 30px 0 12px;
+    }
+
+    .section-title h2 {
+      font-size: 1.3rem;
+      letter-spacing: -0.02em;
+    }
+
+    .section-title .label {
+      color: var(--muted);
+      font-size: 0.76rem;
+      font-weight: 800;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+    }
+
+    /* ── Cards ── */
+    .card {
+      padding: 22px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: linear-gradient(180deg, var(--paper-2), var(--paper));
+      box-shadow: 0 12px 28px rgba(31, 27, 49, 0.07);
+    }
+
+    .card + .card { margin-top: 16px; }
+
+    .card h3 {
+      margin-bottom: 10px;
+      color: var(--deep-2);
+      font-size: 1.05rem;
+    }
+
+    .cycle-card { border-left: 5px solid var(--blue); }
+    .violet-card { border-left: 5px solid var(--violet); }
+
+    .cycle-id {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      color: var(--muted);
+      font-size: 0.85rem;
+      letter-spacing: 0.04em;
+    }
+
+    .test-block {
+      margin: 10px 0;
+      padding: 12px 14px;
+      border-radius: 12px;
+      background: rgba(75, 123, 216, 0.06);
+      border: 1px solid rgba(75, 123, 216, 0.12);
+    }
+
+    .test-label {
+      display: block;
+      color: var(--blue);
+      font-size: 0.72rem;
+      font-weight: 800;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+    }
+
+    .test-name {
+      display: block;
+      margin-top: 4px;
+      font-weight: 800;
+      color: var(--deep-2);
+    }
+
+    .test-asserts {
+      display: block;
+      margin-top: 4px;
+      color: var(--ink);
+      font-size: 0.94rem;
+    }
+
+    /* ── Checklist ── */
+    .checklist {
+      list-style: none;
+      padding: 0;
+      margin: 12px 0 0;
+      counter-reset: step;
+    }
+
+    .checklist li {
+      counter-increment: step;
+      display: flex;
+      align-items: baseline;
+      gap: 10px;
+      padding: 7px 0;
+      border-bottom: 1px solid var(--line);
+      font-size: 0.94rem;
+    }
+
+    .checklist li:last-child { border-bottom: none; }
+
+    .checklist li::before {
+      content: counter(step);
+      flex-shrink: 0;
+      width: 24px;
+      height: 24px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 999px;
+      background: rgba(75, 123, 216, 0.10);
+      color: var(--blue);
+      font-size: 0.78rem;
+      font-weight: 900;
+    }
+
+    .step-key {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.88em;
+      color: var(--deep-2);
+      font-weight: 700;
+    }
+
+    .extra-checks {
+      margin-top: 12px;
+      padding: 12px 14px;
+      border-radius: 12px;
+      background: rgba(123, 92, 200, 0.06);
+      border: 1px solid rgba(123, 92, 200, 0.14);
+    }
+
+    .extra-label {
+      display: block;
+      color: var(--violet);
+      font-size: 0.72rem;
+      font-weight: 800;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      margin-bottom: 6px;
+    }
+
+    .extra-checks ul {
+      margin: 0;
+      padding-left: 1.1rem;
+    }
+
+    ul, ol { padding-left: 1.25rem; }
+    li + li { margin-top: 4px; }
+
+    code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      background: rgba(23, 24, 46, 0.06);
+      padding: 1px 5px;
+      border-radius: 5px;
+      font-size: 0.92em;
+    }
+
+    .footer {
+      margin-top: 34px;
+      padding: 20px 0 0;
+      color: var(--muted);
+      font-size: 0.9rem;
+      text-align: center;
+    }
+
+    @media (max-width: 860px) {
+      .meta-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+
+    @media (max-width: 560px) {
+      .page { width: min(100% - 20px, 960px); padding-top: 16px; }
+      .hero { padding: 24px; border-radius: 22px; }
+      .meta-grid { grid-template-columns: 1fr; }
+    }
+
+    @media print {
+      body { background: #fff; }
+      .page { width: 100%; padding: 0; }
+      .hero, .card { box-shadow: none; }
+      .hero { border-radius: 0; }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+
+    <!-- ════════════════ HERO ════════════════ -->
+    <header class="hero">
+      <p class="eyebrow">TDD Plan</p>
+      <h1>q001 &mdash; Add a fizzbuzz function with full TDD coverage</h1>
+      <p class="subtitle">Three Red&rarr;Green&rarr;Refactor cycles covering Fizz, Buzz, and FizzBuzz. Each cycle targets one observable assertion with the full 9-item checklist spine.</p>
+
+      <section class="meta-grid" aria-label="Plan metadata">
+        <div class="meta-card">
+          <span class="meta-label">Campaign</span>
+          <span class="meta-value">camp-2026-01-15-fizzbuzz-kata</span>
+        </div>
+        <div class="meta-card">
+          <span class="meta-label">Quest</span>
+          <span class="meta-value">q001</span>
+        </div>
+        <div class="meta-card">
+          <span class="meta-label">Cycles</span>
+          <span class="meta-value">3</span>
+        </div>
+        <div class="meta-card">
+          <span class="meta-label">Created</span>
+          <span class="meta-value">2026-01-15</span>
+        </div>
+      </section>
+
+      <div class="difficulty-banner">
+        <span class="diff-label">Difficulty</span>
+        <span class="diff-value">Easy</span>
+        <span class="diff-rationale">Narrow scope with 3 clear assertions, no risks, no open questions, and only 3 cycles needed.</span>
+      </div>
+
+      <div class="pill-row">
+        <span class="pill ready">Readiness: Ready</span>
+        <span class="pill">Schema v1</span>
+        <span class="pill">3 Cycles</span>
+      </div>
+    </header>
+
+    <!-- ════════════════ NON-TEST CHECKS ════════════════ -->
+    <section class="section">
+      <div class="section-title">
+        <h2>Beyond TDD</h2>
+        <span class="label">Non-Test Checks</span>
+      </div>
+      <article class="card violet-card">
+        <h3>Legitimate Non-Test Concerns</h3>
+        <ul>
+          <li>Verify the function&rsquo;s JSDoc comment matches the implemented behavior.</li>
+        </ul>
+      </article>
+    </section>
+
+    <!-- ════════════════ CYCLES ════════════════ -->
+    <section class="section">
+      <div class="section-title">
+        <h2>Battle Plan</h2>
+        <span class="label">TDD Cycles</span>
+      </div>
+
+      <!-- ── Cycle 1 ── -->
+      <article class="card cycle-card">
+        <span class="cycle-id">c01</span>
+        <h3>Fizz for multiples of 3</h3>
+        <div class="test-block">
+          <span class="test-label">Test Target</span>
+          <span class="test-name">fizzbuzz returns &lsquo;Fizz&rsquo; for multiples of 3</span>
+          <span class="test-asserts">Asserts: fizzbuzz(3) returns &lsquo;Fizz&rsquo;; fizzbuzz(9) returns &lsquo;Fizz&rsquo;.</span>
+        </div>
+
+        <ol class="checklist">
+          <li><span class="step-key">write_failing_test</span></li>
+          <li><span class="step-key">run_tests</span></li>
+          <li><span class="step-key">confirm_test_fails</span></li>
+          <li><span class="step-key">confirm_fails_for_right_reason</span></li>
+          <li><span class="step-key">implement_minimal</span></li>
+          <li><span class="step-key">run_tests_and_confirm_passes</span></li>
+          <li><span class="step-key">confirm_no_regression</span></li>
+          <li><span class="step-key">refactor_and_confirm_still_green</span></li>
+          <li><span class="step-key">checkpoint</span></li>
+        </ol>
+      </article>
+
+      <!-- ── Cycle 2 ── -->
+      <article class="card cycle-card">
+        <span class="cycle-id">c02</span>
+        <h3>Buzz for multiples of 5</h3>
+        <div class="test-block">
+          <span class="test-label">Test Target</span>
+          <span class="test-name">fizzbuzz returns &lsquo;Buzz&rsquo; for multiples of 5</span>
+          <span class="test-asserts">Asserts: fizzbuzz(5) returns &lsquo;Buzz&rsquo;; fizzbuzz(10) returns &lsquo;Buzz&rsquo;.</span>
+        </div>
+
+        <ol class="checklist">
+          <li><span class="step-key">write_failing_test</span></li>
+          <li><span class="step-key">run_tests</span></li>
+          <li><span class="step-key">confirm_test_fails</span></li>
+          <li><span class="step-key">confirm_fails_for_right_reason</span></li>
+          <li><span class="step-key">implement_minimal</span></li>
+          <li><span class="step-key">run_tests_and_confirm_passes</span></li>
+          <li><span class="step-key">confirm_no_regression</span></li>
+          <li><span class="step-key">refactor_and_confirm_still_green</span></li>
+          <li><span class="step-key">checkpoint</span></li>
+        </ol>
+
+        <div class="extra-checks">
+          <span class="extra-label">Extra Checks</span>
+          <ul>
+            <li>Confirm that multiples of 3 (but not 15) still return &lsquo;Fizz&rsquo; after adding Buzz logic.</li>
+          </ul>
+        </div>
+      </article>
+
+      <!-- ── Cycle 3 ── -->
+      <article class="card cycle-card">
+        <span class="cycle-id">c03</span>
+        <h3>FizzBuzz for multiples of 15</h3>
+        <div class="test-block">
+          <span class="test-label">Test Target</span>
+          <span class="test-name">fizzbuzz returns &lsquo;FizzBuzz&rsquo; for multiples of 15</span>
+          <span class="test-asserts">Asserts: fizzbuzz(15) returns &lsquo;FizzBuzz&rsquo;; fizzbuzz(30) returns &lsquo;FizzBuzz&rsquo;.</span>
+        </div>
+
+        <ol class="checklist">
+          <li><span class="step-key">write_failing_test</span></li>
+          <li><span class="step-key">run_tests</span></li>
+          <li><span class="step-key">confirm_test_fails</span></li>
+          <li><span class="step-key">confirm_fails_for_right_reason</span></li>
+          <li><span class="step-key">implement_minimal</span></li>
+          <li><span class="step-key">run_tests_and_confirm_passes</span></li>
+          <li><span class="step-key">confirm_no_regression</span></li>
+          <li><span class="step-key">refactor_and_confirm_still_green</span></li>
+          <li><span class="step-key">checkpoint</span></li>
+        </ol>
+
+        <div class="extra-checks">
+          <span class="extra-label">Extra Checks</span>
+          <ul>
+            <li>Confirm that non-multiples (e.g., 7) still return the number as a string.</li>
+            <li>Confirm edge case: fizzbuzz(0) behaves as expected (multiple of both 3 and 5).</li>
+          </ul>
+        </div>
+      </article>
+
+    </section>
+
+    <!-- ════════════════ FOOTER ════════════════ -->
+    <footer class="footer">
+      Generated by liang-quest-tdd-tactician on 2026-01-15. Schema v1. Static TDD plan; regenerate via re-plan override instead of editing.
+    </footer>
+
+  </main>
+</body>
+</html>
