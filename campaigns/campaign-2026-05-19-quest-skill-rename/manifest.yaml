@@ -39,10 +39,12 @@ quests:
     path: "quest-003-verification/index.html"
     priority: "high"
     readiness: "high"
-    status: "ready_for_planning"
+    status: "passed"
     workflow: "quick"
     depends_on:
       - "q002"
+    started_at: "2026-05-19T00:04:00Z"
+    completed_at: "2026-05-19T00:05:00Z"
 
 notes: "Generated as a static handoff; regenerate instead of editing."
 tags:
