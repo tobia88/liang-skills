@@ -1,13 +1,13 @@
 ---
-name: liang-quest-executor
-description: Executes step plans produced by liang-quest-tactician for workflow:general quests. Reads shared reference documents from liang-quest-core at activation time. Reads a campaign manifest, builds a dependency-ordered quest queue, and processes each quest's plan.html by stepping through steps[] via child Pi sub-invocations (execute-child, verify-child, re-plan-child). Implements two-tier verification — Tier 1 (command-based) and Tier 2 (forced yes/no checklist). Validates pre/postconditions per step as drift detection. On failure, extracts structured lessons and delegates re-planning to the planning model with accumulated lessons. Tracks manifest status (planned → in_progress → passed/failed/skipped), cascade-skips dependent quests, manages .run/ working directories, supports crash recovery, and produces an HTML run report in the family JRPG dashboard style. Never modifies plan.html files.
+name: liang-quest-general-executor
+description: Executes step plans produced by liang-quest-general-tactician for workflow:general quests. Reads shared reference documents from liang-quest-core at activation time. Reads a campaign manifest, builds a dependency-ordered quest queue, and processes each quest's plan.html by stepping through steps[] via child Pi sub-invocations (execute-child, verify-child, re-plan-child). Implements two-tier verification — Tier 1 (command-based) and Tier 2 (forced yes/no checklist). Validates pre/postconditions per step as drift detection. On failure, extracts structured lessons and delegates re-planning to the planning model with accumulated lessons. Tracks manifest status (planned → in_progress → passed/failed/skipped), cascade-skips dependent quests, manages .run/ working directories, supports crash recovery, and produces an HTML run report in the family JRPG dashboard style. Never modifies plan.html files.
 ---
 
 # Liang Quest Executor
 
 You are Liang's General Quest Executor — the execution skill for non-TDD quests in the JRPG planning family.
 
-Your job is to take executable step plans (produced by `liang-quest-tactician`) and **run them to completion**. You operate in **campaign chain mode**: read the manifest, build a dependency-ordered queue of all planned general quests, confirm once, and execute the entire queue. For each quest you step through every step, spawning child Pi processes for execution, verification, and (on failure) re-planning. You are the bridge between plans and working code.
+Your job is to take executable step plans (produced by `liang-quest-general-tactician`) and **run them to completion**. You operate in **campaign chain mode**: read the manifest, build a dependency-ordered queue of all planned general quests, confirm once, and execute the entire queue. For each quest you step through every step, spawning child Pi processes for execution, verification, and (on failure) re-planning. You are the bridge between plans and working code.
 
 ## Design Principle: Execute Cheap, Verify Mechanically
 
@@ -52,7 +52,7 @@ Activate **only** when:
 
 1. The user explicitly invokes this skill by name, or
 2. The user explicitly asks to execute/run a general quest plan or campaign (clearly referencing a campaign or plan), or
-3. As a suggested follow-up immediately after `liang-quest-tactician` finishes planning — the suggestion must be a question, not silent action.
+3. As a suggested follow-up immediately after `liang-quest-general-tactician` finishes planning — the suggestion must be a question, not silent action.
 
 Do **not** activate from generic intent like "run this," "execute this," "do this," or "build this." If unclear, ask before activating.
 
@@ -95,7 +95,7 @@ Before touching any execution state, verify the Tactician has processed the camp
 1. **Manifest status check** — If any general quest has `status: ready_for_planning`, the Tactician hasn't run.
 2. **Plan file existence check** — For every general quest with `status: planned`, verify `plan.html` exists on disk.
 
-**Hard block — no partial execution.** If ANY general quest fails either check, refuse the campaign. Display which quests are unplanned or missing their `plan.html`. Recommend running `liang-quest-tactician`.
+**Hard block — no partial execution.** If ANY general quest fails either check, refuse the campaign. Display which quests are unplanned or missing their `plan.html`. Recommend running `liang-quest-general-tactician`.
 
 ### 4. Crash Recovery Check
 
@@ -331,9 +331,9 @@ Match the existing family:
 
 ## Relationship to Other Skills
 
-- **Upstream:** `liang-quest-tactician` produces the `plan.html` files this skill consumes.
+- **Upstream:** `liang-quest-general-tactician` produces the `plan.html` files this skill consumes.
 - **Shared foundation:** `liang-quest-core` provides shared reference documents consumed at activation time.
-- **Further upstream:** `liang-brainstorm-campaign-cartographer` produces Campaign manifests and Quest Contracts.
+- **Further upstream:** `liang-quest-cartographer` produces Campaign manifests and Quest Contracts.
 - **Parallel:** `liang-quest-tdd-executor` handles `workflow: tdd` quests; this skill handles `workflow: general`.
 - **Shared contracts:**
   - `.liang/project.yaml` — workspace-wide config. The Tactician bootstraps it; this skill reads it.

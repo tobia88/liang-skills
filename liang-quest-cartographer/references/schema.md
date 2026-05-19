@@ -1,6 +1,6 @@
 # Tiered Schema — Manifest and Quest Contract
 
-This file is the source of truth for the Campaign schema used by `liang-brainstorm-campaign-cartographer`.
+This file is the source of truth for the Campaign schema used by `liang-quest-cartographer`.
 
 Two artifacts, **Layered Truth**:
 

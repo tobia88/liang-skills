@@ -24,9 +24,9 @@ This skill contains **no behavioral logic**. It exists solely as a structured li
 |---|---|---|
 | **liang-quest-core** | Shared references (this skill) | — |
 | **liang-quest-tdd-tactician** | TDD planning: cycles, 9-item checklist spine | `campaign/`, `plan-schema/` |
-| **liang-quest-tactician** | General planning: ordered steps, pre/postconditions, two-tier verification | `campaign/`, `plan-schema/` |
+| **liang-quest-general-tactician** | General planning: ordered steps, pre/postconditions, two-tier verification | `campaign/`, `plan-schema/` |
 | **liang-quest-tdd-executor** | TDD execution: cycle processing, test_command verification | `campaign/`, `execution/` |
-| **liang-quest-executor** | General execution: step processing, two-tier verification, lesson extraction | `campaign/`, `execution/` |
+| **liang-quest-general-executor** | General execution: step processing, two-tier verification, lesson extraction | `campaign/`, `execution/` |
 
 ## Composition Mechanism
 

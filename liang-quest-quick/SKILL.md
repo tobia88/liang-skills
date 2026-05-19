@@ -44,7 +44,7 @@ Activate **only** when:
 
 1. The user explicitly invokes this skill by name, or
 2. The user explicitly asks to quick-execute a campaign (clearly referencing a campaign), or
-3. As a suggested follow-up after `liang-brainstorm-campaign-cartographer` finalizes a campaign containing quick quests — the suggestion must be a question, not silent action.
+3. As a suggested follow-up after `liang-quest-cartographer` finalizes a campaign containing quick quests — the suggestion must be a question, not silent action.
 
 Do **not** activate from generic intent like "run this," "execute this," "do this," or "build this." If unclear, ask before activating.
 
@@ -267,8 +267,8 @@ Match the existing family style, plus Quick-specific elements:
 
 ## Relationship to Other Skills
 
-- **Upstream:** `liang-brainstorm-campaign-cartographer` assigns `workflow: quick` to quests during campaign creation.
-- **Parallel:** `liang-quest-executor` handles `workflow: general` quests; `liang-quest-tdd-executor` handles `workflow: tdd` quests. This skill handles `workflow: quick`.
+- **Upstream:** `liang-quest-cartographer` assigns `workflow: quick` to quests during campaign creation.
+- **Parallel:** `liang-quest-general-executor` handles `workflow: general` quests; `liang-quest-tdd-executor` handles `workflow: tdd` quests. This skill handles `workflow: quick`.
 - **Shared foundation:** `liang-quest-core` provides shared reference documents consumed at activation time.
 - **Shared contracts:** `.liang/project.yaml` — workspace-wide config. Optional for Quick (unlike general/TDD which require it).
 - **Not downstream of any tactician.** This skill bypasses the tactician+executor pipeline entirely. There is no `liang-quest-quick-tactician`.

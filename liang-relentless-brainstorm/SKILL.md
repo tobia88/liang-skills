@@ -508,14 +508,14 @@ Use this style:
 To continue in a clean context, copy and paste this into a new session:
 
 ```
-liang-brainstorm-campaign-cartographer <report-path>
+liang-quest-cartographer <report-path>
 ```
 
 Where `<report-path>` is the actual saved path of the report just written (e.g., `brainstorm-reports/2026-05-19-my-topic.html`).
 
 Rules:
 
-- Always suggest `liang-brainstorm-campaign-cartographer` as the downstream skill, since that is the next step in the pipeline.
+- Always suggest `liang-quest-cartographer` as the downstream skill, since that is the next step in the pipeline.
 - Use the literal report path, not a placeholder.
 - Do not include invocation-method prefixes (no `/liang-pi`, no `pi skill`). The command should be agent/platform agnostic — just the skill name and the path.
 - Present it as a suggestion, not an action. Do not invoke the cartographer automatically.

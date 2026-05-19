@@ -27,10 +27,12 @@ quests:
     path: "quest-002-execute-rename-sweep/index.html"
     priority: "high"
     readiness: "high"
-    status: "ready_for_planning"
+    status: "passed"
     workflow: "general"
     depends_on:
       - "q001"
+    started_at: "2026-05-19T00:02:00Z"
+    completed_at: "2026-05-19T00:03:00Z"
 
   - id: "q003"
     title: "Verification"

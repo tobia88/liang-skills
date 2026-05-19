@@ -45,7 +45,7 @@ Activate **only** when:
 
 1. The user explicitly invokes this skill by name, or
 2. The user explicitly asks to turn a Quest Contract into a TDD plan (clearly referencing a quest), or
-3. As a suggested follow-up immediately after `liang-brainstorm-campaign-cartographer` finalizes a Campaign - the suggestion must be a question, not silent action.
+3. As a suggested follow-up immediately after `liang-quest-cartographer` finalizes a Campaign - the suggestion must be a question, not silent action.
 
 Do **not** activate from generic intent like "plan this," "break this down," "create tasks," or "make a plan." If unclear, ask before activating.
 
@@ -438,7 +438,7 @@ Match the existing family:
 
 ## Relationship to Other Skills
 
-- **Upstream:** `liang-brainstorm-campaign-cartographer` produces the Quest Contracts this skill consumes.
+- **Upstream:** `liang-quest-cartographer` produces the Quest Contracts this skill consumes.
 - **Further upstream:** `liang-relentless-brainstorm` produces the Strategy Reports the Cartographer consumes.
 - **Downstream:** `liang-quest-tdd-executor` consumes `plan.html` and steps through the cycles.
 - **Shared contracts:**

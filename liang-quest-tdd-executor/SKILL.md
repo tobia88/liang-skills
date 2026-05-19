@@ -528,7 +528,7 @@ Match the existing family:
 
 - **Upstream:** `liang-quest-tdd-tactician` produces the `plan.html` files this skill consumes.
 - **Shared infrastructure:** `liang-quest-planner-core` provides the re-planning interface for the retry loop.
-- **Further upstream:** `liang-brainstorm-campaign-cartographer` produces Campaign manifests and Quest Contracts.
+- **Further upstream:** `liang-quest-cartographer` produces Campaign manifests and Quest Contracts.
 - **Shared contracts:**
   - `.liang/project.yaml` — workspace-wide config. The Tactician bootstraps it; the Executor reads it. `schema_version: 1`.
   - `.liang/test-approaches.yaml` — project-global test registry. The Tactician creates and appends entries; the Executor reads them for spine validation and hybrid verification.

@@ -1,0 +1,525 @@
+<!--
+---
+run_id: "run-2026-05-19-quick-001"
+campaign_id: "camp-2026-05-19-quest-skill-rename"
+workflow: "quick"
+started_at: "2026-05-19T00:00:00Z"
+completed_at: "2026-05-19T00:01:00Z"
+duration_seconds: 60
+
+quests:
+  - quest_id: "q001"
+    title: "Dependency Audit"
+    workflow: "quick"
+    status: "passed"
+    victory_conditions_checked: 3
+    victory_conditions_passed: 3
+    files_changed: []
+
+totals:
+  passed: 1
+  failed: 0
+  skipped: 0
+
+lessons_count: 0
+---
+-->
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Run Report &mdash; Quest Skill Rename</title>
+  <style>
+    :root {
+      --bg: #f6f1e8; --paper: #fffaf0; --paper-2: #fffdf8; --ink: #252338;
+      --muted: #6f6984; --line: rgba(45, 40, 70, 0.14); --deep: #17182e;
+      --deep-2: #232245; --gold: #d6a84f; --gold-2: #f3d58b; --blue: #4b7bd8;
+      --violet: #7b5cc8; --danger: #b85757; --ok: #3f8f6b; --warn: #b8872c;
+      --shadow: 0 18px 50px rgba(31, 27, 49, 0.12); --radius: 18px;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      background:
+        radial-gradient(circle at top left, rgba(214, 168, 79, 0.18), transparent 30rem),
+        radial-gradient(circle at top right, rgba(75, 123, 216, 0.16), transparent 28rem),
+        var(--bg);
+      color: var(--ink);
+      font: 16px/1.65 ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    .page {
+      width: min(960px, calc(100% - 32px));
+      margin: 0 auto;
+      padding: 32px 0 56px;
+    }
+
+    /* ── Hero ── */
+    .hero {
+      position: relative;
+      overflow: hidden;
+      border-radius: 28px;
+      padding: 30px 34px;
+      background:
+        linear-gradient(135deg, rgba(214, 168, 79, 0.16), transparent 28%),
+        linear-gradient(145deg, var(--deep), var(--deep-2));
+      color: #fff8e8;
+      box-shadow: var(--shadow);
+    }
+
+    .hero::after {
+      content: "";
+      position: absolute;
+      inset: auto -80px -120px auto;
+      width: 260px;
+      height: 260px;
+      border-radius: 999px;
+      background: rgba(123, 92, 200, 0.22);
+      filter: blur(4px);
+    }
+
+    .eyebrow {
+      margin: 0 0 8px;
+      color: var(--gold-2);
+      font-size: 0.78rem;
+      font-weight: 800;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+    }
+
+    h1, h2, h3 { margin: 0; line-height: 1.2; }
+
+    h1 {
+      position: relative;
+      z-index: 1;
+      max-width: 760px;
+      font-size: clamp(1.8rem, 3.2vw, 2.6rem);
+      letter-spacing: -0.035em;
+    }
+
+    .subtitle {
+      position: relative;
+      z-index: 1;
+      max-width: 720px;
+      margin: 12px 0 0;
+      color: rgba(255, 248, 232, 0.82);
+      font-size: 1rem;
+    }
+
+    .workflow-badge {
+      position: relative;
+      z-index: 1;
+      display: inline-flex;
+      margin-top: 14px;
+      padding: 5px 14px;
+      border-radius: 999px;
+      font-size: 0.72rem;
+      font-weight: 800;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      background: rgba(123, 92, 200, 0.2);
+      color: #c4b5ff;
+      border: 1px solid rgba(123, 92, 200, 0.3);
+    }
+
+    /* ── Totals Bar ── */
+    .totals-bar {
+      position: relative;
+      z-index: 1;
+      display: flex;
+      gap: 10px;
+      margin-top: 18px;
+      flex-wrap: wrap;
+    }
+
+    .total-pill {
+      padding: 10px 18px;
+      border-radius: 14px;
+      font-weight: 800;
+      font-size: 1.1rem;
+    }
+
+    .total-pill.passed { background: rgba(63, 143, 107, 0.2); color: #7fffba; }
+    .total-pill.failed { background: rgba(184, 87, 87, 0.2); color: #ffaaaa; }
+    .total-pill.skipped { background: rgba(184, 135, 44, 0.2); color: #f3d58b; }
+
+    /* ── Meta Grid ── */
+    .meta-grid {
+      position: relative;
+      z-index: 1;
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 18px;
+    }
+
+    .meta-card {
+      padding: 12px 14px;
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      border-radius: 14px;
+      background: rgba(255, 255, 255, 0.07);
+    }
+
+    .meta-label {
+      display: block;
+      color: rgba(255, 248, 232, 0.62);
+      font-size: 0.72rem;
+      font-weight: 800;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+    }
+
+    .meta-value {
+      display: block;
+      margin-top: 4px;
+      font-weight: 800;
+    }
+
+    /* ── Sections ── */
+    .section { margin-top: 24px; }
+
+    .section-title {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      margin: 30px 0 12px;
+    }
+
+    .section-title h2 {
+      font-size: 1.3rem;
+      letter-spacing: -0.02em;
+    }
+
+    .section-title .label {
+      color: var(--muted);
+      font-size: 0.76rem;
+      font-weight: 800;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+    }
+
+    /* ── Cards ── */
+    .card {
+      padding: 22px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: linear-gradient(180deg, var(--paper-2), var(--paper));
+      box-shadow: 0 12px 28px rgba(31, 27, 49, 0.07);
+    }
+
+    .card + .card { margin-top: 16px; }
+
+    .card h3 {
+      margin-bottom: 10px;
+      color: var(--deep-2);
+      font-size: 1.05rem;
+    }
+
+    /* ── Quest Cards ── */
+    .quest-card { position: relative; }
+
+    .quest-card.passed { border-left: 5px solid var(--ok); }
+    .quest-card.failed { border-left: 5px solid var(--danger); }
+    .quest-card.skipped { border-left: 5px solid var(--warn); }
+
+    .quest-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .quest-id {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      color: var(--muted);
+      font-size: 0.85rem;
+      letter-spacing: 0.04em;
+    }
+
+    .status-badge {
+      display: inline-flex;
+      padding: 4px 12px;
+      border-radius: 999px;
+      font-size: 0.76rem;
+      font-weight: 800;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+
+    .status-badge.passed { background: rgba(63, 143, 107, 0.14); color: var(--ok); border: 1px solid rgba(63, 143, 107, 0.3); }
+    .status-badge.failed { background: rgba(184, 87, 87, 0.14); color: var(--danger); border: 1px solid rgba(184, 87, 87, 0.3); }
+    .status-badge.skipped { background: rgba(184, 135, 44, 0.14); color: var(--warn); border: 1px solid rgba(184, 135, 44, 0.3); }
+
+    /* ── Victory Conditions ── */
+    .vc-list {
+      margin: 14px 0 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .vc-list li {
+      padding: 6px 0;
+      font-size: 0.88rem;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .vc-list li:last-child { border-bottom: 0; }
+
+    .vc-pass {
+      color: var(--ok);
+      font-weight: 700;
+      margin-right: 8px;
+    }
+
+    .vc-fail {
+      color: var(--danger);
+      font-weight: 700;
+      margin-right: 8px;
+    }
+
+    .quest-meta {
+      margin-top: 10px;
+      display: flex;
+      gap: 16px;
+      flex-wrap: wrap;
+      font-size: 0.88rem;
+      color: var(--muted);
+    }
+
+    .quest-meta span { white-space: nowrap; }
+
+    /* ── Hit List ── */
+    .hit-list-section { margin-top: 16px; }
+
+    .hit-list-section h4 {
+      margin: 12px 0 6px;
+      font-size: 0.92rem;
+      color: var(--violet);
+    }
+
+    .hit-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.82rem;
+    }
+
+    .hit-table th {
+      text-align: left;
+      padding: 6px 10px;
+      background: rgba(23, 24, 46, 0.04);
+      border-bottom: 2px solid var(--line);
+      font-weight: 800;
+      color: var(--muted);
+      font-size: 0.72rem;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+
+    .hit-table td {
+      padding: 5px 10px;
+      border-bottom: 1px solid var(--line);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.78rem;
+      color: var(--ink);
+    }
+
+    .hit-count {
+      display: inline-flex;
+      padding: 2px 8px;
+      border-radius: 6px;
+      font-size: 0.72rem;
+      font-weight: 800;
+      background: rgba(123, 92, 200, 0.10);
+      color: var(--violet);
+      border: 1px solid rgba(123, 92, 200, 0.2);
+      margin-left: 8px;
+    }
+
+    /* ── Lessons ── */
+    details {
+      margin-top: 4px;
+    }
+
+    details summary {
+      cursor: pointer;
+      font-size: 1.3rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      color: var(--ink);
+      padding: 4px 0;
+    }
+
+    details summary::marker {
+      color: var(--violet);
+    }
+
+    .no-lessons {
+      color: var(--muted);
+      font-style: italic;
+      padding: 8px 0;
+    }
+
+    code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      background: rgba(23, 24, 46, 0.06);
+      padding: 1px 5px;
+      border-radius: 5px;
+      font-size: 0.92em;
+    }
+
+    /* ── Footer ── */
+    .footer {
+      margin-top: 34px;
+      padding: 20px 0 0;
+      color: var(--muted);
+      font-size: 0.9rem;
+      text-align: center;
+    }
+
+    /* ── Responsive ── */
+    @media (max-width: 660px) {
+      .page { width: min(100% - 20px, 960px); padding-top: 16px; }
+      .hero { padding: 24px; border-radius: 22px; }
+      .meta-grid { grid-template-columns: 1fr; }
+      .totals-bar { flex-direction: column; }
+    }
+
+    @media print {
+      body { background: #fff; }
+      .page { width: 100%; padding: 0; }
+      .hero, .card { box-shadow: none; }
+      .hero { border-radius: 0; }
+      details[open] summary ~ * { display: block; }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+
+    <!-- ════════════════ HERO ════════════════ -->
+    <header class="hero">
+      <p class="eyebrow">Quick Run Report</p>
+      <h1>Quest Skill Rename</h1>
+      <p class="subtitle">Executed 1 quick quest &middot; ~1 min &middot; 2026-05-19</p>
+      <span class="workflow-badge">Quick Workflow</span>
+
+      <div class="totals-bar">
+        <span class="total-pill passed">1 Passed</span>
+        <span class="total-pill failed">0 Failed</span>
+        <span class="total-pill skipped">0 Skipped</span>
+      </div>
+
+      <section class="meta-grid">
+        <div class="meta-card"><span class="meta-label">Started</span><span class="meta-value">2026-05-19T00:00:00Z</span></div>
+        <div class="meta-card"><span class="meta-label">Completed</span><span class="meta-value">2026-05-19T00:01:00Z</span></div>
+        <div class="meta-card"><span class="meta-label">Lessons</span><span class="meta-value">0</span></div>
+      </section>
+    </header>
+
+    <!-- ════════════════ QUEST RESULTS ════════════════ -->
+    <section class="section">
+      <div class="section-title">
+        <h2>Quest Results</h2>
+        <span class="label">Battle Log</span>
+      </div>
+
+      <article class="card quest-card passed">
+        <div class="quest-header">
+          <div>
+            <span class="quest-id">q001</span>
+            <h3>Dependency Audit</h3>
+          </div>
+          <span class="status-badge passed">Passed</span>
+        </div>
+
+        <div class="quest-meta">
+          <span>VCs: <strong>3/3</strong></span>
+          <span>Files changed: <strong>0</strong> (read-only audit)</span>
+        </div>
+
+        <ul class="vc-list">
+          <li><span class="vc-pass">&#x2713;</span> Hit list covers all file types: .md, .html, .yaml, and any other text files in the repo</li>
+          <li><span class="vc-pass">&#x2713;</span> All three old names are searched: liang-brainstorm-campaign-cartographer, liang-quest-tactician, liang-quest-executor</li>
+          <li><span class="vc-pass">&#x2713;</span> Each hit includes file path and line number for direct reference during the rename sweep</li>
+        </ul>
+
+        <!-- ── Audit Hit List ── -->
+        <div class="hit-list-section">
+          <h4>liang-brainstorm-campaign-cartographer <span class="hit-count">17 hits</span></h4>
+          <table class="hit-table">
+            <thead><tr><th>File</th><th>Line</th></tr></thead>
+            <tbody>
+              <tr><td>liang-brainstorm-campaign-cartographer\SKILL.md</td><td>2</td></tr>
+              <tr><td>liang-brainstorm-campaign-cartographer\references\manifest-example.yaml</td><td>51</td></tr>
+              <tr><td>liang-brainstorm-campaign-cartographer\references\manifest-template.html</td><td>2</td></tr>
+              <tr><td>liang-brainstorm-campaign-cartographer\references\manifest-template.html</td><td>352</td></tr>
+              <tr><td>liang-brainstorm-campaign-cartographer\references\quest-contract-template.html</td><td>391</td></tr>
+              <tr><td>liang-brainstorm-campaign-cartographer\references\schema.md</td><td>3</td></tr>
+              <tr><td>liang-quest-tdd-tactician\SKILL.md</td><td>48</td></tr>
+              <tr><td>liang-quest-tdd-tactician\SKILL.md</td><td>441</td></tr>
+              <tr><td>liang-quest-tdd-executor\SKILL.md</td><td>531</td></tr>
+              <tr><td>liang-relentless-brainstorm\SKILL.md</td><td>511</td></tr>
+              <tr><td>liang-relentless-brainstorm\SKILL.md</td><td>518</td></tr>
+              <tr><td>liang-quest-quick\SKILL.md</td><td>47</td></tr>
+              <tr><td>liang-quest-quick\SKILL.md</td><td>270</td></tr>
+              <tr><td>liang-quest-executor\SKILL.md</td><td>336</td></tr>
+              <tr><td>liang-skill-blacksmith\SKILL.md</td><td>176</td></tr>
+              <tr><td>liang-quest-tactician\SKILL.md</td><td>50</td></tr>
+              <tr><td>liang-quest-tactician\SKILL.md</td><td>328</td></tr>
+            </tbody>
+          </table>
+
+          <h4>liang-quest-tactician <span class="hit-count">9 hits</span></h4>
+          <table class="hit-table">
+            <thead><tr><th>File</th><th>Line</th></tr></thead>
+            <tbody>
+              <tr><td>liang-quest-tactician\SKILL.md</td><td>2</td></tr>
+              <tr><td>liang-quest-tactician\references\plan-template.html</td><td>219</td></tr>
+              <tr><td>liang-quest-tactician\references\example-plan.html</td><td>308</td></tr>
+              <tr><td>liang-quest-executor\SKILL.md</td><td>10</td></tr>
+              <tr><td>liang-quest-executor\SKILL.md</td><td>55</td></tr>
+              <tr><td>liang-quest-executor\SKILL.md</td><td>98</td></tr>
+              <tr><td>liang-quest-executor\SKILL.md</td><td>334</td></tr>
+              <tr><td>liang-quest-core\SKILL.md</td><td>27</td></tr>
+              <tr><td>liang-skill-blacksmith\SKILL.md</td><td>176</td></tr>
+            </tbody>
+          </table>
+
+          <h4>liang-quest-executor <span class="hit-count">6 hits</span></h4>
+          <table class="hit-table">
+            <thead><tr><th>File</th><th>Line</th></tr></thead>
+            <tbody>
+              <tr><td>liang-quest-executor\SKILL.md</td><td>2</td></tr>
+              <tr><td>liang-quest-executor\references\run-report-template.html</td><td>188</td></tr>
+              <tr><td>liang-quest-tactician\SKILL.md</td><td>10</td></tr>
+              <tr><td>liang-quest-tactician\SKILL.md</td><td>330</td></tr>
+              <tr><td>liang-quest-core\SKILL.md</td><td>29</td></tr>
+              <tr><td>liang-quest-quick\SKILL.md</td><td>271</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </article>
+
+    </section>
+
+    <!-- ════════════════ LESSONS ════════════════ -->
+    <section class="section">
+      <details>
+        <summary>Lessons (0)</summary>
+        <p class="no-lessons">No failures recorded.</p>
+      </details>
+    </section>
+
+    <!-- ════════════════ FOOTER ════════════════ -->
+    <footer class="footer">
+      Generated by liang-quest-quick &middot; 2026-05-19T00:01:00Z
+    </footer>
+
+  </main>
+</body>
+</html>
