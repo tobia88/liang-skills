@@ -1,6 +1,6 @@
 <!--
 ---
-run_id: "run-2026-05-19-quick-001"
+run_id: "run-quick-2026-05-19T000100Z"
 campaign_id: "camp-2026-05-19-quest-skill-rename"
 workflow: "quick"
 started_at: "2026-05-19T00:00:00Z"
@@ -15,6 +15,7 @@ quests:
     victory_conditions_checked: 3
     victory_conditions_passed: 3
     files_changed: []
+    notes: "Read-only audit. 33 file references + 3 folder renames identified."
 
 totals:
   passed: 1
@@ -293,57 +294,53 @@ lessons_count: 0
 
     .quest-meta span { white-space: nowrap; }
 
-    /* ── Hit List ── */
-    .hit-list-section { margin-top: 16px; }
-
-    .hit-list-section h4 {
-      margin: 12px 0 6px;
-      font-size: 0.92rem;
-      color: var(--violet);
-    }
-
-    .hit-table {
+    /* ── Audit Summary ── */
+    .audit-table {
       width: 100%;
       border-collapse: collapse;
-      font-size: 0.82rem;
+      margin-top: 12px;
+      font-size: 0.88rem;
     }
 
-    .hit-table th {
+    .audit-table th {
       text-align: left;
-      padding: 6px 10px;
-      background: rgba(23, 24, 46, 0.04);
+      padding: 8px 12px;
       border-bottom: 2px solid var(--line);
-      font-weight: 800;
       color: var(--muted);
-      font-size: 0.72rem;
-      letter-spacing: 0.06em;
+      font-size: 0.76rem;
+      font-weight: 800;
+      letter-spacing: 0.08em;
       text-transform: uppercase;
     }
 
-    .hit-table td {
-      padding: 5px 10px;
+    .audit-table td {
+      padding: 6px 12px;
       border-bottom: 1px solid var(--line);
       font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-      font-size: 0.78rem;
-      color: var(--ink);
+      font-size: 0.82rem;
     }
 
-    .hit-count {
-      display: inline-flex;
-      padding: 2px 8px;
-      border-radius: 6px;
-      font-size: 0.72rem;
+    .audit-table td:last-child {
+      font-family: ui-sans-serif, system-ui, sans-serif;
+      color: var(--muted);
+    }
+
+    .audit-name {
+      padding: 10px 12px 4px;
       font-weight: 800;
-      background: rgba(123, 92, 200, 0.10);
+      color: var(--deep-2);
+      font-size: 0.92rem;
+      border-bottom: none;
+      font-family: ui-sans-serif, system-ui, sans-serif !important;
+    }
+
+    .audit-count {
+      font-weight: 800;
       color: var(--violet);
-      border: 1px solid rgba(123, 92, 200, 0.2);
-      margin-left: 8px;
     }
 
     /* ── Lessons ── */
-    details {
-      margin-top: 4px;
-    }
+    details { margin-top: 4px; }
 
     details summary {
       cursor: pointer;
@@ -354,9 +351,7 @@ lessons_count: 0
       padding: 4px 0;
     }
 
-    details summary::marker {
-      color: var(--violet);
-    }
+    details summary::marker { color: var(--violet); }
 
     .no-lessons {
       color: var(--muted);
@@ -405,7 +400,7 @@ lessons_count: 0
     <header class="hero">
       <p class="eyebrow">Quick Run Report</p>
       <h1>Quest Skill Rename</h1>
-      <p class="subtitle">Executed 1 quick quest &middot; ~1 min &middot; 2026-05-19</p>
+      <p class="subtitle">Executed 1 quick quest &middot; ~60s &middot; 2026-05-19</p>
       <span class="workflow-badge">Quick Workflow</span>
 
       <div class="totals-bar">
@@ -440,6 +435,7 @@ lessons_count: 0
         <div class="quest-meta">
           <span>VCs: <strong>3/3</strong></span>
           <span>Files changed: <strong>0</strong> (read-only audit)</span>
+          <span>References found: <strong>33 file hits + 3 folder renames</strong></span>
         </div>
 
         <ul class="vc-list">
@@ -448,61 +444,59 @@ lessons_count: 0
           <li><span class="vc-pass">&#x2713;</span> Each hit includes file path and line number for direct reference during the rename sweep</li>
         </ul>
 
-        <!-- ── Audit Hit List ── -->
-        <div class="hit-list-section">
-          <h4>liang-brainstorm-campaign-cartographer <span class="hit-count">17 hits</span></h4>
-          <table class="hit-table">
-            <thead><tr><th>File</th><th>Line</th></tr></thead>
-            <tbody>
-              <tr><td>liang-brainstorm-campaign-cartographer\SKILL.md</td><td>2</td></tr>
-              <tr><td>liang-brainstorm-campaign-cartographer\references\manifest-example.yaml</td><td>51</td></tr>
-              <tr><td>liang-brainstorm-campaign-cartographer\references\manifest-template.html</td><td>2</td></tr>
-              <tr><td>liang-brainstorm-campaign-cartographer\references\manifest-template.html</td><td>352</td></tr>
-              <tr><td>liang-brainstorm-campaign-cartographer\references\quest-contract-template.html</td><td>391</td></tr>
-              <tr><td>liang-brainstorm-campaign-cartographer\references\schema.md</td><td>3</td></tr>
-              <tr><td>liang-quest-tdd-tactician\SKILL.md</td><td>48</td></tr>
-              <tr><td>liang-quest-tdd-tactician\SKILL.md</td><td>441</td></tr>
-              <tr><td>liang-quest-tdd-executor\SKILL.md</td><td>531</td></tr>
-              <tr><td>liang-relentless-brainstorm\SKILL.md</td><td>511</td></tr>
-              <tr><td>liang-relentless-brainstorm\SKILL.md</td><td>518</td></tr>
-              <tr><td>liang-quest-quick\SKILL.md</td><td>47</td></tr>
-              <tr><td>liang-quest-quick\SKILL.md</td><td>270</td></tr>
-              <tr><td>liang-quest-executor\SKILL.md</td><td>336</td></tr>
-              <tr><td>liang-skill-blacksmith\SKILL.md</td><td>176</td></tr>
-              <tr><td>liang-quest-tactician\SKILL.md</td><td>50</td></tr>
-              <tr><td>liang-quest-tactician\SKILL.md</td><td>328</td></tr>
-            </tbody>
-          </table>
+        <!-- ── Audit Hit List Detail ── -->
+        <h3 style="margin-top: 20px;">Audit Hit List</h3>
 
-          <h4>liang-quest-tactician <span class="hit-count">9 hits</span></h4>
-          <table class="hit-table">
-            <thead><tr><th>File</th><th>Line</th></tr></thead>
-            <tbody>
-              <tr><td>liang-quest-tactician\SKILL.md</td><td>2</td></tr>
-              <tr><td>liang-quest-tactician\references\plan-template.html</td><td>219</td></tr>
-              <tr><td>liang-quest-tactician\references\example-plan.html</td><td>308</td></tr>
-              <tr><td>liang-quest-executor\SKILL.md</td><td>10</td></tr>
-              <tr><td>liang-quest-executor\SKILL.md</td><td>55</td></tr>
-              <tr><td>liang-quest-executor\SKILL.md</td><td>98</td></tr>
-              <tr><td>liang-quest-executor\SKILL.md</td><td>334</td></tr>
-              <tr><td>liang-quest-core\SKILL.md</td><td>27</td></tr>
-              <tr><td>liang-skill-blacksmith\SKILL.md</td><td>176</td></tr>
-            </tbody>
-          </table>
+        <table class="audit-table">
+          <thead>
+            <tr><th>File</th><th>Line</th><th>Context</th></tr>
+          </thead>
+          <tbody>
+            <tr><td colspan="3" class="audit-name">liang-brainstorm-campaign-cartographer <span class="audit-count">(17 hits)</span></td></tr>
+            <tr><td>liang-brainstorm-campaign-cartographer\SKILL.md</td><td>2</td><td>name field</td></tr>
+            <tr><td>liang-brainstorm-campaign-cartographer\references\manifest-example.yaml</td><td>51</td><td>generated_by field</td></tr>
+            <tr><td>liang-brainstorm-campaign-cartographer\references\manifest-template.html</td><td>2</td><td>template comment</td></tr>
+            <tr><td>liang-brainstorm-campaign-cartographer\references\manifest-template.html</td><td>352</td><td>footer text</td></tr>
+            <tr><td>liang-brainstorm-campaign-cartographer\references\quest-contract-template.html</td><td>391</td><td>footer text</td></tr>
+            <tr><td>liang-brainstorm-campaign-cartographer\references\schema.md</td><td>3</td><td>schema reference</td></tr>
+            <tr><td>liang-quest-executor\SKILL.md</td><td>336</td><td>upstream reference</td></tr>
+            <tr><td>liang-quest-quick\SKILL.md</td><td>47</td><td>activation follow-up</td></tr>
+            <tr><td>liang-quest-quick\SKILL.md</td><td>270</td><td>upstream reference</td></tr>
+            <tr><td>liang-quest-tdd-executor\SKILL.md</td><td>531</td><td>upstream reference</td></tr>
+            <tr><td>liang-quest-tdd-tactician\SKILL.md</td><td>48</td><td>activation follow-up</td></tr>
+            <tr><td>liang-quest-tdd-tactician\SKILL.md</td><td>441</td><td>upstream reference</td></tr>
+            <tr><td>liang-quest-tactician\SKILL.md</td><td>50</td><td>activation follow-up</td></tr>
+            <tr><td>liang-quest-tactician\SKILL.md</td><td>328</td><td>upstream reference</td></tr>
+            <tr><td>liang-skill-blacksmith\SKILL.md</td><td>176</td><td>exclusion list</td></tr>
+            <tr><td>liang-relentless-brainstorm\SKILL.md</td><td>511</td><td>Next Move prompt</td></tr>
+            <tr><td>liang-relentless-brainstorm\SKILL.md</td><td>518</td><td>downstream suggestion</td></tr>
 
-          <h4>liang-quest-executor <span class="hit-count">6 hits</span></h4>
-          <table class="hit-table">
-            <thead><tr><th>File</th><th>Line</th></tr></thead>
-            <tbody>
-              <tr><td>liang-quest-executor\SKILL.md</td><td>2</td></tr>
-              <tr><td>liang-quest-executor\references\run-report-template.html</td><td>188</td></tr>
-              <tr><td>liang-quest-tactician\SKILL.md</td><td>10</td></tr>
-              <tr><td>liang-quest-tactician\SKILL.md</td><td>330</td></tr>
-              <tr><td>liang-quest-core\SKILL.md</td><td>29</td></tr>
-              <tr><td>liang-quest-quick\SKILL.md</td><td>271</td></tr>
-            </tbody>
-          </table>
-        </div>
+            <tr><td colspan="3" class="audit-name">liang-quest-tactician <span class="audit-count">(10 hits, exact match)</span></td></tr>
+            <tr><td>liang-quest-tactician\SKILL.md</td><td>2</td><td>name field</td></tr>
+            <tr><td>liang-quest-tactician\references\example-plan.html</td><td>308</td><td>footer text</td></tr>
+            <tr><td>liang-quest-tactician\references\plan-template.html</td><td>219</td><td>footer text</td></tr>
+            <tr><td>liang-quest-core\SKILL.md</td><td>27</td><td>skill table entry</td></tr>
+            <tr><td>liang-quest-executor\SKILL.md</td><td>3</td><td>description field</td></tr>
+            <tr><td>liang-quest-executor\SKILL.md</td><td>10</td><td>upstream reference</td></tr>
+            <tr><td>liang-quest-executor\SKILL.md</td><td>55</td><td>activation follow-up</td></tr>
+            <tr><td>liang-quest-executor\SKILL.md</td><td>98</td><td>recommendation text</td></tr>
+            <tr><td>liang-quest-executor\SKILL.md</td><td>334</td><td>upstream reference</td></tr>
+            <tr><td>liang-skill-blacksmith\SKILL.md</td><td>176</td><td>exclusion list</td></tr>
+
+            <tr><td colspan="3" class="audit-name">liang-quest-executor <span class="audit-count">(6 hits, exact match)</span></td></tr>
+            <tr><td>liang-quest-executor\SKILL.md</td><td>2</td><td>name field</td></tr>
+            <tr><td>liang-quest-executor\references\run-report-template.html</td><td>188</td><td>footer text</td></tr>
+            <tr><td>liang-quest-core\SKILL.md</td><td>29</td><td>skill table entry</td></tr>
+            <tr><td>liang-quest-quick\SKILL.md</td><td>271</td><td>parallel reference</td></tr>
+            <tr><td>liang-quest-tactician\SKILL.md</td><td>10</td><td>downstream reference</td></tr>
+            <tr><td>liang-quest-tactician\SKILL.md</td><td>330</td><td>downstream reference</td></tr>
+
+            <tr><td colspan="3" class="audit-name">Folder Renames <span class="audit-count">(3)</span></td></tr>
+            <tr><td>liang-brainstorm-campaign-cartographer/</td><td>&mdash;</td><td>rename to liang-quest-cartographer/</td></tr>
+            <tr><td>liang-quest-tactician/</td><td>&mdash;</td><td>rename to liang-quest-general-tactician/</td></tr>
+            <tr><td>liang-quest-executor/</td><td>&mdash;</td><td>rename to liang-quest-general-executor/</td></tr>
+          </tbody>
+        </table>
       </article>
 
     </section>
