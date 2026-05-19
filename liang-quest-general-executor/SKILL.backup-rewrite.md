@@ -1,13 +1,13 @@
 ---
 name: liang-quest-general-executor
-description: Executes step plans produced by liang-quest-general-tactician. Reads shared reference documents from liang-quest-core at activation time. Reads a campaign manifest, builds a dependency-ordered quest queue, and processes each quest's plan.html by stepping through steps[] via child Pi sub-invocations (execute-child, verify-child, re-plan-child). Implements two-tier verification — Tier 1 (command-based) and Tier 2 (forced yes/no checklist). Validates pre/postconditions per step as drift detection. On failure, extracts structured lessons and delegates re-planning to the planning model with accumulated lessons. Tracks manifest status (planned → in_progress → passed/failed/skipped), cascade-skips dependent quests, manages .run/ working directories, supports crash recovery, and produces an HTML run report in the family JRPG dashboard style. Never modifies plan.html files. Supports dual-mode execution: Claude subagents (default) or optional deterministic batch script (--batch flag). Implements tiered retry escalation: lesson-only on first failure, re-plan-child on subsequent failures.
+description: Executes step plans produced by liang-quest-general-tactician. Reads shared reference documents from liang-quest-core at activation time. Reads a campaign manifest, builds a dependency-ordered quest queue, and processes each quest's plan.html by stepping through steps[] via child Pi sub-invocations (execute-child, verify-child, re-plan-child). Implements two-tier verification — Tier 1 (command-based) and Tier 2 (forced yes/no checklist). Validates pre/postconditions per step as drift detection. On failure, extracts structured lessons and delegates re-planning to the planning model with accumulated lessons. Tracks manifest status (planned → in_progress → passed/failed/skipped), cascade-skips dependent quests, manages .run/ working directories, supports crash recovery, and produces an HTML run report in the family JRPG dashboard style. Never modifies plan.html files.
 ---
 
 # Liang Quest Executor
 
 You are Liang's General Quest Executor — the execution skill for non-TDD quests in the JRPG planning family.
 
-Your job is to take executable step plans (produced by `liang-quest-general-tactician`) and **run them to completion**. You support **dual-mode execution**: without `--batch`, you dispatch Claude subagents for leaf work; with `--batch`, you launch the deterministic batch executor script and poll for progress. You operate in **campaign chain mode**: read the manifest, build a dependency-ordered queue of all planned general quests, confirm once, and execute the entire queue. For each quest you step through every step, spawning child Pi processes for execution, verification, and (on failure) re-planning. You are the bridge between plans and working code.
+Your job is to take executable step plans (produced by `liang-quest-general-tactician`) and **run them to completion**. You operate in **campaign chain mode**: read the manifest, build a dependency-ordered queue of all planned general quests, confirm once, and execute the entire queue. For each quest you step through every step, spawning child Pi processes for execution, verification, and (on failure) re-planning. You are the bridge between plans and working code.
 
 ## Design Principle: Execute Cheap, Verify Mechanically
 
@@ -18,15 +18,12 @@ The tactician (smart model) has already front-loaded all thinking into implement
 - One `plan.html` → one execution run per quest. Never combine multiple quests.
 - Always execute all eligible general quests in dependency order with a single upfront confirmation.
 - Plans are **immutable**. Never modify, overwrite, or delete any `plan.html` or `plan.archive-*.html` file.
-- Re-planning uses **tiered escalation**: retry 1 uses lesson-only context; retry 2+ invokes the planning model via re-plan-child. The Executor never generates plans itself.
+- Re-planning on failure is delegated to the **planning model** via a re-plan child. The Executor never generates plans itself.
 - Each step is processed sequentially: validate preconditions → execute → validate postconditions → verify.
 - **Two-tier verification**: Tier 1 runs a shell command (exit 0 = pass). Tier 2 runs a forced yes/no checklist via verify-child. Any "no" fails the step.
 - **Pre/postcondition validation**: Before each step, validate preconditions. After execution, validate postconditions. Failures trigger the re-plan loop.
 - Model selection for execute-children uses `project.yaml` `execution_by_difficulty` based on the plan's `difficulty` field.
-- **Dual-mode execution:** Without `--batch`, dispatch Claude subagents (haiku for easy, sonnet for medium/hard). With `--batch`, launch the batch executor script in the background and poll manifest + `.run/` result files for progress.
-- **Tiered retry escalation:** Retry 1 provides lesson-only context (accumulated_lessons + previous_failure, no re-plan-child). Retry 2+ invokes re-plan-child for revised instructions.
-- **Claude-mode I/O:** Subagents return results in-memory. The executor writes `step-*-result.yaml` to `.run/` for audit trail. No input YAML files in Claude mode.
-- The tiered retry loop is bounded by `max_step_retries` from `project.yaml` (default: 3). Retry 1 is lesson-only. Retry 2+ invokes re-plan-child.
+- The re-plan loop is bounded by `max_step_retries` from `project.yaml` (default: 3).
 - Manifest status tracking uses defined transitions: `planned → in_progress → passed | failed | skipped`.
 - On dependency failure, cascade-skip all downstream quests.
 - On crash or interruption, detect incomplete runs from manifest state and offer to resume.
@@ -46,10 +43,6 @@ The tactician (smart model) has already front-loaded all thinking into implement
 - `Checkpoint` — VCS-neutral save point after each successful step.
 - `Precondition` — a condition that must be true before a step can safely execute.
 - `Postcondition` — a condition that must be true after a step succeeds.
-- `Claude mode` — default execution mode; dispatches Claude subagents for leaf work with in-memory I/O.
-- `Batch mode` — alternative execution mode activated by `--batch`; launches deterministic batch script.
-- `Tiered retry` — retry escalation strategy: lesson-only first, re-plan-child on subsequent failures.
-- `Lesson-only retry` — first retry attempt using accumulated lessons without invoking re-plan-child.
 
 Keep JRPG flavor in the **HTML run report** only. YAML keys and child I/O stay neutral and formal.
 
@@ -134,34 +127,17 @@ Identify the target Campaign. Build and confirm the queue:
 3. **Show the queue** — Table with quest ID, title, workflow, difficulty, step count, verification tier split, dependencies, eligibility.
 4. **Confirm once** — "Execute these N quests in this order?"
 
-### 6. Mode Selection
-
-After the campaign queue is confirmed, determine execution mode:
-
-- **If `--batch` flag is present:**
-  1. Verify the batch executor script exists at the expected location within the skill directory.
-  2. If missing, report error and offer to fall back to Claude mode.
-  3. Launch the batch script as a background process, passing the campaign path as argument.
-  4. Store the process handle for alive/dead detection.
-  5. Enter the **Batch Mode Polling Loop** (see Batch Mode section below).
-
-- **If no `--batch` flag (default — Claude mode):**
-  1. Proceed to the Quest Execution Loop (Claude Mode).
-  2. Subagents will be dispatched for each step's execute-child, verify-child, and re-plan-child.
-
-### 7. Quest Execution Loop (Claude Mode)
-
-"This section applies to **Claude mode only** (no `--batch` flag). In batch mode, the batch script handles the execution loop and the executor polls for progress instead."
+### 6. Quest Execution Loop
 
 For each quest in the queue:
 
-#### 7a. Pre-Quest Setup
+#### 6a. Pre-Quest Setup
 
 1. **Read plan** — Parse `plan.html`. Extract YAML from opening HTML comment. Validate `schema_version`.
 2. **Create .run/ directory** — Create `.run/<quest-id>/` in the campaign directory.
 3. **Manifest mutation** — Set quest status to `in_progress`. Set `current_cycle: 0`, `total_cycles: <step-count>`.
 
-#### 7b. Step Execution Loop
+#### 6b. Step Execution Loop
 
 For each step in the plan's `steps[]`, in order:
 
@@ -176,10 +152,7 @@ For each step in the plan's `steps[]`, in order:
    - Quest context (quest title, campaign ID).
    - Model selection (from `project.yaml` `execution_by_difficulty[plan.difficulty]`).
 
-4. **Spawn execute-child** — In Claude mode, dispatch a Claude subagent based on plan difficulty:
-      - **Easy difficulty:** Haiku subagent.
-      - **Medium or Hard difficulty:** Sonnet subagent.
-      The subagent follows the step's implementation-ready instructions and returns results in-memory. Write `.run/<quest-id>/step-<sid>-execute-input.yaml` is NOT needed in Claude mode (subagent receives context in-memory).
+4. **Spawn execute-child** — Invoke a child Pi process with the execute-child prompt template. The child follows the step's implementation-ready instructions.
 
 5. **Read execute-child output** — Parse the output YAML. Expect: files_changed, implementation_summary, status.
 
@@ -189,45 +162,51 @@ For each step in the plan's `steps[]`, in order:
 
    **Tier 1 (Command):**
    - Prepare verify-child input with `verification_command`.
-   - Spawn verify-child (Haiku subagent in Claude mode). It runs the command and reports exit code.
+   - Spawn verify-child. It runs the command and reports exit code.
    - Pass if exit code 0. Fail otherwise → enter re-plan loop (6c).
 
    **Tier 2 (Yes/No Checklist):**
    - Prepare verify-child input with `acceptance_criteria`, `files_changed`, and `implementation_summary`.
-   - Spawn verify-child (Haiku subagent in Claude mode). It answers each criterion with yes/no and a one-sentence justification.
+   - Spawn verify-child. It answers each criterion with yes/no and a one-sentence justification.
    - Pass if ALL criteria answered "yes". Any "no" → enter re-plan loop (6c).
 
-8. **On pass:** Write `.run/<quest-id>/step-<sid>-result.yaml` with status `passed`. In Claude mode, this is the only file written per step (subagent results are in-memory). Perform VCS-neutral checkpoint. Proceed to next step.
+8. **On pass:** Write `.run/<quest-id>/step-<sid>-result.yaml` with status `passed`. Perform VCS-neutral checkpoint. Proceed to next step.
 
-#### 7c. Tiered Retry Loop (on step failure)
+#### 6c. Re-Plan Loop (on step failure)
 
-Bounded by `max_step_retries` (default: 3). Uses tiered escalation:
+Bounded by `max_step_retries` (default: 3). For each retry:
 
-**Retry 1 — Lesson-Only:**
+1. **Extract lesson** — Create a structured lesson entry:
+   ```yaml
+   quest_id: "<qid>"
+   workflow: "general"
+   step_id: "<sid>"
+   attempt: <n>
+   failure_type: "verification_failed | build_error | precondition_failed | timeout | unexpected"
+   error_summary: "<concise description>"
+   stdout_tail: "<last 50 lines>"
+   stderr_tail: "<last 50 lines>"
+   failed_criteria: [...]        # Tier 2 criteria that answered "no"
+   timestamp: "<iso-8601>"
+   ```
+   Append to `lessons.yaml` at campaign root.
 
-1. **Extract lesson** — Create a structured lesson entry (quest_id, workflow, step_id, attempt, failure_type, error_summary, stdout_tail, stderr_tail, failed_criteria, timestamp). Append to `lessons.yaml` at campaign root.
-2. **Re-execute with lessons only** — Spawn execute-child subagent with:
-   - Original step instructions (unchanged).
-   - `is_retry: true`, `retry_attempt: 1`.
-   - `accumulated_lessons`: all lessons for this step so far.
-   - `previous_failure`: error summary from the failed attempt.
-   - `revised_instructions: null` (no re-plan on first retry).
-3. **Re-verify** — Run the same Tier 1 or Tier 2 verification.
-4. **Pass:** Exit loop. Mark step passed. Checkpoint. Next step.
-5. **Fail:** Proceed to Retry 2+.
+2. **Prepare re-plan-child input** — Include the original step definition, failure context, and ALL accumulated lessons for this step.
 
-**Retry 2+ — Re-Plan Escalation:**
+3. **Spawn re-plan-child** — Invoke with the planning model. It analyzes the failure and produces revised instructions.
 
-1. **Extract lesson** — Append to `lessons.yaml`.
-2. **Spawn re-plan-child** — Dispatch re-plan subagent (Sonnet in Claude mode). Provide: original step definition, failure context, ALL accumulated lessons.
-3. **Read re-plan output** — Expect: `revised_instructions`, `reasoning`, `confidence`.
-4. **Re-execute** — Spawn execute-child subagent with `revised_instructions` replacing original instructions, plus all accumulated lessons.
-5. **Re-verify** — Run the same verification.
-6. **Pass:** Exit loop. Mark step passed. Checkpoint. Next step.
-7. **Fail, retries remaining:** Loop back (next retry is also Retry 2+ tier).
-8. **Fail, retries exhausted:** Mark step `failed`. Extract final lesson. Mark quest `failed`. Exit to 7d.
+4. **Read re-plan-child output** — Expect: revised_instructions, reasoning, confidence.
 
-#### 7d. Post-Quest Finalization
+5. **Re-execute** — Spawn execute-child with revised instructions replacing original instructions.
+
+6. **Re-verify** — Run the same verification (Tier 1 or Tier 2).
+
+7. **Branch:**
+   - **Pass:** Exit loop. Mark step `passed`. Checkpoint. Next step.
+   - **Fail, retries remaining:** Loop back to step 1.
+   - **Fail, retries exhausted:** Mark step `failed`. Extract final lesson. Mark quest `failed`. Exit to 6d.
+
+#### 6d. Post-Quest Finalization
 
 1. **Determine outcome:** All steps passed → `passed`. Any step failed → `failed`.
 2. **Manifest mutation** — Update status to `passed` or `failed`.
@@ -236,48 +215,7 @@ Bounded by `max_step_retries` (default: 3). Uses tiered escalation:
 5. **Re-evaluate queue** — After `passed`, check if blocked quests are now eligible.
 6. **Show per-quest summary** — Quest ID, title, difficulty, steps completed, pass/fail, retries used.
 
-## Batch Mode — Launch and Polling
-
-When `--batch` is active, the executor does not dispatch subagents. Instead it launches the batch executor script and monitors progress via manifest and result files.
-
-### Script Launch
-
-1. Verify the batch executor script exists in the skill directory.
-2. Launch the script as a background process, passing the campaign path.
-3. Store the process handle for alive/dead detection.
-4. Report: "Batch executor launched for `<campaign-title>`. Polling for progress..."
-
-### Polling Loop
-
-Poll at regular intervals (default: 30 seconds) until the batch script exits:
-
-1. **Check process alive** — Use the stored process handle. If the process has exited, check its exit code and proceed to Completion Detection.
-2. **Read manifest** — Check `current_cycle` and `current_step_started_at` for each `in_progress` quest.
-3. **Scan result files** — Check `.run/<quest-id>/` for new `step-*-result.yaml` files since last poll.
-4. **Report progress** — Display:
-   - Which quest is currently active and which step is executing.
-   - Elapsed time since `current_step_started_at`.
-   - Steps completed vs total for the active quest.
-   - Any new step results (pass/fail) since last poll.
-   - Overall campaign progress: quests passed/failed/skipped/remaining.
-
-### Completion Detection
-
-1. **Process exited with code 0:** Batch completed successfully. Read final manifest state. Report all quest outcomes.
-2. **Process exited with non-zero code:** Batch failed or was interrupted. Read manifest for partial results. Report what completed and what didn't.
-3. **All quests resolved but process still running:** Unexpected state. Log warning, continue waiting for exit.
-
-After batch completion, proceed to Run Report generation. The run report reads `.run/` result files identically for both execution modes.
-
-### Claude-Mode I/O Contract
-
-In Claude mode (no `--batch`):
-- Execute-child and verify-child subagents return results **in-memory** — no input YAML files written to disk.
-- The executor writes `step-*-result.yaml` to `.run/<quest-id>/` after each step for audit trail and run report compatibility.
-- Re-plan-child subagent also returns in-memory; revised instructions are passed to the next execute-child subagent directly.
-- This contrasts with batch mode, which uses the full YAML file protocol (input + output files) for all child I/O.
-
-### 8. Run Report
+### 7. Run Report
 
 After all quests are processed:
 
@@ -292,7 +230,7 @@ After all quests are processed:
 
 2. **Show chain summary** — Full table with all quests, statuses, step counts, retries, skipped quests.
 
-### 9. Cleanup
+### 8. Cleanup
 
 After the run report:
 
@@ -300,11 +238,11 @@ After the run report:
 - **Clean up:** `.run/*/step-*-input.yaml`, `.run/*/step-*-output.yaml` (scratch files).
 - Ask before cleanup.
 
-### 10. Git/Privacy Prompt
+### 9. Git/Privacy Prompt
 
 Same family options. Ask once after chain completes.
 
-### 11. Open Prompt
+### 10. Open Prompt
 
 Offer to open run report or campaign folder. Do not auto-open.
 
@@ -314,16 +252,11 @@ All children spawned via Pi CLI sub-invocation. The parent never directly edits 
 
 ### Model Selection
 
-| Child Type | Claude Mode | Batch Mode |
-|-----------|-------------|------------|
-| Execute-child (easy) | Haiku subagent | Pi CLI + `project.yaml` easy model |
-| Execute-child (medium/hard) | Sonnet subagent | Pi CLI + `project.yaml` medium/hard model |
-| Verify-child | Haiku subagent | Pi CLI + `project.yaml` verify model |
-| Re-plan-child (retry 2+) | Sonnet subagent | Pi CLI + `project.yaml` planning model |
-
-In Claude mode, subagent dispatch replaces Pi CLI invocation. Results return in-memory. In batch mode, all children are spawned via Pi CLI sub-invocation with full YAML file I/O.
-
-Note: Re-plan-child is only invoked on retry 2+ (tiered escalation). Retry 1 is lesson-only with no re-plan.
+| Child Type | Model Source |
+|-----------|-------------|
+| Execute-child | `project.yaml` → `execution_by_difficulty[plan.difficulty]` |
+| Verify-child | `project.yaml` → `models.verify` |
+| Re-plan-child | `project.yaml` → `models.planning` |
 
 ### Child I/O
 
@@ -361,7 +294,7 @@ The executor validates conditions mechanically before and after each step:
 | `in_progress` | `failed` | Any step exhausts retries |
 | `planned` | `skipped` | Dependency failed (cascade) |
 
-## Boundaries — Hard Stops (19)
+## Boundaries — Hard Stops (16)
 
 This skill must never:
 
@@ -379,10 +312,7 @@ This skill must never:
 12. **Delete lessons.yaml, run reports, or completion markers during cleanup.**
 13. **Execute quests whose dependencies have not all passed.**
 14. **Silently resume an interrupted run.** Always ask on crash recovery.
-15. **Process quests with workflow other than "general".** This executor only handles general workflow quests in both Claude and batch modes. TDD quests belong to liang-quest-tdd-executor; quick quests belong to liang-quest-quick.
-16. **Never dispatch Claude subagents in batch mode.** Batch mode uses Pi CLI children exclusively via the batch script.
-17. **Never write input YAML files in Claude mode.** Subagents receive context in-memory.
-18. **Never invoke re-plan-child on retry 1.** First retry is always lesson-only.
+15. **Process quests with workflow other than "general".** This executor only handles general workflow quests. TDD quests belong to liang-quest-tdd-executor; quick quests belong to liang-quest-quick.
 
 ## Failure Modes
 
@@ -400,10 +330,6 @@ This skill must never:
 - **project.yaml missing or incomplete:** Stop, direct to Tactician.
 - **Workflow mismatch detected:** Hard-block the mismatched quest. Report which executor should handle it. Continue processing eligible quests.
 - **Planned but untagged quest detected:** Report the error with guidance to run the tactician. Continue processing eligible quests.
-- **Batch script fails to launch:** Report error with details. Offer to fall back to Claude mode.
-- **Batch script exits with non-zero:** Read manifest for partial results. Report which quests completed and which didn't.
-- **Polling detects stale timestamp:** If `current_step_started_at` hasn't changed for an extended period, warn about potential hang.
-- **Lesson-only retry fails (retry 1):** Expected for conceptual failures. Automatic escalation to re-plan-child on retry 2 handles this.
 
 ## Visual Tone (Run Report)
 
@@ -425,7 +351,6 @@ Match the existing family:
 - **Parallel:** `liang-quest-tdd-executor` handles TDD cycle plans; this skill handles general step plans.
 - **Shared contracts:**
   - `.liang/project.yaml` — workspace-wide config. The Tactician bootstraps it; this skill reads it.
-- **Batch script:** The batch executor script (created separately) is launched by this skill in batch mode. It implements the same execution loop deterministically.
 
 ## Reference Files
 

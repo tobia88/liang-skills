@@ -30,6 +30,8 @@ quests:
     cycles_completed: integer                 # present for TDD quests
     cycles_total: integer                     # present for TDD quests
     retries_used: integer                     # present for TDD quests
+    lesson_only_retries: integer              # count of lesson-only (tier 1) retries across all cycles
+    replan_retries: integer                    # count of re-plan escalation (tier 2+) retries across all cycles
     confidence_scores:                        # present for verify-only TDD quests
       - cycle_id: string
         confidence: "high" | "medium" | "low"
@@ -39,6 +41,8 @@ quests:
     steps_completed: integer                  # present for general quests
     steps_total: integer                      # present for general quests
     step_retries_used: integer                # present for general quests
+    lesson_only_retries: integer              # count of lesson-only (tier 1) retries across all steps
+    replan_retries: integer                    # count of re-plan escalation (tier 2+) retries across all steps
     step_results:                             # present for general quests
       - step_id: string
         status: "passed" | "failed"
@@ -69,6 +73,7 @@ lessons:
     cycle_id: string             # TDD
     step_id: string              # General
     attempt: integer
+    retry_tier: "lesson-only" | "replan"  # which retry strategy was used for this attempt
     failure_type: string         # test_failure | build_error | timeout | verification_failed | malformed_output | unexpected
     error_summary: string
     stdout_tail: string          # last 50 lines
@@ -128,6 +133,7 @@ cycle_id: string
 spine_type: "tdd"
 status: "passed" | "failed"
 attempts: integer
+retry_tiers_used: ["lesson-only", "replan"]  # which tiers were used across attempts
 final_attempt_at: string
 files_changed: [string]
 test_command: string
@@ -156,6 +162,7 @@ workflow: "general"
 status: "passed" | "failed"
 verification_tier: 1 | 2
 attempts: integer
+retry_tiers_used: ["lesson-only", "replan"]  # which tiers were used across attempts
 final_attempt_at: string
 files_changed: [string]
 verification_command: string     # Tier 1; null for Tier 2

@@ -38,6 +38,20 @@ planned       → skipped            (cascade from dependency failure)
 
 Any transition not listed above is a violation.
 
+### Tiered Retry Behavior
+
+Both TDD and general executors use tiered retry escalation when a cycle/step fails:
+
+| Retry | Strategy | Details |
+|-------|----------|---------|
+| Retry 1 | Lesson-only | Execute-child receives `accumulated_lessons` + `previous_failure`. No re-plan-child invoked. Original instructions/guidance unchanged. |
+| Retry 2+ | Re-plan escalation | Re-plan-child invoked with planning model. Produces `revised_instructions` (general) or `revised_implementation_guidance` (TDD). Execute-child receives revised content + all accumulated lessons. |
+| Max retries exhausted | Hard fail | Quest status set to `failed`. Final lesson extracted. All transitive dependents cascade-skipped. |
+
+The tiered model applies identically in both Claude mode (subagents) and batch mode (Pi CLI children). The retry limit is governed by `max_step_retries` (general) or `max_cycle_retries` (TDD) in `project.yaml` (default: 3).
+
+Retry tier does not affect status transitions — both tiers produce the same `in_progress` state. The tier distinction is recorded in the lesson schema (see run-report.md) for post-run analysis.
+
 ### Quick Executor Transitions
 
 The quick executor bypasses the `planned` status entirely, transitioning directly from `ready_for_planning` to `in_progress`.

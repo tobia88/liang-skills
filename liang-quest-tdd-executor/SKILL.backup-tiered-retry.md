@@ -14,11 +14,11 @@ Your job is to take executable TDD plans (produced by `liang-quest-tdd-tactician
 - One `plan.html` → one execution run per quest. Never combine multiple quests into a single execution.
 - Always execute all eligible quests in dependency order with a single upfront confirmation.
 - Plans are **immutable**. Never modify, overwrite, or delete any `plan.html` or `plan.archive-*.html` file.
-- Re-planning uses **tiered escalation**: retry 1 uses lesson-only context; retry 2+ invokes the planning model via re-plan-child. The TDD Executor never generates plans itself.
+- Re-planning on failure is delegated to **liang-quest-planner-core** via a re-plan child. The Executor never generates plans itself.
 - Each cycle follows its plan's **checklist spine**: the **9-item TDD spine** for `ready`/`foggy` quests, or the **5-item verify-only spine** for `verify-only` quests. For TDD cycles, the execute-child implements steps 1–8 and the verify-child validates; for verify-only cycles, the execute-child implements and the Executor runs hybrid verification.
 - **Spine validation:** at execution start, the Executor reads `.liang/test-approaches.yaml` and compares the plan's spine type to the registry entry for the quest type. Mismatches produce a warning but do not block execution.
 - Model selection for execute-children uses `project.yaml` `execution_by_difficulty` based on the plan's `difficulty` field.
-- The tiered retry loop is bounded by `max_step_retries` from `project.yaml` (default: 3). Retry 1 is lesson-only. Retry 2+ invokes re-plan-child.
+- The recursive verify/re-plan loop is bounded by `max_cycle_retries` from `project.yaml` (default: 3).
 - Manifest status tracking uses defined transitions: `planned → in_progress → passed | failed | skipped`.
 - On dependency failure, cascade-skip all downstream quests.
 - On crash or interruption, detect incomplete runs from manifest state and offer to resume.
@@ -39,8 +39,6 @@ Your job is to take executable TDD plans (produced by `liang-quest-tdd-tactician
 - `Test Registry` — `.liang/test-approaches.yaml`, the project-global map from quest types to test approaches. Read by the Executor for spine validation and hybrid verification.
 - `Hybrid verification` — two-phase verification for verify-only cycles: mechanical checks followed by LLM-as-judge evaluation.
 - `Confidence score` — three-tier qualitative rating (`high`/`medium`/`low`) assigned to each verify-only cycle after hybrid verification.
-- `Tiered retry` — retry escalation: lesson-only first (retry 1), re-plan-child on subsequent failures (retry 2+).
-- `Lesson-only retry` — first retry attempt using accumulated lessons without invoking re-plan-child.
 
 Keep JRPG flavor in the **HTML run report** only. YAML keys and child I/O stay neutral and formal.
 
@@ -232,43 +230,45 @@ For each cycle in the plan's `cycles[]`, in order:
 
 8. **Continue** — The Executor always continues to the next cycle regardless of confidence score. Low-confidence cycles are flagged in the run report for user review post-run.
 
-#### 7c. Tiered Retry Loop (on TDD cycle failure)
+#### 7c. Retry Loop (on TDD cycle failure)
 
-When a step fails verification (Tier 1 command or Tier 2 checklist), enter the tiered retry loop.
-This applies to both TDD spine execution failures and verify-only cycle failures.
+Bounded by `max_cycle_retries` (default: 3). Applies to TDD cycles only (verify-only cycles do not retry). For each retry attempt:
 
-**Retry 1 — Lesson-Only:**
-- Do NOT invoke re-plan-child.
-- Re-dispatch execute-child with:
-  - Original step instructions (unchanged from plan).
-  - `is_retry: true`
-  - `retry_attempt: 1`
-  - `accumulated_lessons:` array containing the failure reason from the first attempt.
-  - `previous_failure:` description of what failed and why.
-- The child receives lesson context but works from the same plan step.
-- Run verification again after execution.
+1. **Extract lesson** — Create a structured lesson entry:
+   ```yaml
+   quest_id: "<qid>"
+   cycle_id: "<cid>"
+   attempt: <n>
+   failure_type: "test_failure | build_error | timeout | unexpected"
+   error_summary: "<concise description>"
+   stdout_tail: "<last 50 lines>"
+   stderr_tail: "<last 50 lines>"
+   failed_assertions: [...]
+   timestamp: "<iso-8601>"
+   ```
+   Append to `lessons.yaml` at campaign root.
 
-**Retry 2+ — Re-Plan Escalation:**
-- Invoke re-plan-child with:
-  - Original step from plan.
-  - `accumulated_lessons:` array of all failure reasons so far.
-  - `previous_failure:` most recent failure.
-  - `attempt:` current retry number.
-- Re-plan-child returns revised instructions for the step.
-- Dispatch execute-child with the revised instructions.
-- Run verification again after execution.
+2. **Prepare re-plan-child input** — Write `.run/<quest-id>/cycle-<cid>-replan-input.yaml` containing:
+   - The original cycle definition.
+   - The failure context (error output, failed assertions, previous attempts).
+   - All accumulated lessons for this cycle.
 
-**Max retries exhausted:**
-- If `max_step_retries` (from project.yaml, default 3) is exceeded, mark the cycle as failed.
-- For TDD spine: this means the current Red/Green/Refactor cycle fails. The quest fails.
-- For verify-only spine: the verify-only cycle fails. The quest fails.
-- In both cases, proceed to cascade skip for downstream dependents.
+3. **Spawn re-plan-child** — Invoke a child Pi process (uses planning model) with:
+   - The re-plan-child prompt template.
+   - Input/output file paths.
 
-**Important preservation notes:**
-- The tiered retry loop is entered ONLY on step verification failure.
-- Red test failures during the "Red" phase of TDD are NOT retries — they are expected behavior.
-- Green test compilation during "Green" phase is also not a retry trigger — it's part of the cycle.
-- Only verification failures AFTER a step's execute-child completes trigger the retry loop.
+4. **Read re-plan-child output** — Expect: revised_implementation_guidance, revised_test_approach (optional), reasoning.
+
+5. **Prepare revised execute-child input** — Same as 7b.2 but with the re-plan-child's revised guidance replacing original guidance.
+
+6. **Spawn execute-child with revised guidance** — Same as 7b.3.
+
+7. **Spawn verify-child** — Same as 7b.6.
+
+8. **Branch on result:**
+   - **Pass:** Exit retry loop. Mark cycle `passed`. Checkpoint. Continue to next cycle.
+   - **Fail and retries remaining:** Loop back to step 1.
+   - **Fail and retries exhausted:** Mark cycle `failed`. Extract final lesson. Mark the entire quest as `failed`. Exit to Step 7d.
 
 #### 7d. Post-Quest Finalization
 
@@ -485,7 +485,7 @@ Additional manifest fields managed by the Executor:
 - `total_cycles: integer` — total cycle count from the plan.
 - `skip_reason: string` — present when status is `skipped`; references the failed dependency.
 
-## Boundaries — Hard Stops (19)
+## Boundaries — Hard Stops (18)
 
 This skill must never:
 
@@ -507,13 +507,11 @@ This skill must never:
 16. **Halt or fail a verify-only quest based on low confidence score.** The Executor always continues; low-confidence cycles are flagged in the run report for user review post-run.
 17. **Apply the TDD retry loop to verify-only cycles.** Verify-only cycles use hybrid verification, not test-based verification. They do not enter the retry loop.
 18. **Process quests with workflow other than "tdd".** This executor only handles TDD workflow quests. General quests belong to liang-quest-general-executor; quick quests belong to liang-quest-quick.
-19. **Never invoke re-plan-child on retry 1.** First retry is always lesson-only with accumulated lessons.
 
 If the user asks for any of the above, decline and explain the boundary, then offer the closest in-scope alternative.
 
 ## Failure Modes
 
-- **Lesson-only retry fails (retry 1):** Expected for conceptual failures that need revised instructions. Automatic escalation to re-plan-child on retry 2 handles this.
 - **Tactician Pre-Flight Gate fails:** Hard-block the entire campaign. List which quests are unplanned or missing `plan.html`. Recommend running `liang-quest-tdd-tactician`.
 - **Child process fails to spawn:** Report the error, mark the cycle as failed, enter retry loop.
 - **Child output YAML is malformed:** Treat as cycle failure. Extract what context is available for the lesson.
@@ -565,8 +563,6 @@ Read core references first, then local references. Core references are the sourc
 - `liang-quest-core/references/execution/child-contracts.md` — shared child contracts.
 - `liang-quest-core/references/execution/run-report.md` — shared run report schema.
 - `liang-quest-core/references/project/project-yaml.md` — project.yaml contract.
-
-These references include tiered retry behavior (added by campaign quest q002).
 
 ### Local references
 

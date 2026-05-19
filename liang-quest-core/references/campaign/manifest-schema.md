@@ -46,8 +46,11 @@ quests[]:
   total_cycles: integer      # total cycle/step count from plan
   skip_reason: string        # present when status is "skipped"
   started_at: string         # ISO 8601; set on in_progress transition
+  current_step_started_at: string  # ISO 8601; updated at each step/cycle start for progress polling
   completed_at: string       # ISO 8601; set on passed/failed/skipped transition
 ```
+
+The `current_step_started_at` field is updated at the start of each step (general) or cycle (TDD). In batch mode, Claude polls this field to calculate elapsed time and detect potential hangs. In Claude mode, it serves as an audit timestamp.
 
 ## Quest Contract YAML
 
