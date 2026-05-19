@@ -1,0 +1,51 @@
+campaign_id: "camp-2026-05-19-quest-skill-rename"
+slug: "quest-skill-rename"
+title: "Quest Skill Rename"
+created_at: "2026-05-19"
+source_report: "brainstorm-reports/2026-05-19-quest-skill-rename.html"
+lens: "Skill Creation"
+summary: >
+  Rename three quest pipeline skills — campaign cartographer, tactician, and
+  executor — for identity clarity, discoverability, and pipeline coherence.
+  Audit-first approach: map all cross-references, execute folder renames and
+  reference updates in one sweep, then verify with a zero-grep-hits check.
+
+quests:
+  - id: "q001"
+    title: "Dependency Audit"
+    path: "quest-001-dependency-audit/index.html"
+    priority: "high"
+    readiness: "high"
+    status: "passed"
+    workflow: "quick"
+    depends_on: []
+    started_at: "2026-05-19T00:00:00Z"
+    completed_at: "2026-05-19T00:01:00Z"
+
+  - id: "q002"
+    title: "Execute Rename Sweep"
+    path: "quest-002-execute-rename-sweep/index.html"
+    priority: "high"
+    readiness: "high"
+    status: "ready_for_planning"
+    workflow: "general"
+    depends_on:
+      - "q001"
+
+  - id: "q003"
+    title: "Verification"
+    path: "quest-003-verification/index.html"
+    priority: "high"
+    readiness: "high"
+    status: "ready_for_planning"
+    workflow: "quick"
+    depends_on:
+      - "q002"
+
+notes: "Generated as a static handoff; regenerate instead of editing."
+tags:
+  - "skill-creation"
+  - "rename"
+  - "quest-pipeline"
+generated_by: "liang-brainstorm-campaign-cartographer"
+schema_version: "1"
