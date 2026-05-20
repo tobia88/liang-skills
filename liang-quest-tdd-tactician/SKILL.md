@@ -23,7 +23,7 @@ Your job is to take planner-ready Quest Contracts from a Campaign and turn each 
 - The hybrid **TDD Readiness Gate** refuses quests with zero testable victory conditions unless the user gives a one-shot override.
 - **Refuse by default** when `plan.html` already exists; explicit re-plan archives then replaces.
 - On successful planning, perform exactly **one narrow manifest mutation**: flip `quests[].status` from `ready_for_planning` to `planned` for the just-planned quest.
-- On successful planning, also **stamp `workflow: tdd`** in the manifest's quest entry and **validate the stamp** by re-reading the manifest.
+- On first successful plan write, **stamp `workflow: tdd`** at campaign level in the manifest (top-level field, not per quest) and **validate the stamp** by re-reading the manifest. Only stamp once — skip if already present.
 - Bootstrap `.liang/project.yaml` on **first run only** via an interactive interview; never re-ask.
 - Stop at a TDD plan. **Never** produce implementation code, task lists, sprint plans, milestone plans, or architecture playbooks.
 
@@ -77,26 +77,33 @@ Check whether `.liang/project.yaml` exists in the workspace root.
 Ask these fields **one at a time**, in this order:
 
 1. **VCS** - "Which version control system does this project use?" Offer: `git`, `perforce`, `none`.
-2. **Planning model** - Before asking, run `pi model list` to discover available models and present a summary table showing provider, model IDs, and highlights as suggestions. Then ask: "Which model should be used for planning (this skill)?" Accept a free-text model ID - the user may type any model, including ones not in the table.
-3. **Easy execution model** - "Which model should handle easy-difficulty execution?" Reference the model table already shown. Accept a free-text model ID.
-4. **Medium execution model** - "Which model should handle medium-difficulty execution?" Reference the model table already shown. Accept a free-text model ID.
-5. **Hard execution model** - "Which model should handle hard-difficulty execution?" Reference the model table already shown. Accept a free-text model ID.
+2. **Planning artifacts policy** (only if VCS is not `none`) - "How should planning artifacts (`plan.html`, etc.) be handled in VCS?" Offer: `ignore`, `commit`, `ask`.
+3. **Execution artifacts policy** (only if VCS is not `none`) - "How should execution artifacts (`.run/` directories, run reports, etc.) be handled in VCS?" Offer: `ignore`, `commit`, `ask`.
+4. **Planning model** - Before asking, run `pi model list` to discover available models and present a summary table showing provider, model IDs, and highlights as suggestions. Then ask: "Which model should be used for planning (this skill)?" Accept a free-text model ID - the user may type any model, including ones not in the table.
+5. **Easy execution model** - "Which model should handle easy-difficulty execution?" Reference the model table already shown. Accept a free-text model ID.
+6. **Medium execution model** - "Which model should handle medium-difficulty execution?" Reference the model table already shown. Accept a free-text model ID.
+7. **Hard execution model** - "Which model should handle hard-difficulty execution?" Reference the model table already shown. Accept a free-text model ID.
 
 Each question is fully independent - do not offer "same as previous" shortcuts. Accept whatever the user types. The model suggestion table is a convenience; the user is not limited to listed models.
 
-After all five answers, write `.liang/project.yaml` conforming to the schema in `references/schema.md`:
+After all seven answers, write `.liang/project.yaml` conforming to the schema in `references/schema.md`:
 
 ```yaml
 schema_version: 1
 vcs: "<answer-1>"
-models:
+vcs_artifacts:
   planning: "<answer-2>"
+  execution: "<answer-3>"
+models:
+  planning: "<answer-4>"
   execution_by_difficulty:
-    easy: "<answer-3>"
-    medium: "<answer-4>"
-    hard: "<answer-5>"
+    easy: "<answer-5>"
+    medium: "<answer-6>"
+    hard: "<answer-7>"
 created_at: "<iso-8601-now>"
 ```
+
+> **Note:** When `vcs` is `"none"`, omit the `vcs_artifacts` block entirely from the generated YAML.
 
 ### 3. Test Registry Check
 
@@ -237,13 +244,7 @@ If validation fails, do not write anything. Report the failure and stop or corre
 
 ### 10. Write Plan
 
-Write `plan.html` as a sibling to the quest's `index.html`:
-
-```text
-campaigns/<campaign>/quest-NNN-<slug>/
-  index.html       # existing quest contract
-  plan.html        # new: the TDD plan
-```
+Write `plan.html` as a sibling to the quest's `index.html` within the campaign directory. Campaign directory layout is defined in `liang-quest-core/references/campaign/protocol.md`.
 
 The file follows `references/plan-template.html`:
 
@@ -261,13 +262,13 @@ After `plan.html` is successfully written, perform these manifest mutations on t
 
 1. Find the quest entry whose `id` matches the just-planned quest.
 2. Change its `status` from `ready_for_planning` to `planned`.
-3. Write `workflow: "tdd"` to the quest entry's `workflow` field.
+3. **Campaign-level workflow stamp (first quest only):** If the manifest does not already have a top-level `workflow` field, write `workflow: "tdd"` at campaign level (sibling to `campaign_id`, `slug`, etc.). Skip this step if `workflow` is already present.
 
 Then perform post-stamp validation:
 
 4. Re-read `manifest.yaml` from disk (do not trust in-memory state).
-5. Confirm the quest entry now has `workflow: "tdd"`.
-6. If the stamp is missing or incorrect, warn the user with: "Workflow stamp validation failed for `<quest-id>`: expected `workflow: tdd`, found `<actual-value>`. The plan file is valid but the manifest stamp did not land."
+5. Confirm the manifest top-level has `workflow: "tdd"`.
+6. If the stamp is missing or incorrect, warn the user with: "Workflow stamp validation failed: expected campaign-level `workflow: tdd`, found `<actual-value>`. The plan file is valid but the manifest stamp did not land."
 
 If the status is not `ready_for_planning`, warn and ask before proceeding.
 
@@ -289,16 +290,16 @@ After successful write, show:
 
 Show a condensed per-quest summary after each quest during the chain (quest ID, title, inferred type, difficulty, cycles, mutation result). After the entire chain completes, show a full chain summary table covering all planned quests with their difficulty, cycle counts, readiness, spine type, and any skipped quests with reasons.
 
-### 13. Git/Privacy Prompt
+### 13. VCS Artifact Policy
 
-Ask the user how to handle Git/privacy, using the same option style as the Cartographer:
+Read `vcs_artifacts.planning` from `.liang/project.yaml` to determine how to handle VCS rules for plan artifacts:
+- **`"ignore"`** — Apply VCS ignore rules silently. Do not prompt.
+- **`"commit"`** — Leave plan artifacts trackable. Do not apply ignore rules.
+- **`"ask"`** — Ask the user how to handle VCS ignore rules (legacy behavior).
 
-- Add relevant paths to root `.gitignore`.
-- Create a local `.gitignore`.
-- Leave Git rules alone.
-- Decide later.
+**Fallback (missing config):** If `vcs_artifacts` is absent from `project.yaml`, treat as `"ask"`. After the user answers, write their choice to `project.yaml` under `vcs_artifacts.planning` so subsequent runs are silent.
 
-Do **not** silently change Git ignore rules. Ask once after the entire chain completes, not per-quest.
+Do **not** silently change Git ignore rules. Apply policy once after the entire chain completes, not per-quest.
 
 ### 14. Open Prompt
 
@@ -352,11 +353,7 @@ This preserves current behavior for existing campaigns that predate the quest-ty
 
 ### Plan File
 
-```text
-campaigns/<campaign>/quest-NNN-<slug>/
-  index.html    # existing quest contract (untouched)
-  plan.html     # the TDD plan (new)
-```
+Write `plan.html` as a sibling to the quest's `index.html` within the campaign directory. Campaign directory layout is defined in `liang-quest-core/references/campaign/protocol.md`.
 
 ### Plan YAML (in opening HTML comment)
 
@@ -408,8 +405,8 @@ This skill must never:
 3. **Process quests without upfront confirmation.** The queue must be shown and confirmed once before any planning begins.
 4. **Overwrite `plan.html` silently.** Re-plan requires an explicit, named override and uses archive-then-replace (`plan.archive-<ts>.html`).
 5. **Run tests, execute code, install dependencies, or interact with VCS.**
-6. **Mutate `manifest.yaml` outside the allowed mutations:** status `ready_for_planning → planned` and workflow stamping to `"tdd"` for the specific quest just planned. All other manifest edits are violations.
-7. **Silently change Git ignore rules.** Ask at finalization, Cartographer-style.
+6. **Mutate `manifest.yaml` outside the allowed mutations:** status `ready_for_planning → planned` for the specific quest just planned, and campaign-level `workflow: "tdd"` stamp (once). All other manifest edits are violations.
+7. **Silently change Git ignore rules.** Obey `vcs_artifacts.planning` policy at finalization.
 8. **Read or include secrets, `.env`, `.env.*`, `.git/`, credentials, tokens, dependency folders, build outputs, or large binaries.**
 9. **Use VCS-specific wording in plan content** (commit, PR, branch, changelist, push, submit). VCS belongs only in `.liang/project.yaml`.
 10. **Plan a quest with zero testable victory conditions** unless the user gives a one-shot "plan anyway as `readiness: foggy`" override, or the quest type is `verify-only` per the registry.

@@ -20,7 +20,7 @@ This skill is the bridge between `liang-relentless-brainstorm` (which produces S
 - Never silently modify Git ignore rules.
 - Treat campaigns as private working artifacts unless the user says otherwise.
 - Keep the JRPG vibe in the **HTML view**, not in the machine-readable schema keys.
-- Quest contracts are **workflow-agnostic**. The cartographer does not assign or detect workflow types. Workflow is stamped downstream by the tactician or quick skill that processes the quest.
+- Quest contracts are **workflow-agnostic**. The cartographer does not assign or detect workflow types. Workflow is stamped at campaign level by the downstream skill (tactician or quick) that first processes the campaign.
 
 ## Terminology
 
@@ -61,7 +61,7 @@ Confirm the user wants to proceed.
 Offer three ways for the user to supply the source report:
 
 - **Explicit path** — user gives a path.
-- **Recent reports picker** — list recent files in `brainstorm-reports/` (most recent first). Do **not** silently read them; show file names only.
+- **Recent reports picker** — list recent files in `.liang/brainstorm-reports/` (most recent first). Do **not** silently read them; show file names only.
 - **Paste/attach** — user provides report content directly in chat.
 
 Always confirm the chosen source before reading. Show what will be read and ask once.
@@ -96,7 +96,7 @@ Apply **outcome-boundary decomposition** with **dependency topology** and **expo
 - Detect cycles in `depends_on`. Cycles are not allowed. If detected, restructure or stop and ask.
 - Target an auto-detected count, typically **2–8 quests**, driven by meaningful decomposition rather than a target number.
 
-Quest contracts produced by the cartographer are **workflow-agnostic**. They describe what to achieve and how to verify it, not which execution approach (TDD, general, or quick) to use. Workflow is assigned downstream by the tactician or quick skill that first processes the quest.
+Quest contracts produced by the cartographer are **workflow-agnostic**. They describe what to achieve and how to verify it, not which execution approach (TDD, general, or quick) to use. Workflow is assigned at campaign level by the downstream skill (tactician or quick) that first processes the campaign.
 
 Build a complete in-memory Campaign object:
 
@@ -117,11 +117,7 @@ If validation fails, do not write anything. Report the failure and stop or corre
 
 ### 7. Compute Output Path
 
-Default Campaign root:
-
-```text
-campaigns/campaign-<yyyy-mm-dd>-<campaign-slug>/
-```
+Default Campaign root is defined in `liang-quest-core/references/campaign/protocol.md`.
 
 If that folder already exists, **auto-suffix** with `-2`, `-3`, … until unused. Never overwrite or merge into an existing campaign folder.
 
@@ -129,16 +125,7 @@ If that folder already exists, **auto-suffix** with `-2`, `-3`, … until unused
 
 Only after Steps 5–7 succeed, write all files **as a batch**:
 
-```text
-campaigns/campaign-<yyyy-mm-dd>-<slug>/
-  manifest.html
-  manifest.yaml
-  quest-001-<slug>/
-    index.html
-  quest-002-<slug>/
-    index.html
-  ...
-```
+Campaign directory layout is defined in `liang-quest-core/references/campaign/protocol.md`.
 
 - Numeric prefixes (`quest-001`, `quest-002`, …) communicate dependency/recommended order in the filesystem.
 - Each quest HTML uses the YAML-in-opening-HTML-comment convention from `references/quest-contract-template.html`.
@@ -154,14 +141,15 @@ After successful write, show:
 - Quest IDs, titles, priorities, and `depends_on` summary.
 - Short one-paragraph Campaign summary.
 
-### 10. Git/Privacy Prompt (Mirror Brainstorm Skill)
+### 10. VCS Artifact Policy
 
-Ask the user how to handle Git/privacy for `campaigns/`, using the same option style as `liang-relentless-brainstorm`:
+Read `vcs_artifacts.planning` from `.liang/project.yaml` to determine how to handle campaign artifact VCS rules (campaign directory layout defined in `liang-quest-core/references/campaign/protocol.md`):
 
-- Add `campaigns/` to root `.gitignore`.
-- Create a local `campaigns/.gitignore`.
-- Leave Git rules alone.
-- Decide later.
+- **`"ignore"`** — Apply VCS ignore rules to the campaign directory silently. Do not prompt.
+- **`"commit"`** — Leave campaigns trackable. Do not apply ignore rules.
+- **`"ask"`** — Ask the user how to handle VCS ignore rules for campaigns (legacy behavior).
+
+**Fallback (missing config):** If `vcs_artifacts` is absent from `project.yaml`, treat as `"ask"`. After the user answers, write their choice to `project.yaml` under `vcs_artifacts.planning` so subsequent runs are silent.
 
 Do **not** silently change Git ignore rules.
 
@@ -203,7 +191,7 @@ liang-quest-general-tactician <campaign-path>
 liang-quest-quick <campaign-path>
 ```
 
-Where `<campaign-path>` is the relative path to the campaign directory (e.g., `campaigns/campaign-2026-05-19-my-campaign`). The tactician operates in campaign chain mode — it reads the manifest, discovers all eligible quests, and plans them in dependency order.
+Where `<campaign-path>` is the relative path to the campaign directory (see `liang-quest-core/references/campaign/protocol.md` for directory layout). The tactician operates in campaign chain mode — it reads the manifest, discovers all eligible quests, and plans them in dependency order.
 
 Rules:
 
@@ -217,17 +205,7 @@ Rules:
 
 ### Folder Structure
 
-```text
-campaigns/
-  campaign-<yyyy-mm-dd>-<campaign-slug>/
-    manifest.html
-    manifest.yaml
-    quest-001-<quest-slug>/
-      index.html
-    quest-002-<quest-slug>/
-      index.html
-    ...
-```
+Campaign directory layout is defined in `liang-quest-core/references/campaign/protocol.md`.
 
 ### Manifest YAML (Required Core)
 
@@ -236,7 +214,7 @@ campaigns/
 Required Core keys:
 
 - `campaign_id`, `slug`, `title`, `created_at`, `source_report`, `lens`, `summary`
-- `quests[]` with `id`, `title`, `path`, `priority`, `readiness`, `status`, `depends_on` (workflow is not included — it is stamped downstream)
+- `quests[]` with `id`, `title`, `path`, `priority`, `readiness`, `status`, `depends_on` (workflow is not included — it is stamped at campaign level downstream)
 
 ### Manifest HTML
 
@@ -272,7 +250,7 @@ status: ready_for_planning
 
 The HTML body presents the quest contract in JRPG dashboard style. See `references/quest-contract-template.html`.
 
-Note: Quest contracts do not include a workflow field. Workflow is assigned downstream by the skill that plans or executes the quest.
+Note: Quest contracts do not include a workflow field. Workflow is assigned at campaign level by the downstream skill that plans or executes the campaign.
 
 ### Tiered Schema
 
