@@ -59,7 +59,7 @@ When this skill is activated:
 2. Give a brief scout summary before questioning.
 3. If the user supplied an initial idea, infer the likely planning lens and ask for confirmation.
 4. If no initial idea was supplied, ask for the Main Quest.
-5. Ignore existing `brainstorm-reports/` reports unless the user explicitly asks to use one as context.
+5. Ignore existing `.liang/brainstorm-reports/` reports unless the user explicitly asks to use one as context.
 
 Preserve the one-question rule. The opening question should be the highest-leverage next question, usually lens confirmation or the Main Quest.
 
@@ -190,7 +190,7 @@ Do not inspect:
 - caches/temp folders
 - large binaries/assets
 - broad source dumps
-- old reports in `brainstorm-reports/` unless explicitly requested
+- old reports in `.liang/brainstorm-reports/` unless explicitly requested
 
 If deeper inspection seems necessary, ask first.
 
@@ -422,43 +422,40 @@ Guarded finalization sequence:
 3. Ask whether to continue or finalize anyway.
 4. Prepare final report content.
 5. Infer a report filename at finalization, then ask the user to confirm or edit it.
-   - Default path: `brainstorm-reports/<yyyy-mm-dd>-<topic-slug>.html`
+   - Default path: `.liang/brainstorm-reports/<yyyy-mm-dd>-<topic-slug>.html`
    - Avoid overwriting existing files. If the path exists, propose a safe suffix or ask.
 6. Ask Git/privacy handling only at finalization.
-7. Create `brainstorm-reports/` if needed.
+7. Create `.liang/brainstorm-reports/` if needed.
 8. Write the final self-contained HTML Strategy Report.
 9. Tell the user the saved path.
 10. Ask whether to open the generated HTML report in the user's default browser using the Browser Open Prompt below. Do not open it automatically unless the user confirms.
 
-### Git/Privacy Prompt
+### VCS Artifact Policy
 
-Reports are private working notes by default. If the workspace appears to be a Git repo, ask before changing ignore rules.
+Reports are private working notes by default. Before applying VCS rules, read the centralized artifact policy.
 
-Use this style:
+**Read `vcs_artifacts.planning` from `.liang/project.yaml`:**
+
+| Policy | Action |
+|---|---|
+| `"ignore"` | Apply VCS ignore rules to `.liang/brainstorm-reports/` silently. Do not prompt. |
+| `"commit"` | Leave reports trackable. Do not apply ignore rules. |
+| `"ask"` | Present the privacy prompt below and let the user choose. |
+
+**Fallback (missing config):** If `.liang/project.yaml` exists but `vcs_artifacts` is absent, treat as `"ask"`. After the user answers, write their choice to `project.yaml` under `vcs_artifacts.planning` so subsequent runs are silent. If `project.yaml` does not exist, use `"ask"` behavior without writing.
+
+When the policy resolves to `"ask"` (explicitly or via fallback), present this prompt:
 
 ```text
 Private Notes Warning
 
-This Strategy Report may include private reasoning, rejected paths, contradictions, uncertainty, and rough planning notes.
+This Strategy Report may include private reasoning, rejected paths, and rough planning notes.
 
-How should I handle Git ignore rules?
+How should I handle VCS rules for planning artifacts?
 
-A. Add brainstorm-reports/ to the root .gitignore.
-B. Create brainstorm-reports/.gitignore to ignore reports in this folder.
-C. Do not add ignore rules; I may want to commit/share reports.
-D. Decide later; write the report without changing Git ignore.
-
-Recommended:
-B — it keeps privacy behavior local to the reports folder.
-
-Tradeoff:
-If you later want to commit a report, you may need to remove or override the local ignore file.
-
-Confidence:
-High.
-
-Manual:
-Describe a different privacy handling choice.
+A. Apply ignore rules to .liang/brainstorm-reports/ (keep out of version control).
+B. Leave reports trackable (I may want to commit/share them).
+C. Decide later; write the report without changing VCS rules.
 ```
 
 Do not silently modify Git ignore rules.
@@ -511,7 +508,7 @@ To continue in a clean context, copy and paste this into a new session:
 liang-quest-cartographer <report-path>
 ```
 
-Where `<report-path>` is the actual saved path of the report just written (e.g., `brainstorm-reports/2026-05-19-my-topic.html`).
+Where `<report-path>` is the actual saved path of the report just written (e.g., `.liang/brainstorm-reports/2026-05-19-my-topic.html`).
 
 Rules:
 

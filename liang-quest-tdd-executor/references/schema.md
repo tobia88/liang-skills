@@ -93,7 +93,7 @@ If the `executor` block is absent, use defaults silently (do not error). If `max
 
 ## Manifest YAML (Read-Write)
 
-Lives at `campaigns/<campaign>/manifest.yaml`.
+Lives at `.liang/campaigns/<campaign>/manifest.yaml`.
 
 ### Executor-Owned Fields
 
@@ -137,7 +137,7 @@ Any transition not in this table is a violation.
 
 ## Lesson YAML (Write-Only / Append-Only)
 
-Lives at `campaigns/<campaign>/lessons.yaml`. Created on first failure; appended to on subsequent failures. Never deleted by the Executor.
+Lives at `.liang/campaigns/<campaign>/lessons.yaml`. Created on first failure; appended to on subsequent failures. Never deleted by the Executor.
 
 ### Lesson Entry Schema
 
@@ -160,7 +160,7 @@ lessons:
 
 ## .run/ Directory Structure
 
-Created per quest execution. Lives at `campaigns/<campaign>/.run/<quest-id>/`.
+Created per quest execution. Lives at `.liang/campaigns/<campaign>/.run/<quest-id>/`.
 
 ```
 .run/
@@ -235,7 +235,7 @@ completed_at: string           # ISO 8601
 
 ## Run Report (Write-Only)
 
-Lives at `campaigns/<campaign>/run-report-<timestamp>.html`.
+Lives at `.liang/campaigns/<campaign>/run-report-<timestamp>.html`.
 
 Contains an HTML comment with summary YAML:
 
