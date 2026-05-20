@@ -4,7 +4,7 @@ Source of truth for `manifest.yaml` and Quest Contract YAML used across the JRPG
 
 ## Manifest YAML
 
-Lives at `campaigns/<campaign>/manifest.yaml`.
+Lives at `.liang/campaigns/<campaign>/manifest.yaml`.
 
 ### Required Core
 
@@ -26,6 +26,16 @@ quests:                      # ordered list; order communicates recommended prog
     status: string           # see Status Vocabulary
     depends_on: [string]     # quest IDs; may be empty
 ```
+
+### Downstream-Stamped Fields (campaign-level)
+
+These fields are NOT written by the cartographer. They are stamped by the downstream skill (tactician or quick) that first processes the campaign.
+
+```yaml
+workflow: string             # "tdd" | "general" | "quick" — stamped once at campaign level
+```
+
+The workflow field is a campaign-wide property, not a per-quest property. Whichever skill first processes the campaign stamps its workflow. Executors check this field at startup and refuse to run if the workflow does not match.
 
 ### Optional Extensions
 

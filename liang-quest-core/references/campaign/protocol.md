@@ -44,7 +44,7 @@ The HTML body is the human-readable view (JRPG dashboard style). The YAML commen
 ## Campaign Folder Structure
 
 ```
-campaigns/
+.liang/campaigns/
   campaign-<yyyy-mm-dd>-<slug>/
     manifest.html              # human-readable quest board
     manifest.yaml              # machine-readable quest index

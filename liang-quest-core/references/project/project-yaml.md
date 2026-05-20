@@ -36,15 +36,56 @@ executor:
 
 If the `executor` block is absent, use defaults silently.
 
+### VCS Artifact Policy (optional)
+
+```yaml
+vcs_artifacts:
+  planning: string           # "ignore" | "commit" | "ask" — policy for planning artifacts (.liang/brainstorm-reports/, .liang/campaigns/)
+  execution: string          # "ignore" | "commit" | "ask" — policy for execution artifacts (.run/, lessons.yaml)
+```
+
+If the `vcs_artifacts` block is absent, all skills treat both categories as `"ask"` (preserving current per-skill prompt behavior). Once a user answers the prompt, the skill writes the answer back to `project.yaml`, making the config self-healing.
+
+| Value | Behavior |
+|---|---|
+| `"ignore"` | Apply VCS ignore rules silently; suppress commit suggestions for this category |
+| `"commit"` | Leave artifacts trackable; suggest commit command at campaign completion |
+| `"ask"` | Preserve current per-skill prompt behavior (ask each time) |
+
+#### Full Example
+
+```yaml
+schema_version: 1
+vcs: "git"
+models:
+  planning: "claude-opus-4-6"
+  verify: "claude-haiku-4-5-20251001"
+  execution_by_difficulty:
+    easy: "claude-haiku-4-5-20251001"
+    medium: "claude-sonnet-4-6"
+    hard: "claude-opus-4-6"
+vcs_artifacts:
+  planning: "ignore"
+  execution: "ignore"
+created_at: "2026-05-19T22:31:00+08:00"
+```
+
 ## First-Run Interview
 
 The tactician (whichever runs first) bootstraps `project.yaml` via an interactive interview. Questions are asked one at a time, in order:
 
 1. **VCS** — "Which version control system does this project use?" Offer: `git`, `perforce`, `none`.
-2. **Planning model** — Present available models, then ask for a model ID (free-text).
-3. **Easy execution model** — Ask for easy-difficulty model ID.
-4. **Medium execution model** — Ask for medium-difficulty model ID.
-5. **Hard execution model** — Ask for hard-difficulty model ID.
+
+   If vcs is not none, ask:
+2. **Planning artifacts policy** — "How should planning artifacts (brainstorm reports, campaigns) be handled by VCS?" Offer: `ignore`, `commit`, `ask`. Recommend: `ignore`.
+3. **Execution artifacts policy** — "How should execution artifacts (.run/ data, lessons) be handled by VCS?" Offer: `ignore`, `commit`, `ask`. Recommend: `ignore`.
+
+   When vcs is 'none', omit the vcs_artifacts block from the written project.yaml.
+
+4. **Planning model** — Present available models, then ask for a model ID (free-text).
+5. **Easy execution model** — Ask for easy-difficulty model ID.
+6. **Medium execution model** — Ask for medium-difficulty model ID.
+7. **Hard execution model** — Ask for hard-difficulty model ID.
 
 Each question is independent — no "same as previous" shortcuts. The user may type any model ID.
 
@@ -60,7 +101,8 @@ The `models.verify` field is required by both executors. If absent when an execu
 ## Schema Versioning
 
 - Current version: `schema_version: 1`
-- New fields require a `schema_version` bump
+- **Additive-optional** fields (new keys with a safe default when absent) do not require a `schema_version` bump. Example: `vcs_artifacts` defaults to `"ask"` when absent, preserving existing behavior.
+- **Breaking changes** (removed fields, changed semantics, new required fields without safe defaults) require a `schema_version` bump.
 - Never retroactively edit existing configs for schema changes
 - Skills must check `schema_version` before parsing
 

@@ -5,7 +5,7 @@ Shared run report format for both TDD and general executors.
 ## File Location
 
 ```
-campaigns/<campaign>/run-report-<iso-8601-timestamp>.html
+.liang/campaigns/<campaign>/run-report-<iso-8601-timestamp>.html
 ```
 
 ## Run Report YAML (in opening HTML comment)
@@ -13,7 +13,7 @@ campaigns/<campaign>/run-report-<iso-8601-timestamp>.html
 ```yaml
 run_id: string                 # "run-<iso-8601-timestamp>"
 campaign_id: string
-workflow: "tdd" | "general" | "mixed"   # "mixed" when campaign has both types
+workflow: "tdd" | "general" | "quick"   # from campaign-level workflow
 started_at: string             # ISO 8601
 completed_at: string           # ISO 8601
 duration_seconds: integer
@@ -21,7 +21,6 @@ duration_seconds: integer
 quests:
   - quest_id: string
     title: string
-    workflow: "tdd" | "general"
     difficulty: string
     status: "passed" | "failed" | "skipped"
 
@@ -64,12 +63,11 @@ lessons_count: integer
 
 ## Lesson Schema
 
-Shared across both executors. Lives at `campaigns/<campaign>/lessons.yaml`.
+Shared across both executors. Lives at `.liang/campaigns/<campaign>/lessons.yaml`.
 
 ```yaml
 lessons:
   - quest_id: string
-    workflow: "tdd" | "general"
     cycle_id: string             # TDD
     step_id: string              # General
     attempt: integer
@@ -93,7 +91,6 @@ Per-quest completion marker at `.run/<quest-id>/complete.yaml`.
 
 ```yaml
 quest_id: string
-workflow: "tdd"
 status: "passed" | "failed"
 spine_type: "tdd" | "verify-only"
 cycles_completed: integer
@@ -110,7 +107,6 @@ completed_at: string
 
 ```yaml
 quest_id: string
-workflow: "general"
 status: "passed" | "failed"
 steps_completed: integer
 steps_total: integer
@@ -158,7 +154,6 @@ files_changed: [string]
 
 ```yaml
 step_id: string
-workflow: "general"
 status: "passed" | "failed"
 verification_tier: 1 | 2
 attempts: integer
