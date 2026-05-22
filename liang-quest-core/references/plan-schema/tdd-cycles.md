@@ -32,7 +32,10 @@ cycles[]:
   target_files: [string]            # files to create or modify
   reference_files: [string]         # existing files to read for context
   expected_outcome: string          # what success looks like after this cycle
+  discussion_constraints_applied: [string]  # constraint IDs from discussion.html honored by this cycle
 ```
+
+The `discussion_constraints_applied` field works identically to its counterpart in general steps — it lists constraint IDs from `discussion.html` that influenced the cycle's design. See `liang-quest-core/references/discussion/constraint-schema.md` for the constraint ID format.
 
 ## Dual Checklist Spines
 
@@ -72,35 +75,9 @@ Spine selection is determined by the plan's `readiness` field.
 
 All cycles within a plan use the same spine (determined by plan-level readiness).
 
-## Test Registry — `.liang/test-approaches.yaml`
+## Test Registry
 
-Project-global registry mapping quest types to test approaches. Created by the Tactician; read by the Executor.
-
-### Automatable Entry
-
-```yaml
-quest_types:
-  <quest-type-slug>:
-    framework: string              # e.g. "jest", "pytest", "catch2"
-    test_command: string           # e.g. "npm test", "pytest tests/"
-    test_file_pattern: string      # e.g. "**/*.test.ts"
-```
-
-### Verify-Only Entry
-
-```yaml
-quest_types:
-  <quest-type-slug>:
-    verify_only: true
-    verify_hint: string            # guidance for hybrid verification
-```
-
-### Rules
-
-- Quest type slugs are open-ended (user-defined).
-- Each entry uses exactly one shape.
-- The `verify_only` flag distinguishes shapes; absence implies automatable.
-- The file is optional. When absent, pipeline falls back to all-TDD behavior.
+See `test-approaches.md` for the complete `.liang/test-approaches.yaml` registry schema (entry shapes, rules, validation).
 
 ## TDD Readiness Gate
 
@@ -118,3 +95,4 @@ In addition to common validation:
 - Every cycle contains the correct checklist spine for the plan's readiness level.
 - All cycles within a plan use the same spine.
 - `foggy_reason` must be present when `readiness` is `foggy`.
+- When present, `discussion_constraints_applied` must be a list of strings matching the constraint ID format (`dc` + 3-digit number).

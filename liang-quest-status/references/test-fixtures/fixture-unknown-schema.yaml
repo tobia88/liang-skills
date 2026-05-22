@@ -1,0 +1,16 @@
+campaign_id: "fixture-unknown-schema"
+title: "Fixture: Unknown Schema Version"
+created_at: "2026-05-01"
+schema_version: "99"
+workflow: "general"
+
+quests:
+  - id: "q001"
+    title: "Some quest"
+    status: "passed"
+    depends_on: []
+  - id: "q002"
+    title: "Another quest"
+    status: "in_progress"
+    depends_on:
+      - "q001"

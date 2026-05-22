@@ -20,16 +20,17 @@ This skill contains **no behavioral logic**. It exists solely as a structured li
 
 ## Schema Version
 
-**Current: schema_version: 2**
+**Current: schema_version: 3**
 
 The quest planning family uses integer schema versioning. All skills reference the current version from this central declaration.
 
 | Version | Changes |
 |---------|---------|
 | 1 | Initial schema. workflow is Required Core in both manifest and quest contract, assigned by the cartographer. |
-| 2 | workflow moves from Required Core to Downstream-Stamped. Tacticians and quick stamp workflow in the manifest on first contact. Cartographer produces workflow-agnostic quest contracts. v1 campaigns remain valid; pre-existing workflow values are treated as informational. |
+| 2 | workflow moves from Required Core to Downstream-Stamped on quest entries. Tacticians and quick stamp workflow per quest in the manifest on first contact. Cartographer produces workflow-agnostic quest contracts. v1 campaigns remain valid; pre-existing workflow values are treated as informational. |
+| 3 | workflow moves from quest-level to campaign-level. Tacticians and quick stamp workflow once at manifest top-level, not per quest. Executors check campaign-level workflow at startup instead of filtering per quest. Per-quest workflow fields in v1/v2 campaigns are ignored. |
 
-Skills should check schema_version when parsing campaign artifacts and handle both v1 and v2 gracefully.
+Skills should check schema_version when parsing campaign artifacts and handle v1, v2, and v3 gracefully.
 
 The declaration must be prominent and unambiguous -- any skill reading quest-core will see the current version immediately after the reference table.
 
@@ -62,6 +63,7 @@ Each workflow skill reads only the subdirectories it needs:
 - `common.md` — Shared plan envelope fields, difficulty vocabulary, readiness vocabulary, YAML conventions, schema versioning.
 - `tdd-cycles.md` — TDD cycle plan schema: cycles[], 9-item and 5-item checklist spines, enriched fields.
 - `general-steps.md` — General step plan schema: steps[], flat schema, pre/postconditions, two-tier verification marking.
+- `test-approaches.md` — Test approaches registry schema: entry shapes, rules, validation for .liang/test-approaches.yaml.
 
 ### execution/
 - `status-transitions.md` — Manifest status vocabulary, allowed transitions, executor-owned fields.

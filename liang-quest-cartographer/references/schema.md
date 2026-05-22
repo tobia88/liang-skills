@@ -39,16 +39,15 @@ quests:                      # ordered list; order communicates recommended prog
     depends_on: [string]     # list of quest ids this quest depends on; may be empty
 ```
 
-### Downstream-Stamped Fields (v2)
+### Downstream-Stamped Fields (v3)
 
-These fields are NOT written by the cartographer. They are stamped by the downstream skill (tactician or quick) that first plans or processes the quest.
+These fields are NOT written by the cartographer. They are stamped by the downstream skill (tactician or quick) that first processes the campaign.
 
 ```yaml
-quests[]:
-  workflow: string         # "tdd" | "general" | "quick" -- stamped by tacticians/quick, not by the cartographer
+workflow: string             # "tdd" | "general" | "quick" — stamped once at campaign level, not per quest
 ```
 
-In schema v2, workflow is no longer assigned by the cartographer. It is stamped by the downstream skill that first plans or processes the quest. For v1 campaigns where the cartographer wrote workflow, the field remains valid but is considered informational -- the downstream skill may overwrite it.
+In schema v3, workflow is a campaign-level field stamped by the downstream skill that first processes the campaign. It is not a per-quest property. For v1/v2 campaigns where workflow was per-quest, the per-quest values are ignored; the downstream skill stamps campaign-level workflow on first contact.
 
 ### Optional Extensions
 
@@ -81,13 +80,9 @@ readiness: string            # "low" | "medium" | "medium-high" | "high"
 status: string               # see Status Vocabulary below
 ```
 
-### Downstream-Stamped Fields (v2)
+### Downstream-Stamped Fields (v3)
 
-```yaml
-workflow: string             # stamped by tactician or quick, not by cartographer
-```
-
-In schema v2, quest contracts are workflow-agnostic. The downstream skill stamps workflow in the manifest on first contact.
+Quest contracts are workflow-agnostic. Workflow is stamped at campaign level in the manifest by the downstream skill, not in quest contracts.
 
 ### Optional Extensions
 
@@ -137,11 +132,10 @@ Use exactly these values:
 - `general` — config, docs, assets, spikes, glue, prompt work, skill creation, or any quest without meaningful test-first cycles
 - `quick` — simple, narrowly-scoped quests that bypass the tactician+executor pipeline for single-pass scout+execute
 
-Downstream skills (tacticians and quick) assign workflow when they first process a quest. The workflow value reflects the planning approach used:
-- Presence of testable code deliverables → `tdd`
-- Simple quests meeting ALL of: two or fewer dependencies, clear victory conditions with no open questions, low risk, scope limited to a single directory or file set → `quick`
-- Config, documentation, asset, spike, or skill creation work that does not meet quick criteria → `general`
-- When ambiguous between `quick` and `general`, prefer `general` (the more permissive workflow)
+Downstream skills (tacticians and quick) assign workflow when they first process a campaign. The workflow value reflects the planning approach used for the entire campaign:
+- `tdd` — the TDD tactician planned the campaign
+- `general` — the general tactician planned the campaign
+- `quick` — the quick skill executed the campaign directly
 
 ## Validation Rules
 
@@ -154,7 +148,7 @@ Before any file is written:
 - The `depends_on` graph must be acyclic.
 - All slugs must be lowercase ASCII with hyphens, no spaces or special characters.
 - `created_at` must be a valid ISO 8601 date or datetime.
-- `workflow`, when present, must be exactly `"tdd"`, `"general"`, or `"quick"`. In v2, workflow may be absent from quest contracts (it is stamped downstream).
+- `workflow`, when present at campaign level, must be exactly `"tdd"`, `"general"`, or `"quick"`. In v3, workflow is campaign-level only (stamped downstream). Per-quest workflow fields from v1/v2 are ignored.
 
 If any rule fails, the skill must not write files.
 
@@ -172,6 +166,6 @@ If this schema changes:
 - Bump `schema_version` in new manifests.
 - Do not retroactively edit existing campaigns; generate new ones instead.
 
-### Backward Compatibility -- v1 to v2
+### Backward Compatibility
 
-v1 campaigns have workflow in Required Core, assigned by the cartographer. v2 campaigns emit quest contracts without workflow; the downstream skill stamps it in the manifest on first contact. When a v2 tool encounters a v1 campaign with pre-existing workflow values, it treats them as informational -- the downstream skill may overwrite with its own stamp. The schema_version field in the manifest (Optional Extensions) indicates which version generated the campaign. Absence of schema_version implies v1.
+v1 campaigns have workflow per quest in Required Core, assigned by the cartographer. v2 campaigns have workflow per quest as Downstream-Stamped. v3 campaigns have workflow at campaign level only. When a v3 tool encounters a v1/v2 campaign with per-quest workflow values, it ignores them and stamps campaign-level workflow on first contact. The schema_version field in the manifest (Optional Extensions) indicates which version generated the campaign. Absence of schema_version implies v1.

@@ -12,6 +12,7 @@ workflow: "general"
 readiness: "ready" | "scout-limited"
 
 scout_summary: string        # summary of codebase state from the mandatory scout phase
+inferred_quest_type: string   # quest type slug from registry/inference; optional
 
 steps:                       # ordered list; order is execution order
   - id: string              # e.g. "s01"; unique within the plan
@@ -27,6 +28,7 @@ steps:                       # ordered list; order is execution order
     verification_command: string | null  # Tier 1: shell command (exit 0 = pass); null for Tier 2
     acceptance_criteria:     # Tier 2: forced yes/no questions; also used as human-readable summary for Tier 1
       - string               # each criterion as an explicit yes/no question for Tier 2
+    discussion_constraints_applied: [string]  # optional; constraint IDs from discussion.html honored by this step
 ```
 
 ## Step Schema Design Principles
@@ -59,6 +61,15 @@ Replace TDD's self-contained test cycles as the drift-detection mechanism. The e
 - Content patterns present
 - Structural properties satisfied
 
+### Discussion Constraint Traceability
+
+When a campaign has a `discussion.html` (produced by the discussion stage), the tactician populates `discussion_constraints_applied` on each step with the IDs of constraints that influenced the step's design. This enables mechanical traceability from discussion to plan.
+
+- Field is optional — steps in plans without a discussion stage omit it
+- Values are constraint IDs (e.g. `"dc001"`, `"dc003"`) matching the `id` field in the constraint schema (see `liang-quest-core/references/discussion/constraint-schema.md`)
+- A constraint may appear on multiple steps
+- Every constraint from `discussion.html` should appear on at least one step
+
 ### Two-Tier Verification
 
 | Tier | When Used | How It Works |
@@ -67,6 +78,24 @@ Replace TDD's self-contained test cycles as the drift-detection mechanism. The e
 | **2 (Yes/No Checklist)** | No mechanical verification possible | Tactician writes `acceptance_criteria` as explicit yes/no questions; verify-child answers each; any "no" = fail |
 
 The tactician should prefer Tier 1 whenever possible. Tier 2 is the fallback for inherently non-mechanical verification (documentation quality, design consistency, etc.).
+
+### Registry-Informed Verification
+
+When `.liang/test-approaches.yaml` exists and contains an entry for the
+quest's inferred type, the registry informs Tier selection:
+
+| Registry State | Step Type | Verification Behavior |
+|---|---|---|
+| Automatable (`test_command` present) | Code-touching step | Tier 1 with `test_command` as default `verification_command` |
+| Automatable (`test_command` present) | Non-code step | Independent per-step verification (unchanged) |
+| Verify-only (`verify_only: true`) | Domain-relevant step | Tier 2 with `verify_hint`-derived `acceptance_criteria` |
+| Verify-only (`verify_only: true`) | Non-domain step | Independent per-step verification (unchanged) |
+| No entry / registry absent | Any step | Per-step ad-hoc verification (existing behavior) |
+
+The registry is a default, not an override. The tactician may choose a more
+specific verification command when one exists for a particular step.
+
+See `test-approaches.md` for the complete registry schema.
 
 ## Mandatory Scout Phase
 
@@ -116,6 +145,7 @@ steps:
     acceptance_criteria:
       - "Logging config exists at src/config/logging.json"
       - "Output format is set to structured JSON"
+    discussion_constraints_applied: []
 
   - id: "s02"
     name: "Write migration guide"
@@ -151,3 +181,4 @@ In addition to common validation:
 - `preconditions` and `postconditions` must each have at least one entry.
 - `instructions` must be non-empty.
 - `files` must list at least one file path.
+- When present, `discussion_constraints_applied` must be a list of strings. Each string should match a constraint ID format (`dc` + 3-digit number).

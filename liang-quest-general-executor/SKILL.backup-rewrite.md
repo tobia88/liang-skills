@@ -28,7 +28,7 @@ The tactician (smart model) has already front-loaded all thinking into implement
 - On dependency failure, cascade-skip all downstream quests.
 - On crash or interruption, detect incomplete runs from manifest state and offer to resume.
 - Produce an HTML run report at campaign root on completion.
-- **Workflow enforcement:** Only process quests with `workflow: "general"` in the manifest. Hard-block and report quests with a mismatched workflow tag. Flag quests that are `planned` but have no workflow tag as a distinct error category.
+- **Workflow enforcement:** Check campaign-level `workflow` field at startup. Refuse to run if `workflow` is not `"general"`. This is a single check at campaign level, not per quest.
 
 ## Terminology
 
@@ -111,21 +111,15 @@ If detected, show which quests were interrupted and at which step. Offer: **Resu
 Identify the target Campaign. Build and confirm the queue:
 
 1. **Read manifest** — Read `manifest.yaml`.
-2. **Build the queue** — Read all quests from the manifest. For each quest with `status: planned`, check the `workflow` field:
+2. **Campaign workflow check** — Read the top-level `workflow` field from the manifest.
+   - If `workflow: "general"` — proceed.
+   - If `workflow` is present but not `"general"` — **Hard-block.** Report: "Campaign has workflow: <value>, expected: general. This campaign belongs to a different executor." Stop.
+   - If `workflow` is absent — **Hard-block.** Report: "Campaign has no workflow tag. Run the general tactician on this campaign first to stamp workflow." Stop.
 
-   - **`workflow: "general"`** — Add to the execution queue. This executor processes this quest.
-   - **`workflow` is present but not `"general"`** (e.g., `"tdd"`, `"quick"`) — **Hard-block.** Do not add to the queue. Report: "Quest <quest-id> has workflow: <value>, expected: general. Skipping — this quest belongs to a different executor."
-   - **`workflow` is absent or empty** (planned but untagged) — **Distinct error.** Do not add to the queue. Report: "Quest <quest-id> is planned but has no workflow tag. This indicates the tactician did not stamp workflow. Run the tactician on this campaign to stamp workflow before executing."
+3. **Build the queue** — Collect all quests with `status: planned`. Sort by dependency order: quests whose dependencies are all `passed` (or have no dependencies) come first.
 
-   Sort the eligible quests by dependency order.
-
-   Display a summary of enforcement results before the queue table:
-   - Eligible: N quests with workflow: general
-   - Skipped (wrong workflow): N quests (list IDs)
-   - Error (untagged): N quests (list IDs)
-
-3. **Show the queue** — Table with quest ID, title, workflow, difficulty, step count, verification tier split, dependencies, eligibility.
-4. **Confirm once** — "Execute these N quests in this order?"
+4. **Show the queue** — Table with quest ID, title, difficulty, step count, verification tier split, dependencies, eligibility.
+5. **Confirm once** — "Execute these N quests in this order?"
 
 ### 6. Quest Execution Loop
 
@@ -221,7 +215,7 @@ After all quests are processed:
 
 1. **Generate HTML run report** — Write `run-report-<timestamp>.html` at campaign root. Include:
    - Campaign title, run timestamp, duration.
-   - Quest results table: ID, title, difficulty, workflow, status, steps completed, retries.
+   - Quest results table: ID, title, difficulty, status, steps completed, retries.
    - Step-level detail per quest: step ID, verification tier, pass/fail, attempts.
    - Tier 2 verification details: per-criterion yes/no results for Tier 2 steps.
    - Lessons section.
@@ -312,7 +306,7 @@ This skill must never:
 12. **Delete lessons.yaml, run reports, or completion markers during cleanup.**
 13. **Execute quests whose dependencies have not all passed.**
 14. **Silently resume an interrupted run.** Always ask on crash recovery.
-15. **Process quests with workflow other than "general".** This executor only handles general workflow quests. TDD quests belong to liang-quest-tdd-executor; quick quests belong to liang-quest-quick.
+15. **Process campaigns with workflow other than "general".** This executor only handles general workflow campaigns. TDD campaigns belong to liang-quest-tdd-executor; quick campaigns belong to liang-quest-quick.
 
 ## Failure Modes
 

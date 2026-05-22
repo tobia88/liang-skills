@@ -59,6 +59,8 @@ Run these steps in order. Do not skip ahead.
 State that this skill will:
 
 - Read all eligible Quest Contracts from a Campaign in dependency order.
+- Run a campaign-level crosscut discussion to establish shared constraints before planning.
+- Offer optional per-quest discussions via a dialogue hub to capture quest-specific design preferences.
 - Produce a `plan.html` per quest containing an executable TDD plan.
 - Auto-decide difficulty and display the rationale.
 - Stop at TDD plans; not produce implementation code or task lists.
@@ -150,7 +152,7 @@ Then build and confirm the queue:
 
 7. **Confirm once** — Ask: "Plan these N quests in this order?" The user confirms or declines the entire chain. This confirmation covers the queue, inferred types, and any newly registered test approaches.
 
-8. **Process each quest** — For each quest in the queue, run Steps 5–11 (Read → Readiness Gate → Existing Plan Check → Decompose → Validate → Write → Manifest Mutation). Between quests:
+8. **Process each quest** — For each quest in the queue, run Steps 7–13 (Read → Readiness Gate → Existing Plan Check → Decompose → Validate → Write → Manifest Mutation). Between quests:
    - Show a **condensed per-quest summary**: quest ID, title, inferred type, difficulty, cycle count, manifest mutation result.
    - **Re-evaluate the queue**: after each manifest mutation, check if any previously-blocked quests are now eligible (all dependencies `planned`). Append newly eligible quests.
 
@@ -159,13 +161,218 @@ Then build and confirm the queue:
    - **Existing plan conflict**: offer the re-plan archive override. If declined, **skip** that quest.
    - A quest is skipped: show which downstream quests are affected.
 
-10. **After the last quest** — Proceed to Steps 12–14 once for the entire chain.
+10. **After the last quest** — Proceed to Steps 14–16 once for the entire chain.
 
-### 5. Read Source
+### 5. Crosscut Discussion
+
+Before planning individual quests, run a campaign-level crosscut discussion
+to establish constraints that apply across multiple or all quests.
+
+Reference: See `liang-quest-core/references/discussion/protocol.md` for the
+full protocol and `liang-quest-core/references/discussion/constraint-schema.md`
+for the constraint data model.
+
+#### 5a. Hybrid Shallow Scout
+
+Read all quest contracts from the manifest to build campaign-wide context:
+
+1. For each quest in the queue, read its `index.html` and extract the YAML
+   contract.
+2. Identify codebase files referenced across quest `scope_boundary`,
+   `required_inputs`, and `expected_output` fields.
+3. Read the key referenced codebase files (prioritize files mentioned by
+   multiple quests).
+4. Build a structured campaign context: what areas of the codebase are
+   touched, what patterns exist, what shared dependencies or conventions
+   apply.
+
+This is a SHALLOW scout — read for orientation, not for planning depth.
+The per-quest deep scout (Step 7) happens later.
+
+#### 5b. Scout-Present
+
+Present the shallow scout findings to the user in a structured summary:
+
+1. Campaign scope overview: which directories/files are touched across all
+   quests.
+2. Shared patterns and conventions observed.
+3. Cross-quest dependencies or tensions identified.
+4. Any assumptions or risks that span multiple quests.
+
+Wait for the user to react — they may correct assumptions, add context, or
+confirm. This is an interactive checkpoint, not a monologue.
+
+#### 5c. Brainstorm-Lite (2-4 Questions)
+
+Based on scout findings and user reactions, ask 2-4 pointed questions about
+campaign-wide concerns.
+
+**Question format:** Each question uses 4 concrete options with the first
+marked as recommended:
+- Option A (Recommended) — with short description
+- Option B — with short description
+- Option C — with short description
+- Option D — with short description
+
+**Hard cap: 4 questions maximum.** Do not ask more than 4 questions.
+Questions should be specific to this campaign's scout findings.
+
+#### 5d. Abbreviated Mode (1-Quest Campaigns)
+
+When the campaign has exactly one quest:
+- Run 5a (Hybrid Shallow Scout) and 5b (Scout-Present) normally.
+- **Skip 5c** (Brainstorm-Lite) — no follow-up questions.
+- Proceed directly to per-quest work.
+
+#### 5e. Persist Discussion Output
+
+After the brainstorm-lite completes (or after scout-present for abbreviated
+mode):
+
+1. Collect all constraints captured from user responses.
+2. Structure each constraint per the constraint schema (`id`, `description`,
+   `why`, `source`, `applicable_quests`, `scope`). Use `source: "crosscut"`
+   and `scope: "crosscut"` for all.
+3. Write `discussion.html` at the campaign root using the discussion template
+   (`liang-quest-core/references/discussion/discussion-template.html`).
+
+If the discussion produces zero constraints, still write `discussion.html`
+with an empty constraints list.
+
+### 6. Per-Quest Dialogue Hub (Optional)
+
+After the crosscut discussion (Step 5) completes, present a dialogue hub
+where the user can select quests to discuss before planning begins. This
+step runs **once** for the entire campaign — it is not interleaved with
+individual quest planning. The hub is entirely skippable: the user can exit
+immediately to plan with crosscut constraints only.
+
+Reference: See `liang-quest-core/references/discussion/protocol.md` for the
+full hub protocol and `liang-quest-core/references/discussion/constraint-schema.md`
+for the constraint data model.
+
+#### 6a. Hub Presentation
+
+Present all eligible quests from the planning queue as a numbered menu. The
+last option is always "Done — begin planning":
+
+  Per-Quest Discussion Hub
+
+    1. [quest-title-1]
+    2. [quest-title-2]
+    ...
+    N+1. Done — begin planning
+
+Discussed quests display a checkmark on the quest title when the menu is
+re-displayed.
+
+#### 6b. Discussion Loop
+
+When the user selects a quest number:
+
+1. Present a brief quest context: title, purpose, desired outcome, and key
+   risks.
+2. Run Brainstorm-Lite for that quest (see 6c).
+3. Persist constraints to `discussion.html` (see 6d).
+4. Re-display the hub menu with a checkmark on the just-discussed quest.
+
+The user may then select another quest, re-enter a previously discussed
+quest, or select Done.
+
+#### 6c. Brainstorm-Lite (3-5 Questions)
+
+For each selected quest, ask 3-5 pointed questions about quest-specific
+design decisions.
+
+**Question format:** Each question uses 4 concrete options with the first
+marked as recommended:
+- Option A (Recommended) — with short description
+- Option B — with short description
+- Option C — with short description
+- Option D — with short description
+
+**Question categories** (draw from these based on quest content, adapted for
+TDD concerns):
+- Test strategy and assertion approach (what to assert, how to structure
+  test cases)
+- Fixture and setup needs (test data, environment setup, teardown)
+- Cycle granularity and decomposition (how fine-grained cycles should be,
+  what each cycle targets)
+- Mocking approach and test isolation (what to mock, integration vs unit
+  boundaries)
+- Risk mitigation for test reliability (flaky test prevention, determinism)
+
+**Hard cap: 5 questions per quest.** Non-negotiable.
+
+#### 6d. Persist Per-Quest Constraints
+
+After each quest's brainstorm-lite completes (each time the user returns to
+the hub menu):
+
+1. Collect constraints from user responses.
+2. Structure each per the constraint schema:
+   - `source: "per_quest:<quest-id>"` (e.g., `"per_quest:q003"`)
+   - `scope: "quest_specific"`
+   - `applicable_quests: ["<quest-id>"]` (the specific quest)
+3. **Append** to the existing `discussion.html` at the campaign root. Do NOT
+   overwrite — the crosscut constraints are already there.
+4. Update the HTML body to render the new per-quest constraints section.
+
+#### 6e. Re-entry
+
+Discussed quests (marked with a checkmark) can be re-entered from the hub
+menu. When re-entering:
+
+- New constraints are **appended** to `discussion.html` (append-only
+  semantics).
+- Existing constraints from the prior discussion of that quest are preserved
+  unchanged.
+- The checkmark remains on the quest in the menu.
+
+#### 6f. Hub Exit
+
+When the user selects "Done — begin planning":
+
+- The hub closes.
+- The tactician proceeds to Step 7 for each quest in dependency order.
+- No further discussion prompts occur during the planning phase (Steps
+  7-13).
+- "Done" is the only way to exit the hub.
+
+**Zero-Discussion Exit:** Selecting "Done" immediately — without discussing
+any quests — proceeds to planning with crosscut constraints only. No
+additional confirmation is required.
+
+#### 6g. Abbreviated Mode (1-Quest Campaigns)
+
+When the campaign has exactly one quest, the per-quest dialogue hub is
+**skipped entirely**. The tactician proceeds directly to Step 7 (Read
+Source) with crosscut constraints only.
+
+Rationale: with one quest, crosscut and per-quest concerns collapse into
+the same scope.
+
+#### 6h. Conflict Handling
+
+When a per-quest constraint appears to conflict with a crosscut constraint:
+- Both constraints are preserved in `discussion.html`.
+- Per-quest constraint takes precedence for its specific quest (more
+  specific wins).
+- The tactician notes the conflict in the scout context when planning that
+  quest.
+- No automatic resolution — both constraints are tracked, and the per-quest
+  constraint shapes the plan for its quest.
+
+### 7. Read Source
 
 After confirmation, read the Quest Contract. If the source is a path, read only that file. Extract the YAML from the opening HTML comment. Do not crawl the folder. Do not read `.env`, secrets, `.git/`, or large unrelated files.
 
-### 6. Readiness Gate
+**Discussion constraints:** If `discussion.html` exists at the campaign root, read it and extract the YAML from the opening HTML comment. Filter to constraints applicable to the current quest:
+- All constraints with `applicable_quests` containing `"*"` (crosscut)
+- All constraints with `applicable_quests` containing the current quest ID
+Include the filtered constraint list in the scout context for use during cycle decomposition.
+
+### 8. Readiness Gate
 
 Determine the quest's readiness level using two inputs: the **test registry** and the quest's **victory conditions**.
 
@@ -182,17 +389,17 @@ Determine the quest's readiness level using two inputs: the **test registry** an
      - If the user accepts the override, proceed with `readiness: foggy` and record the reason in the plan.
      - If the user declines, stop. Do not write any files.
 
-### 7. Check for Existing Plan
+### 9. Check for Existing Plan
 
 Check whether `plan.html` already exists in the quest folder.
 
-- **If no `plan.html`:** proceed to Step 8.
+- **If no `plan.html`:** proceed to Step 10.
 - **If `plan.html` exists:** **refuse by default**. Tell the user a plan already exists and offer the explicit re-plan override:
   - "A plan already exists. To re-plan, I will archive the existing plan as `plan.archive-<timestamp>.html` and write a fresh `plan.html`. Do you want to re-plan?"
   - If the user accepts: rename the existing file to `plan.archive-<iso-8601-timestamp>.html`, then proceed.
   - If the user declines: stop. Do not write any files.
 
-### 8. Decompose and Decide Difficulty (In Memory)
+### 10. Decompose and Decide Difficulty (In Memory)
 
 Read the quest contract fields: purpose, desired outcome, victory conditions, scope boundary, risks, open questions, planner handoff, constraints, required inputs.
 
@@ -228,7 +435,7 @@ If the quest has legitimate non-test concerns (playtest feel, visual polish, per
 
 Build the complete plan object in memory before writing.
 
-### 9. Validate (Still In Memory)
+### 11. Validate (Still In Memory)
 
 Before any file write, validate:
 
@@ -242,7 +449,7 @@ Before any file write, validate:
 
 If validation fails, do not write anything. Report the failure and stop or correct.
 
-### 10. Write Plan
+### 12. Write Plan
 
 Write `plan.html` as a sibling to the quest's `index.html` within the campaign directory. Campaign directory layout is defined in `liang-quest-core/references/campaign/protocol.md`.
 
@@ -256,7 +463,7 @@ The file follows `references/plan-template.html`:
 - `non_test_checks[]` render as a separate section if present.
 - Readiness state and inferred quest type are displayed and explained.
 
-### 11. Manifest Mutation
+### 13. Manifest Mutation
 
 After `plan.html` is successfully written, perform these manifest mutations on the Campaign's `manifest.yaml`:
 
@@ -272,7 +479,7 @@ Then perform post-stamp validation:
 
 If the status is not `ready_for_planning`, warn and ask before proceeding.
 
-### 12. Chat Summary
+### 14. Chat Summary
 
 After successful write, show:
 
@@ -290,7 +497,7 @@ After successful write, show:
 
 Show a condensed per-quest summary after each quest during the chain (quest ID, title, inferred type, difficulty, cycles, mutation result). After the entire chain completes, show a full chain summary table covering all planned quests with their difficulty, cycle counts, readiness, spine type, and any skipped quests with reasons.
 
-### 13. VCS Artifact Policy
+### 15. VCS Artifact Policy
 
 Read `vcs_artifacts.planning` from `.liang/project.yaml` to determine how to handle VCS rules for plan artifacts:
 - **`"ignore"`** — Apply VCS ignore rules silently. Do not prompt.
@@ -301,7 +508,7 @@ Read `vcs_artifacts.planning` from `.liang/project.yaml` to determine how to han
 
 Do **not** silently change Git ignore rules. Apply policy once after the entire chain completes, not per-quest.
 
-### 14. Open Prompt
+### 16. Open Prompt
 
 Offer to:
 

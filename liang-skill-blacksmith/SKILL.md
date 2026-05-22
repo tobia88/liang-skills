@@ -1,6 +1,6 @@
 ---
 name: liang-skill-blacksmith
-description: A recursive quality-refinement skill for Pi agent SKILL.md files. Inspects skill definitions against a layered rubric across structural, language, and cross-skill consistency dimensions, records findings in an HTML Appraisal report with before/after diffs, and applies approved fixes in a single batch. Two modes: inspect (full sweep + fix) and verify (post-application clean-state check).
+description: "A recursive quality-refinement skill for Pi agent SKILL.md files. Inspects skill definitions against a layered rubric across structural, language, and cross-skill consistency dimensions, records findings in an HTML Appraisal report with before/after diffs, and applies approved fixes in a single batch. Two modes: inspect (full sweep + fix) and verify (post-application clean-state check)."
 ---
 
 # Liang Skill Blacksmith

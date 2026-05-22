@@ -1,0 +1,27 @@
+campaign_id: "fixture-mixed-status"
+title: "Fixture: Mixed Statuses Across Quests"
+created_at: "2026-04-01"
+schema_version: "3"
+workflow: "general"
+
+quests:
+  - id: "q001"
+    title: "Foundation work"
+    status: "passed"
+    depends_on: []
+  - id: "q002"
+    title: "Feature alpha"
+    status: "in_progress"
+    depends_on:
+      - "q001"
+  - id: "q003"
+    title: "Feature beta"
+    status: "blocked"
+    depends_on:
+      - "q001"
+  - id: "q004"
+    title: "Integration"
+    status: "ready_for_planning"
+    depends_on:
+      - "q002"
+      - "q003"

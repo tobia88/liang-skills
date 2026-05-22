@@ -1,6 +1,6 @@
 ---
 name: liang-quest-tdd-executor
-description: Executes plans produced by liang-quest-tdd-tactician. Reads shared reference documents from liang-quest-core at activation time. Supports dual-spine execution — 9-item TDD spine for ready/foggy quests, 5-item verify-only spine for verify-only quests. Reads a campaign manifest, builds a dependency-ordered quest queue, and processes each quest's plan.html by stepping through cycles via child Pi sub-invocations (execute-child, verify-child, re-plan-child). Validates spine type against .liang/test-approaches.yaml at execution start. Implements a recursive verify/re-plan loop bounded by max_cycle_retries for TDD cycles, and hybrid mechanical+LLM verification for verify-only cycles. Tracks manifest status (planned → in_progress → passed/failed/skipped), extracts lessons on failure, cascade-skips dependent quests, manages .run/ working directories, supports crash recovery from manifest state, and produces an HTML run report in the family JRPG dashboard style. Never modifies plan.html files. Never produces plans — delegates re-planning to liang-quest-planner-core.
+description: "Executes TDD plans from liang-quest-tdd-tactician. Reads shared references from liang-quest-core at activation time. Supports dual-spine execution: 9-item TDD spine for ready/foggy, 5-item verify-only for verify-only quests. Builds a dependency-ordered quest queue from campaign manifest and processes each quest's cycles via child Pi sub-invocations (execute-child, verify-child, re-plan-child). Validates spine type against .liang/test-approaches.yaml. Implements recursive verify/re-plan bounded by max_cycle_retries for TDD cycles, hybrid mechanical+LLM verification for verify-only. Tracks manifest status (planned→in_progress→passed/failed/skipped), extracts lessons on failure, cascade-skips dependents, manages .run/ directories, supports crash recovery, and produces an HTML run report in JRPG dashboard style. Never modifies plan.html. Delegates re-planning to liang-quest-planner-core."
 ---
 
 # Liang Quest TDD Executor
@@ -23,7 +23,7 @@ Your job is to take executable TDD plans (produced by `liang-quest-tdd-tactician
 - On dependency failure, cascade-skip all downstream quests.
 - On crash or interruption, detect incomplete runs from manifest state and offer to resume.
 - Produce an HTML run report at campaign root on completion.
-- **Workflow enforcement:** Only process quests with `workflow: "tdd"` in the manifest. Hard-block and report quests with a mismatched workflow tag. Flag quests that are `planned` but have no workflow tag as a distinct error category.
+- **Workflow enforcement:** Check campaign-level `workflow` field at startup. Refuse to run if `workflow` is not `"tdd"`. This is a single check at campaign level, not per quest.
 
 ## Terminology
 
@@ -137,22 +137,16 @@ Then build and confirm the queue:
 
 1. **Read manifest** — Read `manifest.yaml` from the campaign.
 
-2. **Build the queue** — Read all quests from the manifest. For each quest with `status: planned`, check the `workflow` field:
+2. **Campaign workflow check** — Read the top-level `workflow` field from the manifest.
+      - If `workflow: "tdd"` — proceed.
+      - If `workflow` is present but not `"tdd"` — **Hard-block.** Report: "Campaign has workflow: <value>, expected: tdd. This campaign belongs to a different executor." Stop.
+      - If `workflow` is absent — **Hard-block.** Report: "Campaign has no workflow tag. Run the TDD tactician on this campaign first to stamp workflow." Stop.
 
-      - **`workflow: "tdd"`** — Add to the execution queue. This executor processes this quest.
-      - **`workflow` is present but not `"tdd"`** (e.g., `"general"`, `"quick"`) — **Hard-block.** Do not add to the queue. Report: "Quest <quest-id> has workflow: <value>, expected: tdd. Skipping — this quest belongs to a different executor."
-      - **`workflow` is absent or empty** (planned but untagged) — **Distinct error.** Do not add to the queue. Report: "Quest <quest-id> is planned but has no workflow tag. This indicates the tactician did not stamp workflow. Run the tactician on this campaign to stamp workflow before executing."
+3. **Build the queue** — Collect all quests with `status: planned`. Sort by dependency order: quests whose dependencies are all `passed` (or have no dependencies) come first.
 
-      Sort the eligible quests by dependency order: quests whose dependencies are all `passed` (or have no dependencies) come first.
+4. **Show the queue** — Display a numbered table showing quest ID, title, difficulty, cycle count, **spine type** (TDD or verify-only, from plan readiness), dependencies, and eligibility status. If the queue is empty (no `planned` quests), report this and stop.
 
-      Display a summary of enforcement results before the queue table:
-      - Eligible: N quests with workflow: tdd
-      - Skipped (wrong workflow): N quests (list IDs)
-      - Error (untagged): N quests (list IDs)
-
-3. **Show the queue** — Display a numbered table showing quest ID, title, difficulty, cycle count, workflow, **spine type** (TDD or verify-only, from plan readiness), dependencies, and eligibility status. If the queue is empty (no `planned` quests), report this and stop.
-
-4. **Confirm once** — Ask: "Execute these N quests in this order?" The user confirms or declines the entire chain.
+5. **Confirm once** — Ask: "Execute these N quests in this order?" The user confirms or declines the entire chain.
 
 ### 7. Quest Execution Loop
 
@@ -308,18 +302,42 @@ After the run report is written:
 - **Clean up:** `.run/<quest-id>/cycle-*-input.yaml`, `.run/<quest-id>/cycle-*-output.yaml`, `.run/<quest-id>/cycle-*-expected-outcome.yaml` (child I/O scratch files).
 - Ask the user before cleanup: "Clean up child I/O scratch files from .run/? Lessons and results will be preserved."
 
-### 10. Git/Privacy Prompt
+### 10. VCS Artifact Policy
+Read `vcs_artifacts.execution` from `.liang/project.yaml` to determine how to handle VCS rules for execution artifacts (`.run/`, `lessons.yaml`):
+- **`"ignore"`** — Apply VCS ignore rules to `.run/` and `lessons.yaml` silently. Do not prompt.
+- **`"commit"`** — Leave execution artifacts trackable. Do not apply ignore rules.
+- **`"ask"`** — Ask the user how to handle VCS ignore rules (legacy behavior).
+**Fallback (missing config):** If `vcs_artifacts` is absent from `project.yaml`, treat as `"ask"`. After the user answers, write their choice to `project.yaml` under `vcs_artifacts.execution` so subsequent runs are silent.
+Do **not** silently change Git ignore rules. Apply policy once after the entire chain completes.
 
-Ask the user how to handle Git/privacy, using the same option style as the family:
+### 11. Commit Suggestion
 
-- Add `.run/` and `lessons.yaml` paths to root `.gitignore`.
-- Create a local `.gitignore` in the campaign directory.
-- Leave Git rules alone.
-- Decide later.
+After the chain completes and VCS artifact policy is applied, check whether to suggest a commit command for planning artifacts.
 
-Do **not** silently change Git ignore rules. Ask once after the entire chain completes.
+**Read `vcs_artifacts.planning` from `.liang/project.yaml`:**
 
-### 11. Open Prompt
+- **`"ignore"`** — Do not suggest a commit. Skip this section entirely.
+- **`"commit"` or `"ask"`** — Proceed with VCS health check and suggestion.
+
+**VCS Health Check** (before suggesting):
+
+1. Verify `.git/` exists in the workspace root.
+2. Run `git status` and confirm it exits successfully.
+3. If either check fails: "VCS health check failed — skipping commit suggestion." Skip.
+
+**Suggestion** (when policy allows and VCS is healthy):
+
+Present a paste-able commit command. **Never** auto-execute it. Use this template:
+
+```text
+Campaign completed. To commit the planning artifacts, paste:
+git add <campaign-path>/
+git commit -m "Campaign: <campaign-title> — <passed>/<total> quests passed"
+```
+
+Replace placeholders with actual values. This is always a **suggestion**. Never execute the commit automatically.
+
+### 12. Open Prompt
 
 Offer to:
 
@@ -495,7 +513,7 @@ This skill must never:
 4. **Process quests without upfront confirmation.** The queue must be shown and confirmed once before any execution begins.
 5. **Continue executing after `max_cycle_retries` is exhausted for a TDD cycle.** Mark the quest failed and cascade-skip dependents.
 6. **Mutate manifest fields outside its authority.** Only the status transitions and tracking fields defined above. Never touch quest contracts, plan content, or campaign metadata.
-7. **Silently change Git ignore rules.** Ask at finalization, family-style.
+7. **Silently change Git ignore rules.** Obey vcs_artifacts.execution policy at finalization.
 8. **Read or include secrets, `.env`, `.env.*`, `.git/`, credentials, tokens, dependency folders, build outputs, or large binaries.**
 9. **Use VCS-specific wording in YAML keys or child I/O** (commit, PR, branch, changelist, push, submit). VCS belongs only in `project.yaml`.
 10. **Parse child stdout/stderr for structured data.** All structured communication is via YAML files.
@@ -506,7 +524,7 @@ This skill must never:
 15. **Execute a campaign where any quest has not been planned by the Tactician.** If any quest is `ready_for_planning` or any `planned` quest is missing its `plan.html`, hard-block the entire campaign — no partial execution.
 16. **Halt or fail a verify-only quest based on low confidence score.** The Executor always continues; low-confidence cycles are flagged in the run report for user review post-run.
 17. **Apply the TDD retry loop to verify-only cycles.** Verify-only cycles use hybrid verification, not test-based verification. They do not enter the retry loop.
-18. **Process quests with workflow other than "tdd".** This executor only handles TDD workflow quests. General quests belong to liang-quest-general-executor; quick quests belong to liang-quest-quick.
+18. **Process campaigns with workflow other than "tdd".** This executor only handles TDD workflow campaigns. General campaigns belong to liang-quest-general-executor; quick campaigns belong to liang-quest-quick.
 19. **Never invoke re-plan-child on retry 1.** First retry is always lesson-only with accumulated lessons.
 
 If the user asks for any of the above, decline and explain the boundary, then offer the closest in-scope alternative.

@@ -1,10 +1,13 @@
 schema_version: 1
 vcs: "git"
+vcs_artifacts:
+  planning: "ignore"
+  execution: "ignore"
 models:
   planning: "claude-opus-4-6"
-  verify: "claude-haiku-4-5-20251001"
+  verify: "deepseek-v4-flash"
   execution_by_difficulty:
-    easy: "claude-haiku-4-5-20251001"
-    medium: "claude-sonnet-4-6"
-    hard: "claude-opus-4-6"
+    easy: "deepseek-v4-flash"
+    medium: "deepseek-v4-pro"
+    hard: "deepseek-v4-pro"
 created_at: "2026-05-19T22:31:00+08:00"

@@ -1,0 +1,9 @@
+campaign_id: "fixture-malformed"
+title: "Fixture: Malformed YAML"
+created_at: "2026-01-01"
+schema_version: "3"
+quests:
+  - id: "q001"
+    title: [unterminated bracket
+    status: "passed"
+    depends_on: []

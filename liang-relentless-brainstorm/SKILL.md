@@ -421,14 +421,14 @@ Guarded finalization sequence:
 2. If incomplete, warn once and list missing/weak gates.
 3. Ask whether to continue or finalize anyway.
 4. Prepare final report content.
-5. Infer a report filename at finalization, then ask the user to confirm or edit it.
-   - Default path: `.liang/brainstorm-reports/<yyyy-mm-dd>-<topic-slug>.html`
-   - Avoid overwriting existing files. If the path exists, propose a safe suffix or ask.
+5. Auto-generate the report filename. Do not ask the user to confirm or edit it.
+   - Format: `.liang/brainstorm-reports/<YYYY-MM-DD>_<HHMM>-<topic-slug>.html`
+   - `<HHMM>` is the current local time (24h) at the moment of finalization.
+   - The timestamp makes each filename naturally unique; no collision handling needed.
 6. Ask Git/privacy handling only at finalization.
 7. Create `.liang/brainstorm-reports/` if needed.
 8. Write the final self-contained HTML Strategy Report.
-9. Tell the user the saved path.
-10. Ask whether to open the generated HTML report in the user's default browser using the Browser Open Prompt below. Do not open it automatically unless the user confirms.
+9. Tell the user the saved path and proceed directly to the Next Move Prompt.
 
 ### VCS Artifact Policy
 
@@ -460,43 +460,9 @@ C. Decide later; write the report without changing VCS rules.
 
 Do not silently modify Git ignore rules.
 
-### Browser Open Prompt
-
-After the HTML report is successfully written and the saved path has been shown, ask whether to open it in the user's default browser.
-
-Use this style:
-
-```text
-Report Saved
-
-Saved path:
-<path>
-
-Open the generated HTML report in your default browser?
-
-A. Open now in the default browser.
-B. Do not open it; just leave the saved path.
-C. Open the containing folder instead.
-D. Decide later.
-
-Recommended:
-A — it gives you an immediate visual check of the final Strategy Report.
-
-Tradeoff:
-It may create an extra browser window/tab or expose private notes on-screen.
-
-Confidence:
-High.
-
-Manual:
-Describe a different handling choice.
-```
-
-If the user chooses to open the report, use the platform-appropriate default opener and quote the path. If opening fails, do not rewrite the report; tell the user the saved path and the failure briefly.
-
 ### Next Move Prompt
 
-After the Browser Open Prompt is resolved, suggest the logical next pipeline step as a concrete, copy-pasteable command the user can paste into a new session. The suggestion must include the downstream skill name and the report path as arguments.
+After the report is saved and the path is shown, immediately present the Next Move. This is the final interaction of the brainstorm session.
 
 Use this style:
 
@@ -508,7 +474,9 @@ To continue in a clean context, copy and paste this into a new session:
 liang-quest-cartographer <report-path>
 ```
 
-Where `<report-path>` is the actual saved path of the report just written (e.g., `.liang/brainstorm-reports/2026-05-19-my-topic.html`).
+Where `<report-path>` is the actual saved path of the report just written (e.g., `.liang/brainstorm-reports/2026-05-21_1430-my-topic.html`).
+
+If you'd like to preview the report first, I can open it in your default browser — just say so.
 
 Rules:
 
@@ -516,6 +484,7 @@ Rules:
 - Use the literal report path, not a placeholder.
 - Do not include invocation-method prefixes (no `/liang-pi`, no `pi skill`). The command should be agent/platform agnostic — just the skill name and the path.
 - Present it as a suggestion, not an action. Do not invoke the cartographer automatically.
+- Include a one-line offer to open the report in the browser. Do not present it as a multi-option prompt — just a brief mention. If the user asks to open it, use the platform-appropriate default opener.
 - This is the final interaction of the brainstorm session.
 
 ## Final HTML Strategy Report

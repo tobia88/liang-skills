@@ -1,0 +1,22 @@
+campaign_id: "fixture-alert-failed"
+title: "Fixture: Failed Quest Campaign"
+created_at: "2026-01-15"
+schema_version: "3"
+workflow: "general"
+
+quests:
+  - id: "q001"
+    title: "Setup component"
+    status: "passed"
+    depends_on: []
+  - id: "q002"
+    title: "Implement feature"
+    status: "failed"
+    depends_on:
+      - "q001"
+  - id: "q003"
+    title: "Write tests"
+    status: "skipped"
+    skip_reason: "dependency_failed: q002"
+    depends_on:
+      - "q002"

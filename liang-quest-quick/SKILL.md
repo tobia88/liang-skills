@@ -1,6 +1,6 @@
 ---
 name: liang-quest-quick
-description: Single-pass execution skill for the JRPG quest planning family. Consumes campaign manifests and executes quests directly via scout+execute without the tactician+executor pipeline. Reads quest contracts from index.html, scouts the codebase, executes in a single context, verifies victory conditions, and produces a JRPG-style run report. No planning artifacts, no child processes, no retries, no .run/ directories. Status path: ready_for_planning to in_progress to passed/failed/skipped. project.yaml optional.
+description: "Single-pass execution skill for the JRPG quest planning family. Consumes campaign manifests and executes quests directly via scout+execute without the tactician+executor pipeline. Reads quest contracts from index.html, scouts the codebase, executes in a single context, verifies victory conditions, and produces a JRPG-style run report. No planning artifacts, no child processes, no retries, no .run/ directories. Status path: ready_for_planning to in_progress to passed/failed/skipped. project.yaml optional."
 ---
 
 # Liang Quest Quick
@@ -17,7 +17,7 @@ No planning layer. No child processes. No retries. Read the quest contract, scou
 
 - **Campaign chain mode:** Read manifest, queue all quests with `status: ready_for_planning`, confirm once, process the entire queue in dependency order.
 - **Status path:** `ready_for_planning` -> `in_progress` -> `passed`/`failed`/`skipped`. No `planned` step — this skill IS the planner and executor combined.
-- **Workflow stamping:** On first contact with a quest, stamp `workflow: "quick"` in the manifest's quest entry alongside the status transition to `in_progress`.
+- **Workflow stamping:** On first quest execution, stamp `workflow: "quick"` at campaign level in the manifest (top-level field, not per quest). Only stamp once — skip if already present.
 - **Single-context execution:** Reads, scouts, edits, and verifies within one context window. No child Pi processes, no I/O files, no `.run/` directory.
 - **Direct codebase editing:** Unlike general/TDD executors (which delegate to children), this skill edits files directly.
 - **Mandatory scout phase:** Before executing each quest, read relevant codebase files to understand current state.
@@ -94,9 +94,7 @@ For each quest in the queue:
 #### 4a. Pre-Quest Setup
 
 1. **Read quest contract** — Parse `index.html` from the quest directory. Extract YAML from the opening HTML comment.
-2. **Manifest mutation** — Set quest status to `in_progress`. Write `workflow: "quick"` to the quest entry's `workflow` field. Record `started_at` timestamp.
-
-   Note: Quick does not require post-stamp validation (no separate planning and execution phases). The stamp is written at the same time as the status transition.
+2. **Manifest mutation** — Set quest status to `in_progress`. Record `started_at` timestamp. **Campaign-level workflow stamp (first quest only):** If the manifest does not already have a top-level `workflow` field, write `workflow: "quick"` at campaign level (sibling to `campaign_id`, `slug`, etc.). Skip if already present.
 
 #### 4b. Scout Phase (Mandatory)
 
@@ -171,18 +169,48 @@ Display a full summary table covering all quests with:
 - Skipped quests with reasons.
 - Lessons extracted (count).
 
-### 7. Git/Privacy Prompt
+### 7. VCS Artifact Policy
 
-Ask the user how to handle Git/privacy, using the same option style as the family:
+Read `vcs_artifacts.execution` from `.liang/project.yaml` to determine how to handle VCS rules for execution artifacts (`lessons.yaml`, run reports):
 
-- Add `lessons.yaml` and run report paths to root `.gitignore`.
-- Create a local `.gitignore` in the campaign directory.
-- Leave Git rules alone.
-- Decide later.
+- **`"ignore"`** — Apply VCS ignore rules silently. Do not prompt.
+- **`"commit"`** — Leave artifacts trackable. Do not apply ignore rules.
+- **`"ask"`** — Ask the user how to handle VCS ignore rules (legacy behavior).
 
-Do **not** silently change Git ignore rules. Ask once after the entire chain completes.
+**Fallback (missing config):** If `.liang/project.yaml` exists but `vcs_artifacts` is absent, treat as `"ask"`. After the user answers, write their choice to `project.yaml` under `vcs_artifacts.execution` so subsequent runs are silent. If `project.yaml` does not exist (quest-quick can operate without it), use `"ask"` behavior without writing — the tactician's first-run interview owns `project.yaml` creation.
 
-### 8. Open Prompt
+Do **not** silently change Git ignore rules. Apply policy once after the entire chain completes.
+
+### 8. Commit Suggestion
+
+After the chain completes and VCS artifact policy is applied, check whether to suggest a commit command for the campaign artifacts.
+
+**Special note for quest-quick:** If `.liang/project.yaml` does not exist (quest-quick can operate without it), skip the commit suggestion entirely — there is no policy to read.
+
+**Read `vcs_artifacts.planning` from `.liang/project.yaml`:**
+
+- **`"ignore"`** — Do not suggest a commit. Skip this section entirely.
+- **`"commit"` or `"ask"`** — Proceed with VCS health check and suggestion.
+
+**VCS Health Check** (before suggesting):
+
+1. Verify `.git/` exists in the workspace root.
+2. Run `git status` and confirm it exits successfully.
+3. If either check fails: "VCS health check failed — skipping commit suggestion." Skip.
+
+**Suggestion** (when policy allows and VCS is healthy):
+
+Present a paste-able commit command. **Never** auto-execute it. Use this template:
+
+```text
+Campaign completed. To commit the planning artifacts, paste:
+git add <campaign-path>/
+git commit -m "Campaign: <campaign-title> — <passed>/<total> quests passed"
+```
+
+Replace placeholders with actual values. This is always a **suggestion**. Never execute the commit automatically.
+
+### 9. Open Prompt
 
 Offer to:
 
@@ -198,7 +226,6 @@ When a quest fails, extract a structured lesson and append to `lessons.yaml`:
 
 ```yaml
 quest_id: "<qid>"
-workflow: "quick"
 failure_type: "vc_failed | execution_error | unexpected"
 error_summary: "<concise description of what went wrong>"
 failed_vcs:
@@ -227,7 +254,7 @@ Additional manifest fields managed by this skill:
 - `completed_at: string` — ISO-8601 timestamp when quest execution finished.
 - `skip_reason: string` — present when status is `skipped`; references the failed dependency.
 
-In addition to status transitions, this skill also writes `workflow: "quick"` to the quest entry during the `ready_for_planning` to `in_progress` transition. Workflow is written to the manifest only, never to quest contract files.
+In addition to status transitions, this skill also writes `workflow: "quick"` at campaign level during the first `ready_for_planning` to `in_progress` transition. Workflow is written to the manifest top level only, never to quest entries or quest contract files.
 
 ## Boundaries — Hard Stops (12)
 
@@ -244,7 +271,7 @@ This skill must never:
 10. **Use VCS-specific wording in YAML keys.**
 11. **Execute quests whose dependencies have not all passed.**
 12. **Silently resume an interrupted run.**
-13. **Write workflow to quest contract HTML files.** Workflow stamp writes to `manifest.yaml` `quests[].workflow` only. Never write workflow to quest contract HTML files.
+13. **Write workflow to quest entries or quest contract HTML files.** Workflow stamp writes to `manifest.yaml` top level only. Never write workflow to quest entries or quest contract HTML files.
 
 If the user asks for any of the above, decline and explain the boundary, then offer the closest in-scope alternative.
 

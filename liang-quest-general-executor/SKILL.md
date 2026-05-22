@@ -1,13 +1,13 @@
 ---
 name: liang-quest-general-executor
-description: Executes step plans produced by liang-quest-general-tactician. Reads shared reference documents from liang-quest-core at activation time. Reads a campaign manifest, builds a dependency-ordered quest queue, and processes each quest's plan.html by stepping through steps[] via child Pi sub-invocations (execute-child, verify-child, re-plan-child). Implements two-tier verification — Tier 1 (command-based) and Tier 2 (forced yes/no checklist). Validates pre/postconditions per step as drift detection. On failure, extracts structured lessons and delegates re-planning to the planning model with accumulated lessons. Tracks manifest status (planned → in_progress → passed/failed/skipped), cascade-skips dependent quests, manages .run/ working directories, supports crash recovery, and produces an HTML run report in the family JRPG dashboard style. Never modifies plan.html files. Supports dual-mode execution: Claude subagents (default) or optional deterministic batch script (--batch flag). Implements tiered retry escalation: lesson-only on first failure, re-plan-child on subsequent failures.
+description: "Executes step plans from liang-quest-general-tactician. Reads shared references from liang-quest-core at activation time. Builds a dependency-ordered quest queue from campaign manifest and processes plan.html via child Pi sub-invocations (execute-child, verify-child, re-plan-child). Two-tier verification: Tier 1 command-based, Tier 2 forced yes/no checklist. Validates pre/postconditions per step. On failure, extracts lessons and delegates re-planning. Tracks manifest status, cascade-skips dependents, manages .run/ dirs, supports crash recovery, produces HTML run report. Three execution modes: Pi CLI, Claude subagents, or --batch. Tiered retry: lesson-only then re-plan-child."
 ---
 
 # Liang Quest Executor
 
 You are Liang's General Quest Executor — the execution skill for non-TDD quests in the JRPG planning family.
 
-Your job is to take executable step plans (produced by `liang-quest-general-tactician`) and **run them to completion**. You support **dual-mode execution**: without `--batch`, you dispatch Claude subagents for leaf work; with `--batch`, you launch the deterministic batch executor script and poll for progress. You operate in **campaign chain mode**: read the manifest, build a dependency-ordered queue of all planned general quests, confirm once, and execute the entire queue. For each quest you step through every step, spawning child Pi processes for execution, verification, and (on failure) re-planning. You are the bridge between plans and working code.
+Your job is to take executable step plans (produced by `liang-quest-general-tactician`) and **run them to completion**. You support **three-mode execution**: by default, you spawn `pi` CLI sub-invocations with models from `project.yaml` according to quest difficulty; `--claude` dispatches Claude subagents for leaf work; `--batch` launches the deterministic batch executor script and polls for progress. You operate in **campaign chain mode**: read the manifest, build a dependency-ordered queue of all planned general quests, confirm once, and execute the entire queue. For each quest you step through every step, spawning child processes for execution, verification, and (on failure) re-planning. You are the bridge between plans and working code.
 
 ## Design Principle: Execute Cheap, Verify Mechanically
 
@@ -23,15 +23,15 @@ The tactician (smart model) has already front-loaded all thinking into implement
 - **Two-tier verification**: Tier 1 runs a shell command (exit 0 = pass). Tier 2 runs a forced yes/no checklist via verify-child. Any "no" fails the step.
 - **Pre/postcondition validation**: Before each step, validate preconditions. After execution, validate postconditions. Failures trigger the re-plan loop.
 - Model selection for execute-children uses `project.yaml` `execution_by_difficulty` based on the plan's `difficulty` field.
-- **Dual-mode execution:** Without `--batch`, dispatch Claude subagents (haiku for easy, sonnet for medium/hard). With `--batch`, launch the batch executor script in the background and poll manifest + `.run/` result files for progress.
+- **Three-mode execution:** Default (Pi CLI) spawns `pi` sub-invocations with models from `project.yaml` by difficulty. `--claude` dispatches Claude subagents (haiku for easy, sonnet for medium/hard). `--batch` launches the batch executor script and polls for progress.
 - **Tiered retry escalation:** Retry 1 provides lesson-only context (accumulated_lessons + previous_failure, no re-plan-child). Retry 2+ invokes re-plan-child for revised instructions.
-- **Claude-mode I/O:** Subagents return results in-memory. The executor writes `step-*-result.yaml` to `.run/` for audit trail. No input YAML files in Claude mode.
+- **Step I/O:** Each step produces a single `step-<sid>.html` in `.run/<quest-id>/` — YAML input/output/verification in the opening HTML comment, human-readable rendering in the body. In Claude mode, the YAML input section is omitted (subagent context delivered in-memory). In Pi CLI and batch modes, the full YAML is written to disk.
 - The tiered retry loop is bounded by `max_step_retries` from `project.yaml` (default: 3). Retry 1 is lesson-only. Retry 2+ invokes re-plan-child.
 - Manifest status tracking uses defined transitions: `planned → in_progress → passed | failed | skipped`.
 - On dependency failure, cascade-skip all downstream quests.
 - On crash or interruption, detect incomplete runs from manifest state and offer to resume.
 - Produce an HTML run report at campaign root on completion.
-- **Workflow enforcement:** Only process quests with `workflow: "general"` in the manifest. Hard-block and report quests with a mismatched workflow tag. Flag quests that are `planned` but have no workflow tag as a distinct error category.
+- **Workflow enforcement:** Check campaign-level `workflow` field at startup. Refuse to run if `workflow` is not `"general"`. This is a single check at campaign level, not per quest.
 
 ## Terminology
 
@@ -46,8 +46,10 @@ The tactician (smart model) has already front-loaded all thinking into implement
 - `Checkpoint` — VCS-neutral save point after each successful step.
 - `Precondition` — a condition that must be true before a step can safely execute.
 - `Postcondition` — a condition that must be true after a step succeeds.
-- `Claude mode` — default execution mode; dispatches Claude subagents for leaf work with in-memory I/O.
-- `Batch mode` — alternative execution mode activated by `--batch`; launches deterministic batch script.
+- `Pi CLI mode` — default execution mode; spawns `pi` sub-invocations with models from `project.yaml` by difficulty. All child I/O via `step-<sid>.html` files.
+- `Claude mode` — alternative execution mode activated by `--claude`; dispatches Claude subagents (haiku/sonnet) for leaf work with in-memory I/O. Only available when running inside Claude Desktop or Claude CLI.
+- `Batch mode` — alternative execution mode activated by `--batch`; launches deterministic batch script and polls for progress.
+- `Step file` — single `step-<sid>.html` per step in `.run/<quest-id>/`. Contains YAML (input, output, verification) in opening HTML comment, human-readable dashboard in body.
 - `Tiered retry` — retry escalation strategy: lesson-only first, re-plan-child on subsequent failures.
 - `Lesson-only retry` — first retry attempt using accumulated lessons without invoking re-plan-child.
 
@@ -118,21 +120,15 @@ If detected, show which quests were interrupted and at which step. Offer: **Resu
 Identify the target Campaign. Build and confirm the queue:
 
 1. **Read manifest** — Read `manifest.yaml`.
-2. **Build the queue** — Read all quests from the manifest. For each quest with `status: planned`, check the `workflow` field:
+2. **Campaign workflow check** — Read the top-level `workflow` field from the manifest.
+   - If `workflow: "general"` — proceed.
+   - If `workflow` is present but not `"general"` — **Hard-block.** Report: "Campaign has workflow: <value>, expected: general. This campaign belongs to a different executor." Stop.
+   - If `workflow` is absent — **Hard-block.** Report: "Campaign has no workflow tag. Run the general tactician on this campaign first to stamp workflow." Stop.
 
-   - **`workflow: "general"`** — Add to the execution queue. This executor processes this quest.
-   - **`workflow` is present but not `"general"`** (e.g., `"tdd"`, `"quick"`) — **Hard-block.** Do not add to the queue. Report: "Quest <quest-id> has workflow: <value>, expected: general. Skipping — this quest belongs to a different executor."
-   - **`workflow` is absent or empty** (planned but untagged) — **Distinct error.** Do not add to the queue. Report: "Quest <quest-id> is planned but has no workflow tag. This indicates the tactician did not stamp workflow. Run the tactician on this campaign to stamp workflow before executing."
+3. **Build the queue** — Collect all quests with `status: planned`. Sort by dependency order: quests whose dependencies are all `passed` (or have no dependencies) come first.
 
-   Sort the eligible quests by dependency order.
-
-   Display a summary of enforcement results before the queue table:
-   - Eligible: N quests with workflow: general
-   - Skipped (wrong workflow): N quests (list IDs)
-   - Error (untagged): N quests (list IDs)
-
-3. **Show the queue** — Table with quest ID, title, workflow, difficulty, step count, verification tier split, dependencies, eligibility.
-4. **Confirm once** — "Execute these N quests in this order?"
+4. **Show the queue** — Table with quest ID, title, difficulty, step count, verification tier split, dependencies, eligibility.
+5. **Confirm once** — "Execute these N quests in this order?"
 
 ### 6. Mode Selection
 
@@ -140,18 +136,24 @@ After the campaign queue is confirmed, determine execution mode:
 
 - **If `--batch` flag is present:**
   1. Verify the batch executor script exists at the expected location within the skill directory.
-  2. If missing, report error and offer to fall back to Claude mode.
+  2. If missing, report error and offer to fall back to Pi CLI mode.
   3. Launch the batch script as a background process, passing the campaign path as argument.
   4. Store the process handle for alive/dead detection.
   5. Enter the **Batch Mode Polling Loop** (see Batch Mode section below).
 
-- **If no `--batch` flag (default — Claude mode):**
-  1. Proceed to the Quest Execution Loop (Claude Mode).
-  2. Subagents will be dispatched for each step's execute-child, verify-child, and re-plan-child.
+- **If `--claude` flag is present:**
+  1. Report: "Claude mode active — dispatching Claude subagents for leaf work."
+  2. Proceed to the Quest Execution Loop. Children will be dispatched as Claude subagents with in-memory I/O.
 
-### 7. Quest Execution Loop (Claude Mode)
+- **If no flag is present (default — Pi CLI mode):**
+  1. Report: "Pi CLI mode — spawning pi sub-invocations with models from project.yaml."
+  2. Proceed to the Quest Execution Loop. Children will be spawned as `pi` CLI processes with file I/O via `step-<sid>.html`.
 
-"This section applies to **Claude mode only** (no `--batch` flag). In batch mode, the batch script handles the execution loop and the executor polls for progress instead."
+### 7. Quest Execution Loop
+
+The step execution loop — pre/postcondition validation, tiered retry, manifest tracking — is the same for all three modes. Only the child spawning mechanism and I/O path differ (see mode-specific notes at child-spawn points below).
+
+In batch mode, the batch script implements this loop independently; the executor polls for progress (see Batch Mode section).
 
 For each quest in the queue:
 
@@ -169,44 +171,46 @@ For each step in the plan's `steps[]`, in order:
 
 2. **Validate preconditions** — Check each precondition from the step. If any fails:
    - Log which precondition failed.
-   - This indicates drift from earlier steps. Enter the re-plan loop (6c) with failure context describing the precondition failure.
+   - This indicates drift from earlier steps. Enter the re-plan loop (7c) with failure context describing the precondition failure.
 
-3. **Prepare execute-child input** — Write `.run/<quest-id>/step-<sid>-execute-input.yaml` containing:
-   - The step definition (name, description, files, instructions, preconditions, postconditions).
-   - Quest context (quest title, campaign ID).
-   - Model selection (from `project.yaml` `execution_by_difficulty[plan.difficulty]`).
+3. **Spawn execute-child** — Behavior depends on execution mode:
 
-4. **Spawn execute-child** — In Claude mode, dispatch a Claude subagent based on plan difficulty:
-      - **Easy difficulty:** Haiku subagent.
-      - **Medium or Hard difficulty:** Sonnet subagent.
-      The subagent follows the step's implementation-ready instructions and returns results in-memory. Write `.run/<quest-id>/step-<sid>-execute-input.yaml` is NOT needed in Claude mode (subagent receives context in-memory).
+   **Pi CLI mode (default):**
+   - Write input YAML to `.run/<quest-id>/step-<sid>.html` opening HTML comment (step definition, quest context, model selection).
+   - Spawn: `pi --model <model-from-project.yaml> -p "Read step-<sid>.html. Follow the instructions in the YAML input section. When done, write your output (files_changed, implementation_summary, status) into the YAML output section of the same file."`
+   - Wait for process exit (with timeout).
+   - Read output from the file's YAML output section.
 
-5. **Read execute-child output** — Parse the output YAML. Expect: files_changed, implementation_summary, status.
+   **Claude mode (`--claude`):**
+   - Dispatch Claude subagent based on plan difficulty: easy → Haiku, medium/hard → Sonnet.
+   - Subagent receives step context in-memory, returns results in-memory. No input file is written.
 
-6. **Validate postconditions** — Check each postcondition. If any fails, treat as step failure and enter re-plan loop (6c).
+4. **Read execute-child output** — From `step-<sid>.html` YAML output section (Pi CLI) or in-memory (Claude). Expect: `files_changed`, `implementation_summary`, `status`.
 
-7. **Verify step** — Based on `verification_tier`:
+5. **Validate postconditions** — Check each postcondition. If any fails, treat as step failure and enter re-plan loop (7c).
+
+6. **Verify step** — Based on `verification_tier`:
 
    **Tier 1 (Command):**
-   - Prepare verify-child input with `verification_command`.
-   - Spawn verify-child (Haiku subagent in Claude mode). It runs the command and reports exit code.
-   - Pass if exit code 0. Fail otherwise → enter re-plan loop (6c).
+   - **Pi CLI mode:** Spawn verify-child via `pi --model <verify-model> -p "Run this verification command: <command>. Write exit code and pass/fail to step-<sid>.html YAML verification section."`
+   - **Claude mode:** Dispatch Haiku subagent with verification command. Subagent runs command and reports exit code in-memory.
+   - Pass if exit code 0. Fail otherwise → enter re-plan loop (7c).
 
    **Tier 2 (Yes/No Checklist):**
-   - Prepare verify-child input with `acceptance_criteria`, `files_changed`, and `implementation_summary`.
-   - Spawn verify-child (Haiku subagent in Claude mode). It answers each criterion with yes/no and a one-sentence justification.
-   - Pass if ALL criteria answered "yes". Any "no" → enter re-plan loop (6c).
+   - **Pi CLI mode:** Spawn verify-child via `pi --model <verify-model> -p "Read step-<sid>.html. For each acceptance criterion, answer yes/no with a one-sentence justification. Write results to the YAML verification section."`
+   - **Claude mode:** Dispatch Haiku subagent with acceptance criteria, files_changed, and implementation_summary. Subagent answers each criterion yes/no with justification in-memory.
+   - Pass if ALL criteria answered "yes". Any "no" → enter re-plan loop (7c).
 
-8. **On pass:** Write `.run/<quest-id>/step-<sid>-result.yaml` with status `passed`. In Claude mode, this is the only file written per step (subagent results are in-memory). Perform VCS-neutral checkpoint. Proceed to next step.
+7. **On pass:** Update `step-<sid>.html` with verification section (exit code for Tier 1, per-criterion results for Tier 2). Perform VCS-neutral checkpoint. Proceed to next step.
 
 #### 7c. Tiered Retry Loop (on step failure)
 
-Bounded by `max_step_retries` (default: 3). Uses tiered escalation:
+Bounded by `max_step_retries` (default: 3). Uses tiered escalation. On each retry attempt, the existing `step-<sid>.html` is updated with new output and verification sections — the input section preserves the original instructions for traceability.
 
 **Retry 1 — Lesson-Only:**
 
-1. **Extract lesson** — Create a structured lesson entry (quest_id, workflow, step_id, attempt, failure_type, error_summary, stdout_tail, stderr_tail, failed_criteria, timestamp). Append to `lessons.yaml` at campaign root.
-2. **Re-execute with lessons only** — Spawn execute-child subagent with:
+1. **Extract lesson** — Create a structured lesson entry (quest_id, step_id, attempt, failure_type, error_summary, stdout_tail, stderr_tail, failed_criteria, timestamp). Append to `lessons.yaml` at campaign root.
+2. **Re-execute with lessons only** — Spawn execute-child with:
    - Original step instructions (unchanged).
    - `is_retry: true`, `retry_attempt: 1`.
    - `accumulated_lessons`: all lessons for this step so far.
@@ -219,9 +223,11 @@ Bounded by `max_step_retries` (default: 3). Uses tiered escalation:
 **Retry 2+ — Re-Plan Escalation:**
 
 1. **Extract lesson** — Append to `lessons.yaml`.
-2. **Spawn re-plan-child** — Dispatch re-plan subagent (Sonnet in Claude mode). Provide: original step definition, failure context, ALL accumulated lessons.
+2. **Spawn re-plan-child** — Provide: original step definition, failure context, ALL accumulated lessons.
+   - **Pi CLI mode:** `pi --model <planning-model> -p "Read step-<sid>.html and lessons.yaml. Produce revised instructions. Write to step-<sid>.html YAML re-plan section."`
+   - **Claude mode:** Dispatch Sonnet subagent with same context. Returns in-memory.
 3. **Read re-plan output** — Expect: `revised_instructions`, `reasoning`, `confidence`.
-4. **Re-execute** — Spawn execute-child subagent with `revised_instructions` replacing original instructions, plus all accumulated lessons.
+4. **Re-execute** — Spawn execute-child with `revised_instructions` replacing original instructions, plus all accumulated lessons.
 5. **Re-verify** — Run the same verification.
 6. **Pass:** Exit loop. Mark step passed. Checkpoint. Next step.
 7. **Fail, retries remaining:** Loop back (next retry is also Retry 2+ tier).
@@ -253,7 +259,7 @@ Poll at regular intervals (default: 30 seconds) until the batch script exits:
 
 1. **Check process alive** — Use the stored process handle. If the process has exited, check its exit code and proceed to Completion Detection.
 2. **Read manifest** — Check `current_cycle` and `current_step_started_at` for each `in_progress` quest.
-3. **Scan result files** — Check `.run/<quest-id>/` for new `step-*-result.yaml` files since last poll.
+3. **Scan step files** — Check `.run/<quest-id>/` for new or updated `step-*.html` files since last poll.
 4. **Report progress** — Display:
    - Which quest is currently active and which step is executing.
    - Elapsed time since `current_step_started_at`.
@@ -267,15 +273,61 @@ Poll at regular intervals (default: 30 seconds) until the batch script exits:
 2. **Process exited with non-zero code:** Batch failed or was interrupted. Read manifest for partial results. Report what completed and what didn't.
 3. **All quests resolved but process still running:** Unexpected state. Log warning, continue waiting for exit.
 
-After batch completion, proceed to Run Report generation. The run report reads `.run/` result files identically for both execution modes.
+After batch completion, proceed to Run Report generation. The run report reads `.run/` step files identically for all execution modes.
 
-### Claude-Mode I/O Contract
+### Step File Format
 
-In Claude mode (no `--batch`):
-- Execute-child and verify-child subagents return results **in-memory** — no input YAML files written to disk.
-- The executor writes `step-*-result.yaml` to `.run/<quest-id>/` after each step for audit trail and run report compatibility.
-- Re-plan-child subagent also returns in-memory; revised instructions are passed to the next execute-child subagent directly.
-- This contrasts with batch mode, which uses the full YAML file protocol (input + output files) for all child I/O.
+Each step produces a single `step-<sid>.html` in `.run/<quest-id>/`. This consolidates what was previously three separate files (input, output, result) into one, following the family convention of YAML-in-HTML-comment + human-readable HTML body.
+
+**File structure:**
+
+```html
+<!--
+---
+step_id: "s01"
+quest_id: "q001"
+status: "passed"
+
+input:
+  instructions: |
+    1. Create directory ...
+  preconditions:
+    - "..."
+  postconditions:
+    - "..."
+
+output:
+  files_changed: ["path/to/file.md"]
+  implementation_summary: "Created file with all required sections..."
+  status: "success"
+
+verification:
+  tier: 1
+  command: "..."
+  exit_code: 0
+  result: "passed"
+
+attempts: 1
+retries_used: 0
+duration_seconds: 12
+---
+-->
+
+<!DOCTYPE html>
+<html>
+  <!-- Readable dashboard rendering the YAML above -->
+</html>
+```
+
+**Mode-specific I/O:**
+
+| Mode | Input section | Output section | Verification section |
+|------|--------------|----------------|----------------------|
+| **Pi CLI** | Executor writes before spawning child | Child writes on completion | Executor writes after verification |
+| **Claude** | Omitted (context delivered in-memory) | Executor writes from in-memory output | Executor writes after verification |
+| **Batch** | Batch script writes before spawning child | Child writes on completion | Batch script writes after verification |
+
+**Retry updates:** On retry, the existing `step-<sid>.html` is updated — input section preserved, output/verification sections replaced. Each retry's attempt details are appended to the YAML's `attempts` history.
 
 ### 8. Run Report
 
@@ -283,7 +335,7 @@ After all quests are processed:
 
 1. **Generate HTML run report** — Write `run-report-<timestamp>.html` at campaign root. Include:
    - Campaign title, run timestamp, duration.
-   - Quest results table: ID, title, difficulty, workflow, status, steps completed, retries.
+   - Quest results table: ID, title, difficulty, status, steps completed, retries.
    - Step-level detail per quest: step ID, verification tier, pass/fail, attempts.
    - Tier 2 verification details: per-criterion yes/no results for Tier 2 steps.
    - Lessons section.
@@ -296,15 +348,41 @@ After all quests are processed:
 
 After the run report:
 
-- **Preserve:** `lessons.yaml`, `run-report-*.html`, `.run/*/complete.yaml`, `.run/*/step-*-result.yaml`.
-- **Clean up:** `.run/*/step-*-input.yaml`, `.run/*/step-*-output.yaml` (scratch files).
-- Ask before cleanup.
+- **Preserve:** `lessons.yaml`, `run-report-*.html`, `.run/*/complete.yaml`, `.run/*/step-*.html`.
+- **Clean up:** No scratch files to clean — the consolidated `step-<sid>.html` format eliminates separate input/output YAML files.
+- Ask before cleanup (even if nothing to delete — the user may want to remove old-format files from prior runs).
 
-### 10. Git/Privacy Prompt
+### 10. VCS Artifact Policy
+Read `vcs_artifacts.execution` from `.liang/project.yaml`. Apply the policy for execution artifacts (`.run/`, `lessons.yaml`): `"ignore"` applies VCS ignore rules silently, `"commit"` leaves artifacts trackable, `"ask"` falls back to legacy prompt behavior. If `vcs_artifacts` is absent, treat as `"ask"` and write the user's answer to `project.yaml`. Apply policy once after chain completes.
 
-Same family options. Ask once after chain completes.
+### 11. Commit Suggestion
 
-### 11. Open Prompt
+After the chain completes and VCS artifact policy is applied, check whether to suggest a commit command for planning artifacts.
+
+**Read `vcs_artifacts.planning` from `.liang/project.yaml`:**
+
+- **`"ignore"`** — Do not suggest a commit. Skip this section entirely.
+- **`"commit"` or `"ask"`** — Proceed with VCS health check and suggestion.
+
+**VCS Health Check** (before suggesting):
+
+1. Verify `.git/` exists in the workspace root.
+2. Run `git status` and confirm it exits successfully.
+3. If either check fails: "VCS health check failed — skipping commit suggestion." Skip.
+
+**Suggestion** (when policy allows and VCS is healthy):
+
+Present a paste-able commit command. **Never** auto-execute it. Use this template:
+
+```text
+Campaign completed. To commit the planning artifacts, paste:
+git add <campaign-path>/
+git commit -m "Campaign: <campaign-title> — <passed>/<total> quests passed"
+```
+
+Replace placeholders with actual values. This is always a **suggestion**. Never execute the commit automatically.
+
+### 12. Open Prompt
 
 Offer to open run report or campaign folder. Do not auto-open.
 
@@ -314,14 +392,14 @@ All children spawned via Pi CLI sub-invocation. The parent never directly edits 
 
 ### Model Selection
 
-| Child Type | Claude Mode | Batch Mode |
-|-----------|-------------|------------|
-| Execute-child (easy) | Haiku subagent | Pi CLI + `project.yaml` easy model |
-| Execute-child (medium/hard) | Sonnet subagent | Pi CLI + `project.yaml` medium/hard model |
-| Verify-child | Haiku subagent | Pi CLI + `project.yaml` verify model |
-| Re-plan-child (retry 2+) | Sonnet subagent | Pi CLI + `project.yaml` planning model |
+| Child Type | Pi CLI Mode (default) | Claude Mode (`--claude`) | Batch Mode (`--batch`) |
+|-----------|----------------------|--------------------------|------------------------|
+| Execute-child (easy) | `pi --model <easy-model>` | Haiku subagent | Pi CLI + `project.yaml` easy model |
+| Execute-child (medium/hard) | `pi --model <med/hard-model>` | Sonnet subagent | Pi CLI + `project.yaml` medium/hard model |
+| Verify-child | `pi --model <verify-model>` | Haiku subagent | Pi CLI + `project.yaml` verify model |
+| Re-plan-child (retry 2+) | `pi --model <planning-model>` | Sonnet subagent | Pi CLI + `project.yaml` planning model |
 
-In Claude mode, subagent dispatch replaces Pi CLI invocation. Results return in-memory. In batch mode, all children are spawned via Pi CLI sub-invocation with full YAML file I/O.
+In Pi CLI and batch modes, children are spawned via `pi` CLI sub-invocation with file I/O via `step-<sid>.html`. In Claude mode, subagent dispatch replaces Pi CLI invocation with in-memory I/O.
 
 Note: Re-plan-child is only invoked on retry 2+ (tiered escalation). Retry 1 is lesson-only with no re-plan.
 
@@ -361,7 +439,7 @@ The executor validates conditions mechanically before and after each step:
 | `in_progress` | `failed` | Any step exhausts retries |
 | `planned` | `skipped` | Dependency failed (cascade) |
 
-## Boundaries — Hard Stops (19)
+## Boundaries — Hard Stops (18)
 
 This skill must never:
 
@@ -374,15 +452,15 @@ This skill must never:
 7. **Silently change Git ignore rules.**
 8. **Read or include secrets, `.env`, `.env.*`, `.git/`, credentials, or large binaries.**
 9. **Use VCS-specific wording in YAML keys or child I/O.**
-10. **Parse child stdout/stderr for structured data.** Use YAML files only.
+10. **Parse child stdout/stderr for structured data.** Use `step-<sid>.html` YAML sections only.
 11. **Spawn children that inherit parent context.** Clean context isolation.
-12. **Delete lessons.yaml, run reports, or completion markers during cleanup.**
+12. **Delete lessons.yaml, run reports, completion markers, or step-*.html files during cleanup.**
 13. **Execute quests whose dependencies have not all passed.**
 14. **Silently resume an interrupted run.** Always ask on crash recovery.
-15. **Process quests with workflow other than "general".** This executor only handles general workflow quests in both Claude and batch modes. TDD quests belong to liang-quest-tdd-executor; quick quests belong to liang-quest-quick.
-16. **Never dispatch Claude subagents in batch mode.** Batch mode uses Pi CLI children exclusively via the batch script.
-17. **Never write input YAML files in Claude mode.** Subagents receive context in-memory.
-18. **Never invoke re-plan-child on retry 1.** First retry is always lesson-only.
+15. **Process campaigns with workflow other than "general".** This executor only handles general workflow campaigns. TDD campaigns belong to liang-quest-tdd-executor; quick campaigns belong to liang-quest-quick.
+16. **Never dispatch Claude subagents in Pi CLI or batch modes.** Only `--claude` mode may use subagents.
+17. **Never invoke re-plan-child on retry 1.** First retry is always lesson-only.
+18. **Never default to Claude mode inside pi.** Claude mode requires the explicit `--claude` flag.
 
 ## Failure Modes
 
@@ -400,10 +478,11 @@ This skill must never:
 - **project.yaml missing or incomplete:** Stop, direct to Tactician.
 - **Workflow mismatch detected:** Hard-block the mismatched quest. Report which executor should handle it. Continue processing eligible quests.
 - **Planned but untagged quest detected:** Report the error with guidance to run the tactician. Continue processing eligible quests.
-- **Batch script fails to launch:** Report error with details. Offer to fall back to Claude mode.
+- **Batch script fails to launch:** Report error with details. Offer to fall back to Pi CLI mode.
 - **Batch script exits with non-zero:** Read manifest for partial results. Report which quests completed and which didn't.
 - **Polling detects stale timestamp:** If `current_step_started_at` hasn't changed for an extended period, warn about potential hang.
 - **Lesson-only retry fails (retry 1):** Expected for conceptual failures. Automatic escalation to re-plan-child on retry 2 handles this.
+- **Pi CLI invocation fails:** Report the spawn error with the exact command attempted. Offer to retry or skip the step.
 
 ## Visual Tone (Run Report)
 

@@ -1,0 +1,7 @@
+# Planning artifacts (VCS Artifact Policy: planning = ignore)
+brainstorm-reports/
+.liang/campaigns/
+
+# Execution artifacts (VCS Artifact Policy: execution = ignore)
+campaigns/**/.run/
+campaigns/**/lessons.yaml

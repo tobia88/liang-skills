@@ -73,10 +73,17 @@ Confirm the user wants to proceed.
 
 Check whether `.liang/project.yaml` exists in the workspace root.
 
-- **If it exists:** read it silently and proceed to Step 3. Do not re-ask any config questions.
+- **If it exists:** read it silently and proceed to Step 4. Do not re-ask any config questions.
 - **If it does not exist:** run the **First-Run Interview** (see `liang-quest-core/references/project/project-yaml.md`), write `.liang/project.yaml`, then proceed.
 
-### 3. Campaign Intake
+### 3. Test Registry Check
+
+Check whether `.liang/test-approaches.yaml` exists in the workspace root.
+
+- **If it exists:** read it silently. This is the project-global registry mapping quest types to their validation configurations. See `liang-quest-core/references/plan-schema/test-approaches.md` for the registry schema.
+- **If it does not exist:** proceed normally. The registry will be created during queue confirmation if any quests require it. When absent, the tactician falls back to per-step ad-hoc verification selection (existing behavior).
+
+### 4. Campaign Intake
 
 Identify the target Campaign:
 
@@ -90,21 +97,62 @@ Then build and confirm the queue:
 
 2. **Build the queue** — Collect all quests with `status: ready_for_planning`. Sort by dependency order: quests whose dependencies are all `planned` or `passed` (or have no dependencies) come first.
 
-3. **Show the queue** — Display a numbered table showing quest ID, title, dependencies, and eligibility status. If the queue is empty (no eligible quests), report this and stop.
+3. **Infer quest types** — For each quest in the queue, read its Quest
+   Contract and determine a quest type slug:
+   - **Registry-first:** check `.liang/test-approaches.yaml` for existing
+     slugs whose scope matches the quest's `scope_boundary` and
+     `expected_output`. Prefer an existing slug over inventing a new one.
+   - **Fallback inference:** if no registry match, infer from contract
+     signals: file extensions, framework mentions, output type
+     (SKILL.md → `skill-creation`, schema → `schema-definition`,
+     documentation → `documentation`).
+   - The quest type is an open-ended slug (e.g., `skill-creation`,
+     `documentation`, `web-app`). No predefined taxonomy.
 
-4. **Confirm once** — Ask: "Plan these N quests in this order?" The user confirms or declines the entire chain.
+4. **Look up registry** — For each inferred quest type, check
+   `.liang/test-approaches.yaml`:
+   - **Type found:** use the stored entry to determine validation approach.
+   - **Type not found:** collect into a "missing types" list for batch
+     prompting.
+   - **Registry absent:** all types are "missing" (first-time use).
 
-5. **Process each quest** — For each quest in the queue, optionally run Step 5 (Per-Quest Discussion), then run Steps 6–12. Between quests:
-   - Show a **condensed per-quest summary**: quest ID, title, difficulty, step count, Tier 1/Tier 2 split, manifest mutation result.
+5. **Show the queue** — Display a numbered table showing quest ID, title,
+   **inferred quest type**, dependencies, and eligibility status. Clearly
+   mark which are immediately eligible vs. which will become eligible as
+   earlier quests are planned. If the queue is empty (no eligible quests),
+   report this and stop.
+
+6. **Batch prompt for missing types** — If any inferred quest types are not
+   in the registry, display them below the queue table and collect validation
+   approach details in a single interaction:
+   - For each missing type, ask: "What is the validation command for
+     `<quest-type>` quests?" Accept either:
+     - A validation command (the `test_command` value for the registry
+       entry), or
+     - A verify-only answer ("no automated validation" / `verify_hint`
+       description), which sets `verify_only: true`.
+   - **Workflow-aware field collection:** collect only `test_command` and
+     `verify_only`/`verify_hint`. Do not ask for `test_file_pattern` or
+     `framework` — those are TDD-specific fields the general workflow does
+     not use.
+   - Write all new entries to `.liang/test-approaches.yaml` (create the
+     file if it does not exist). Follow the schema in
+     `liang-quest-core/references/plan-schema/test-approaches.md`.
+   - Do not re-ask for types already present in the registry.
+
+7. **Confirm once** — Ask: "Plan these N quests in this order?" The user confirms or declines the entire chain.
+
+8. **Process each quest** — For each quest in the queue, run Steps 7–13. Between quests:
+   - Show a **condensed per-quest summary**: quest ID, title, **inferred quest type**, difficulty, step count, Tier 1/Tier 2 split, manifest mutation result.
    - **Re-evaluate the queue**: after each manifest mutation, check if any previously-blocked quests are now eligible. Append newly eligible quests.
 
-### 4. Crosscut Discussion
+### 5. Crosscut Discussion
 
 Before planning individual quests, run a campaign-level crosscut discussion to establish constraints that apply across multiple or all quests. This is the primary defense against cross-quest blindness — without it, each quest is planned in isolation.
 
 Reference: See `liang-quest-core/references/discussion/protocol.md` for the full protocol and `liang-quest-core/references/discussion/constraint-schema.md` for the constraint data model.
 
-#### 4a. Hybrid Shallow Scout
+#### 5a. Hybrid Shallow Scout
 
 Read all quest contracts from the manifest to build campaign-wide context:
 
@@ -113,22 +161,22 @@ Read all quest contracts from the manifest to build campaign-wide context:
 3. Read the key referenced codebase files (prioritize files mentioned by multiple quests).
 4. Build a structured campaign context: what areas of the codebase are touched, what patterns exist, what shared dependencies or conventions apply.
 
-This is a SHALLOW scout — read for orientation, not for planning depth. The per-quest deep scout (Step 5) happens later.
+This is a SHALLOW scout — read for orientation, not for planning depth. The per-quest deep scout (Step 7) happens later.
 
-#### 4b. Scout-Present
+#### 5b. Scout-Present & Brainstorm-Lite
 
-Present the shallow scout findings to the user in a structured summary:
+Present the shallow scout findings and brainstorm-lite questions together in a single turn. The findings are context for the questions — do not pause between them for a separate user reaction. The user corrects any scout assumptions through their answers to the questions.
+
+**Scout-present content (context, not a gate):**
 
 1. Campaign scope overview: which directories/files are touched across all quests.
 2. Shared patterns and conventions observed.
 3. Cross-quest dependencies or tensions identified (e.g., two quests modifying the same file).
 4. Any assumptions or risks that span multiple quests.
 
-Wait for the user to react — they may correct assumptions, add context, or confirm. This is an interactive checkpoint, not a monologue.
+**Brainstorm-lite questions (2-4, immediately following the scout summary):**
 
-#### 4c. Brainstorm-Lite (2-4 Questions)
-
-Based on scout findings and user reactions, ask 2-4 pointed questions about campaign-wide concerns.
+Based on scout findings, ask 2-4 pointed questions about campaign-wide concerns.
 
 **Question format:** Each question uses 4 concrete options with the first marked as recommended:
 - Option A (Recommended) — with short description
@@ -145,16 +193,16 @@ Based on scout findings and user reactions, ask 2-4 pointed questions about camp
 
 **Hard cap: 4 questions maximum.** Do not ask more than 4 questions regardless of campaign complexity. Questions should be pointed and specific to this campaign's scout findings, not generic.
 
-#### 4d. Abbreviated Mode (1-Quest Campaigns)
+#### 5c. Abbreviated Mode (1-Quest Campaigns)
 
 When the campaign has exactly one quest:
-- Run 4a (Hybrid Shallow Scout) and 4b (Scout-Present) normally.
-- **Skip 4c** (Brainstorm-Lite) — no follow-up questions.
+- Run 4a (Hybrid Shallow Scout) and 4b scout-present content normally.
+- **Skip brainstorm-lite questions** — no follow-up questions.
 - Proceed directly to per-quest work.
 
 Rationale: with one quest, crosscut and per-quest concerns collapse into the same scope.
 
-#### 4e. Persist Discussion Output
+#### 5d. Persist Discussion Output
 
 After the brainstorm-lite completes (or after scout-present for abbreviated mode):
 
@@ -165,33 +213,53 @@ After the brainstorm-lite completes (or after scout-present for abbreviated mode
 
 If the discussion produces zero constraints (user confirms everything, no adjustments), still write `discussion.html` with an empty constraints list — it serves as a record that the crosscut discussion happened.
 
-### 5. Per-Quest Discussion (Optional)
+### 6. Per-Quest Dialogue Hub (Optional)
 
-Before scouting each quest, offer an optional per-quest discussion that captures quest-specific design preferences the crosscut discussion cannot reach. This step runs once per quest in the queue and is entirely skippable.
+After the crosscut discussion (Step 5) completes, present a dialogue hub where
+the user can select quests to discuss before planning begins. This step runs
+**once** for the entire campaign — it is not interleaved with individual quest
+planning. The hub is entirely skippable: the user can exit immediately to plan
+with crosscut constraints only.
 
-Reference: See `liang-quest-core/references/discussion/protocol.md` for the per-quest protocol.
+Reference: See `liang-quest-core/references/discussion/protocol.md` for the
+full hub protocol and `liang-quest-core/references/discussion/constraint-schema.md`
+for the constraint data model.
 
-#### 5a. Discussion Gate
+#### 6a. Hub Presentation
 
-For each quest about to be planned, ask a single binary question:
+Present all eligible quests from the planning queue as a numbered menu. The last
+option is always "Done — begin planning":
 
-"Would you like to discuss **[quest title]** before planning?"
-- **Yes** → proceed to 5b (Brainstorm-Lite)
-- **No** → skip to the next step (Scout Phase) for this quest
+(Render as indented text block, not a code fence)
+  Per-Quest Discussion Hub
 
-Rules:
-- The gate is a simple yes/no question — no multi-option, no preview.
-- If the user declines, the quest proceeds with crosscut constraints only.
-- The user can decline all gates — no per-quest discussions happen, and all quests are planned using only crosscut constraints.
+    1. [quest-title-1]
+    2. [quest-title-2]
+    ...
+    N+1. Done — begin planning
 
-#### 5b. Brainstorm-Lite (3-5 Questions)
+Discussed quests display a checkmark on the quest title when the menu is
+re-displayed.
 
-If the user accepts the gate, run a targeted brainstorm for this specific quest:
+#### 6b. Discussion Loop
+
+When the user selects a quest number:
 
 1. Present a brief quest context: title, purpose, desired outcome, and key risks.
-2. Ask 3-5 pointed questions about quest-specific design decisions.
+2. Run Brainstorm-Lite for that quest (see 6c).
+3. Persist constraints to `discussion.html` (see 6d).
+4. Re-display the hub menu with a checkmark on the just-discussed quest.
 
-**Question format:** Same as the crosscut discussion — 4 concrete options with the first marked as recommended:
+The user may then select another quest, re-enter a previously discussed quest,
+or select Done.
+
+#### 6c. Brainstorm-Lite (3-5 Questions)
+
+For each selected quest, ask 3-5 pointed questions about quest-specific design
+decisions.
+
+**Question format:** Each question uses 4 concrete options with the first marked
+as recommended:
 - Option A (Recommended) — with short description
 - Option B — with short description
 - Option C — with short description
@@ -206,27 +274,64 @@ If the user accepts the gate, run a targeted brainstorm for this specific quest:
 
 **Hard cap: 5 questions per quest.** Non-negotiable.
 
-#### 5c. Persist Per-Quest Constraints
+#### 6d. Persist Per-Quest Constraints
 
-After each per-quest brainstorm:
+After each quest's brainstorm-lite completes (each time the user returns to the
+hub menu):
 
 1. Collect constraints from user responses.
 2. Structure each per the constraint schema:
    - `source: "per_quest:<quest-id>"` (e.g., `"per_quest:q003"`)
    - `scope: "quest_specific"`
    - `applicable_quests: ["<quest-id>"]` (the specific quest)
-3. **Append** to the existing `discussion.html` at the campaign root. Do NOT overwrite — the crosscut constraints are already there.
+3. **Append** to the existing `discussion.html` at the campaign root. Do NOT
+   overwrite — the crosscut constraints are already there.
 4. Update the HTML body to render the new per-quest constraints section.
 
-#### 5d. Conflict Handling
+#### 6e. Re-entry
+
+Discussed quests (marked with a checkmark) can be re-entered from the hub menu.
+When re-entering:
+
+- New constraints are **appended** to `discussion.html` (append-only semantics).
+- Existing constraints from the prior discussion of that quest are preserved
+  unchanged.
+- The checkmark remains on the quest in the menu.
+
+#### 6f. Hub Exit
+
+When the user selects "Done — begin planning":
+
+- The hub closes.
+- The tactician proceeds to Step 7 for each quest in dependency order.
+- No further discussion prompts occur during the planning phase (Steps 7-13).
+- "Done" is the only way to exit the hub.
+
+**Zero-Discussion Exit:** Selecting "Done" immediately — without discussing any
+quests — proceeds to planning with crosscut constraints only. No additional
+confirmation is required.
+
+#### 6g. Abbreviated Mode (1-Quest Campaigns)
+
+When the campaign has exactly one quest, the per-quest dialogue hub is **skipped
+entirely**. The tactician proceeds directly to Step 7 (Scout Phase) with crosscut
+constraints only.
+
+Rationale: with one quest, crosscut and per-quest concerns collapse into the
+same scope.
+
+#### 6h. Conflict Handling
 
 When a per-quest constraint appears to conflict with a crosscut constraint:
 - Both constraints are preserved in `discussion.html`.
-- Per-quest constraint takes precedence for its specific quest (more specific wins).
-- The tactician notes the conflict in the `scout_summary` when planning that quest.
-- No automatic resolution — both constraints are tracked, and the per-quest constraint shapes the plan for its quest.
+- Per-quest constraint takes precedence for its specific quest (more specific
+  wins).
+- The tactician notes the conflict in the `scout_summary` when planning that
+  quest.
+- No automatic resolution — both constraints are tracked, and the per-quest
+  constraint shapes the plan for its quest.
 
-### 6. Scout Phase (Per Quest)
+### 7. Scout Phase (Per Quest)
 
 Before planning each quest, perform a mandatory codebase scout:
 
@@ -249,7 +354,7 @@ Before planning each quest, perform a mandatory codebase scout:
 
 The scout summary is stored in the plan YAML and provides ground truth for the executor.
 
-### 7. Decompose and Plan (In Memory)
+### 8. Decompose and Plan (In Memory)
 
 Using the quest contract and scout summary, decompose the quest into ordered `steps[]`:
 
@@ -278,10 +383,33 @@ Using the quest contract and scout summary, decompose the quest into ordered `st
   - Content pattern checks (`grep -q pattern file`)
   - Syntax validation (`python -m py_compile file`, `yamllint file`)
   - Command success (`npm run build`, `make check`)
+  - Registry `test_command` for code-touching steps (when registry entry exists)
 - **Use Tier 2 only** when mechanical verification is impossible:
   - Documentation quality, completeness, clarity
   - Design consistency, visual correctness
   - Subjective criteria (readability, naming quality)
+
+**Registry-informed verification (when `.liang/test-approaches.yaml` exists):**
+
+When a registry entry exists for the quest's inferred type, the registry
+informs — but does not replace — the two-tier verification system:
+
+- **Automatable types** (registry has `test_command`): for steps that modify
+  files relevant to the quest type's scope, use the registry's `test_command`
+  as the default `verification_command` (Tier 1). The tactician judges per
+  step whether the registry command is applicable based on which files the
+  step touches. Non-code steps (documentation, config, metadata) retain
+  independent per-step verification logic.
+- **Verify-only types** (registry has `verify_only: true`): for steps
+  touching domain-relevant files, set `verification_tier: 2` and derive
+  `acceptance_criteria` items from the registry's `verify_hint`. Non-domain
+  steps retain independent verification.
+- **No registry entry / registry absent:** fall back to per-step ad-hoc
+  verification selection (existing behavior). No error, no warning.
+
+The registry is a default, not an override. When a step has a more specific
+verification command than the registry's general `test_command`, the
+tactician should use the more specific command.
 
 **Step ordering:**
 
@@ -304,7 +432,7 @@ The matching is tactician-reasoned, not automatic: during decompose, the tactici
 
 When no discussion constraints exist (no `discussion.html`), omit the `discussion_constraints_applied` field from all steps.
 
-### 8. Auto-Decide Difficulty
+### 9. Auto-Decide Difficulty
 
 Compute difficulty from three signals:
 
@@ -316,7 +444,7 @@ Compute difficulty from three signals:
 
 Write a one-sentence `difficulty_rationale` explaining the decision. Render it prominently in the HTML view.
 
-### 9. Validate (Still In Memory)
+### 10. Validate (Still In Memory)
 
 Before any file write, validate:
 
@@ -336,17 +464,17 @@ This is a WARN, not a BLOCK — an orphan constraint does not prevent plan writi
 
 If validation fails, do not write anything. Report the failure and stop or correct.
 
-### 10. Check for Existing Plan
+### 11. Check for Existing Plan
 
 Check whether `plan.html` already exists in the quest folder.
 
-- **If no `plan.html`:** proceed to Step 9.
+- **If no `plan.html`:** proceed to Step 12.
 - **If `plan.html` exists:** refuse by default. Offer the explicit re-plan override:
   - "A plan already exists. To re-plan, I will archive it as `plan.archive-<timestamp>.html` and write a fresh `plan.html`. Re-plan?"
   - If accepted: rename existing file, then proceed.
   - If declined: skip this quest.
 
-### 11. Write Plan
+### 12. Write Plan
 
 Write `plan.html` as a sibling to the quest's `index.html` within the campaign directory. Campaign directory layout is defined in `liang-quest-core/references/campaign/protocol.md`.
 
@@ -360,7 +488,7 @@ The file structure:
 - Verification tier is visually distinguished: Tier 1 gets a "Command" badge, Tier 2 gets a "Checklist" badge.
 - Scout summary renders as a collapsible section.
 
-### 12. Manifest Mutation
+### 13. Manifest Mutation
 
 After `plan.html` is successfully written, perform these manifest mutations on the Campaign's `manifest.yaml`:
 
@@ -376,7 +504,7 @@ Then perform post-stamp validation:
 
 If the status is not `ready_for_planning`, warn and ask before proceeding.
 
-### 13. Chain Summary
+### 14. Chain Summary
 
 After the entire chain completes:
 
@@ -384,7 +512,7 @@ After the entire chain completes:
 2. Handle VCS artifact policy (read `vcs_artifacts.planning` from `.liang/project.yaml`; fallback to `"ask"` if absent, then write choice back).
 3. Offer to open plan files or campaign folder.
 
-### 14. Next Move Prompt
+### 15. Next Move Prompt
 
 After the Chain Summary is resolved, suggest the logical next pipeline step. Present the executor command as a concrete, copy-pasteable command the user can paste into a new session.
 
@@ -395,15 +523,16 @@ Use this style:
 To execute the planned quests in a clean context, copy and paste:
 
 ```
-liang-quest-general-executor <campaign-path>
+skill:liang-quest-general-executor <campaign-path>
 ```
 
 Where `<campaign-path>` is the relative path to the campaign directory (see `liang-quest-core/references/campaign/protocol.md` for directory layout). The executor operates in campaign chain mode — it reads the manifest, discovers all planned quests, and executes them in dependency order.
 
 Rules:
 
+- Substitute `<campaign-path>` with the actual campaign directory path from this session. The output must be directly copy-pasteable — no placeholders or template variables.
 - Use the campaign directory path, not an individual quest path. The executor chains through all planned quests automatically.
-- Do not include invocation-method prefixes (no `/liang-pi`, no `pi skill`). The command should be agent/platform agnostic — just the skill name and the path.
+- Always use the `skill:` prefix. This is the canonical Skill tool invocation format — it produces a copy-pasteable command. Do not use wrapper prefixes (`/liang-pi`, `pi skill`) or bare skill names without the prefix.
 - Present it as a suggestion, not an action. Do not invoke the executor automatically.
 - This is the final interaction of the tactician session.
 
@@ -421,6 +550,7 @@ readiness: "ready | scout-limited"
 scout_summary: "<structured codebase context>"
 created_at: "<iso-8601>"
 schema_version: 1
+inferred_quest_type: "<quest-type-slug>"  # from registry/inference
 
 steps:
   - id: "s01"
@@ -465,6 +595,20 @@ This skill must never:
 - **Manifest mutation fails:** Warn. The plan file is still valid.
 - **Mid-write error:** Abort and report what was/wasn't written.
 
+## Backward Compatibility
+
+When `.liang/test-approaches.yaml` does not exist, the tactician behaves
+exactly as before:
+
+- All quests use per-step ad-hoc verification selection.
+- No quest-type inference is performed.
+- No batch prompting occurs.
+- The queue confirmation table omits the inferred type column.
+- No errors or warnings are produced about the missing registry.
+
+This preserves current behavior for existing campaigns that predate the
+quest-type-aware upgrade.
+
 ## Visual Tone
 
 Match the existing family:
@@ -495,6 +639,7 @@ Match the existing family:
 - `liang-quest-core/references/campaign/manifest-schema.md` — shared manifest and quest contract schema
 - `liang-quest-core/references/plan-schema/common.md` — shared plan envelope, difficulty/readiness vocabularies
 - `liang-quest-core/references/plan-schema/general-steps.md` — general step schema (this skill's plan format)
+- `liang-quest-core/references/plan-schema/test-approaches.md` — test approaches registry schema: entry shapes, rules, validation for .liang/test-approaches.yaml
 - `liang-quest-core/references/project/project-yaml.md` — project.yaml contract
 - `liang-quest-core/references/discussion/protocol.md` — shared discussion protocol, flow, caps
 - `liang-quest-core/references/discussion/constraint-schema.md` — constraint data model and validation

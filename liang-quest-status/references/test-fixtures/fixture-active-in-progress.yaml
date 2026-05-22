@@ -1,0 +1,23 @@
+campaign_id: "fixture-active-in-progress"
+title: "Fixture: In-Progress Campaign"
+created_at: "2026-03-10"
+schema_version: "3"
+workflow: "general"
+
+quests:
+  - id: "q001"
+    title: "Research phase"
+    status: "passed"
+    depends_on: []
+  - id: "q002"
+    title: "Implementation phase"
+    status: "in_progress"
+    depends_on:
+      - "q001"
+    current_cycle: 3
+    total_cycles: 5
+  - id: "q003"
+    title: "Testing phase"
+    status: "planned"
+    depends_on:
+      - "q002"
