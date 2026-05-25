@@ -1,6 +1,6 @@
 ---
 name: liang-quest-general-executor
-description: "Executes step plans from liang-quest-general-tactician. Reads shared references from liang-quest-core at activation time. Builds a dependency-ordered quest queue from campaign manifest and processes plan.html via child Pi sub-invocations (execute-child, verify-child, re-plan-child). Two-tier verification: Tier 1 command-based, Tier 2 forced yes/no checklist. Validates pre/postconditions per step. On failure, extracts lessons and delegates re-planning. Tracks manifest status, cascade-skips dependents, manages .run/ dirs, supports crash recovery, produces HTML run report. Three execution modes: Pi CLI, Claude subagents, or --batch. Tiered retry: lesson-only then re-plan-child."
+description: "Executes step plans from liang-quest-general-tactician. Reads shared references from liang-quest-core at activation time. Builds a dependency-ordered quest queue from campaign manifest and processes plan.html via child Pi sub-invocations (execute-child, verify-child, re-plan-child). Two-tier verification: Tier 1 command-based (inline), Tier 2 yes/no checklist (deferred to post-run UAT batch prompt for AFK-safe execution). Validates pre/postconditions per step. On failure, extracts lessons and delegates re-planning. Tracks manifest status, cascade-skips dependents, manages .run/ dirs, supports crash recovery, produces HTML run report. Three execution modes: Pi CLI, Claude subagents, or --batch. Tiered retry: lesson-only then re-plan-child."
 ---
 
 # Liang Quest Executor
@@ -20,7 +20,7 @@ The tactician (smart model) has already front-loaded all thinking into implement
 - Plans are **immutable**. Never modify, overwrite, or delete any `plan.html` or `plan.archive-*.html` file.
 - Re-planning uses **tiered escalation**: retry 1 uses lesson-only context; retry 2+ invokes the planning model via re-plan-child. The Executor never generates plans itself.
 - Each step is processed sequentially: validate preconditions → execute → validate postconditions → verify.
-- **Two-tier verification**: Tier 1 runs a shell command (exit 0 = pass). Tier 2 runs a forced yes/no checklist via verify-child. Any "no" fails the step.
+- **Two-tier verification**: Tier 1 runs a shell command inline (exit 0 = pass). Tier 2 is **deferred** to the post-run UAT batch prompt (§8a) — during execution, Tier 2 items are collected into a deferred UAT queue and the step passes provisionally. This keeps the execution loop fully AFK-safe.
 - **Pre/postcondition validation**: Before each step, validate preconditions. After execution, validate postconditions. Failures trigger the re-plan loop.
 - Model selection for execute-children uses `project.yaml` `execution_by_difficulty` based on the plan's `difficulty` field.
 - **Three-mode execution:** Default (Pi CLI) spawns `pi` sub-invocations with models from `project.yaml` by difficulty. `--claude` dispatches Claude subagents (haiku for easy, sonnet for medium/hard). `--batch` launches the batch executor script and polls for progress.
@@ -65,6 +65,60 @@ Activate **only** when:
 
 Do **not** activate from generic intent like "run this," "execute this," "do this," or "build this." If unclear, ask before activating.
 
+## Non-Interactive Invocation (--no-confirm)
+
+The `--no-confirm` flag enables parent-process invocation (e.g., from the multi-campaign sweep script described in q003 of the Batch Campaign Sweep campaign) by bypassing all interactive gates with documented defaults. When a parent process such as a multi-campaign orchestrator needs to invoke this executor once per campaign without human intervention, `--no-confirm` provides a predictable, documented non-interactive path.
+
+**`--no-confirm` is INDEPENDENT of `--batch` and `--claude`.** These flags address different concerns: `--no-confirm` controls interactive gates; `--batch` and `--claude` control child-execution mechanism. They may be combined in any subset (e.g., `--no-confirm --claude` for a Claude-powered non-interactive sweep, or `--no-confirm --batch` for a batch-powered non-interactive sweep).
+
+**Terminology distinction (per crosscut constraint dc006):**
+
+- **"batch executor script"** — the per-campaign deterministic script launched by `--batch` mode (already documented in §Batch Mode below). This script orchestrates a SINGLE campaign's execution internally.
+- **"sweep script"** — the multi-campaign orchestrator that invokes this executor with `--no-confirm` once per campaign (designed in the Batch Campaign Sweep campaign, q003). This operates one layer ABOVE the executor, driving multiple campaigns in dependency order.
+
+These are two distinct scripts at different layers. Do not conflate them.
+
+**What `--no-confirm` DOES bypass (seven interactive gates):**
+
+1. **§1 Confirm Intent** — skip the "confirm you want to proceed" prompt; proceed directly to Step 2.
+2. **§4 Crash Recovery Check** — if an interrupted run is detected, default to **Resume** from last checkpoint (parent is responsible for forcing Restart via manual manifest intervention if needed).
+3. **§5 Campaign Intake "Confirm once"** — skip the "Execute these N quests in this order?" prompt; proceed to Step 6.
+4. **§8a UAT Batch Prompt** — skip the interactive UAT checklist. All deferred Tier 2 items remain marked `tier_2_deferred` in step files and run report. The parent decides how to handle Tier 2 review.
+5. **§9 Cleanup** — skip the ask-before-cleanup prompt; default to PRESERVE all files (the conservative choice).
+6. **§10 VCS Artifact Policy** — if `vcs_artifacts.execution` is `"ask"` or absent, treat it as `"ignore"` (apply ignore rules silently). The parent decides persistent policy.
+7. **§11 Commit Suggestion** — skip the commit suggestion entirely; the parent owns commit decisions for sweep-aggregated artifacts.
+
+**What `--no-confirm` does NOT bypass:**
+
+- **§2 Project Config Check — `models.verify` hard-block.** If `models.verify` is unconfigured, fail fast with exit code 2 regardless of `--no-confirm`. There is no safe default for verification.
+- **§3 Tactician Pre-Flight Gate hard-block.** If any quest is unplanned or missing its `plan.html`, fail fast with exit code 2. No partial execution.
+- **§5 Campaign Intake — workflow mismatch hard-block.** If the campaign's `workflow` field is not `"general"`, fail fast with exit code 2.
+- **Any other hard-block already documented in the Boundaries section.** `--no-confirm` only affects the six interactive gates listed above; all other gates, validations, and checks run exactly as they would in interactive mode.
+
+## Exit Code Conventions
+
+The executor emits standard process exit codes so parent processes (e.g., the multi-campaign sweep script from the Batch Campaign Sweep campaign) can distinguish success, planned failure, configuration error, and crash.
+
+| Code | Meaning | When |
+|------|---------|------|
+| 0 | All quests passed | Every quest in the campaign queue terminated with status `passed`. |
+| 1 | At least one quest failed | One or more quests terminated with `failed` after exhausting retries. This is a PLANNED failure path — the executor itself ran correctly. |
+| 2 | Configuration error | Pre-flight gate failed: missing/incomplete project.yaml, missing models.verify, missing plan.html for a planned quest, workflow mismatch, or schema_version mismatch. The executor refused to start. |
+| 3 | Unexpected error / crash | Uncaught exception, child process spawn failure that could not be recovered, or any other condition that prevented orderly completion. |
+
+**Exit code surfacing:** Exit codes are emitted at process termination via the underlying Pi CLI's standard exit-code surfacing mechanism. This section does not invent new infrastructure — it defers to whatever Pi CLI uses natively to surface child process exit codes to the calling process.
+
+**Parent-process cascade behavior:** A parent process invoking the executor with `--no-confirm` should rely on these exit codes for cascade decisions:
+
+- **0** → mark campaign passed in parent's tracking.
+- **1** → mark campaign failed, cascade-skip dependent campaigns.
+- **2** → halt the parent's sweep entirely; configuration must be fixed before retry.
+- **3** → halt and surface crash details; do NOT auto-retry.
+
+**Mode independence:** Exit codes are independent of interactive vs. non-interactive mode. They are emitted for every invocation, but parent processes can only act on them when invoked non-interactively (e.g., with `--no-confirm`). In interactive mode, the user sees the outcome and the exit code is still emitted at process termination.
+
+**Non-goal:** Detailed crash diagnostics in stderr are out of scope for this section. The existing Failure Modes section (§Failure Modes) already covers what goes to stderr on each failure type.
+
 ## Startup Flow
 
 Run these steps in order. Do not skip ahead.
@@ -80,6 +134,8 @@ State that this skill will:
 - Track status in the manifest, extract lessons, and produce a run report.
 
 Confirm the user wants to proceed.
+
+**Under `--no-confirm`:** skip the confirmation prompt entirely. Proceed to Step 2.
 
 ### 2. Project Config Check
 
@@ -115,6 +171,8 @@ Examine the manifest for signs of an interrupted previous run:
 
 If detected, show which quests were interrupted and at which step. Offer: **Resume** from last checkpoint, or **Restart** (reset to planned, clean .run/).
 
+**Under `--no-confirm`:** if an interrupted run is detected, default to **Resume** from last checkpoint. The parent process is responsible for forcing a Restart via manual manifest intervention if Resume is undesired.
+
 ### 5. Campaign Intake
 
 Identify the target Campaign. Build and confirm the queue:
@@ -129,6 +187,8 @@ Identify the target Campaign. Build and confirm the queue:
 
 4. **Show the queue** — Table with quest ID, title, difficulty, step count, verification tier split, dependencies, eligibility.
 5. **Confirm once** — "Execute these N quests in this order?"
+
+**Under `--no-confirm`:** skip the "Execute these N quests in this order?" prompt. Proceed to Step 6.
 
 ### 6. Mode Selection
 
@@ -196,12 +256,12 @@ For each step in the plan's `steps[]`, in order:
    - **Claude mode:** Dispatch Haiku subagent with verification command. Subagent runs command and reports exit code in-memory.
    - Pass if exit code 0. Fail otherwise → enter re-plan loop (7c).
 
-   **Tier 2 (Yes/No Checklist):**
-   - **Pi CLI mode:** Spawn verify-child via `pi --model <verify-model> -p "Read step-<sid>.html. For each acceptance criterion, answer yes/no with a one-sentence justification. Write results to the YAML verification section."`
-   - **Claude mode:** Dispatch Haiku subagent with acceptance criteria, files_changed, and implementation_summary. Subagent answers each criterion yes/no with justification in-memory.
-   - Pass if ALL criteria answered "yes". Any "no" → enter re-plan loop (7c).
+   **Tier 2 (Yes/No Checklist) — Deferred:**
+   - Do NOT spawn verify-child inline. Instead, collect the Tier 2 verification item into the **deferred UAT queue**: record quest ID, step ID, step title, acceptance criteria, `files_changed`, and `implementation_summary` from the execute-child output.
+   - Write `tier_2_deferred: true` to the step's verification section in `step-<sid>.html`.
+   - The step passes provisionally based on postcondition validation and Tier 1 results alone. Tier 2 acceptance review happens post-run in §8a.
 
-7. **On pass:** Update `step-<sid>.html` with verification section (exit code for Tier 1, per-criterion results for Tier 2). Perform VCS-neutral checkpoint. Proceed to next step.
+7. **On pass:** Update `step-<sid>.html` with verification section (exit code for Tier 1; `tier_2_deferred: true` for Tier 2). Perform VCS-neutral checkpoint. Proceed to next step.
 
 #### 7c. Tiered Retry Loop (on step failure)
 
@@ -216,7 +276,7 @@ Bounded by `max_step_retries` (default: 3). Uses tiered escalation. On each retr
    - `accumulated_lessons`: all lessons for this step so far.
    - `previous_failure`: error summary from the failed attempt.
    - `revised_instructions: null` (no re-plan on first retry).
-3. **Re-verify** — Run the same Tier 1 or Tier 2 verification.
+3. **Re-verify** — Run the same Tier 1 verification (Tier 2 remains deferred to §8a).
 4. **Pass:** Exit loop. Mark step passed. Checkpoint. Next step.
 5. **Fail:** Proceed to Retry 2+.
 
@@ -228,7 +288,7 @@ Bounded by `max_step_retries` (default: 3). Uses tiered escalation. On each retr
    - **Claude mode:** Dispatch Sonnet subagent with same context. Returns in-memory.
 3. **Read re-plan output** — Expect: `revised_instructions`, `reasoning`, `confidence`.
 4. **Re-execute** — Spawn execute-child with `revised_instructions` replacing original instructions, plus all accumulated lessons.
-5. **Re-verify** — Run the same verification.
+5. **Re-verify** — Run the same Tier 1 verification (Tier 2 remains deferred to §8a).
 6. **Pass:** Exit loop. Mark step passed. Checkpoint. Next step.
 7. **Fail, retries remaining:** Loop back (next retry is also Retry 2+ tier).
 8. **Fail, retries exhausted:** Mark step `failed`. Extract final lesson. Mark quest `failed`. Exit to 7d.
@@ -337,12 +397,34 @@ After all quests are processed:
    - Campaign title, run timestamp, duration.
    - Quest results table: ID, title, difficulty, status, steps completed, retries.
    - Step-level detail per quest: step ID, verification tier, pass/fail, attempts.
-   - Tier 2 verification details: per-criterion yes/no results for Tier 2 steps.
+   - Deferred Tier 2 items: list of steps with `tier_2_deferred: true` and their acceptance criteria (results populated after §8a review, or marked `tier_2_deferred` if `--no-confirm`).
    - Lessons section.
    - Overall counts.
    - JRPG dashboard style.
 
 2. **Show chain summary** — Full table with all quests, statuses, step counts, retries, skipped quests.
+
+### 8a. UAT Batch Prompt
+
+After the run report, present all deferred Tier 2 verification items as a consolidated UAT checklist. This section exists because Tier 2 items are deferred from the execution loop (§7b step 6) to keep the loop fully AFK-safe once started.
+
+1. **Check the deferred UAT queue.** If empty (no Tier 2 steps in any executed quest), skip this section entirely.
+2. **Present the UAT Checklist** — Display a consolidated table of all deferred items:
+   - Quest ID, step ID, step title.
+   - Acceptance criteria (the yes/no checklist items).
+   - Files changed by the step.
+   - Implementation summary from the execute-child.
+3. **For each item, ask the user:** "Does this step meet its acceptance criteria?" Present each criterion for yes/no review.
+4. **Record results.** Update each step's `step-<sid>.html` verification section with the Tier 2 results (replacing `tier_2_deferred: true` with per-criterion yes/no).
+5. **Handle failures.** If any criterion receives "no":
+   - Extract lesson to `lessons.yaml` with `failure_type: "uat_rejected"`.
+   - Update the quest's manifest status from `passed` to `failed` if any of its steps fail Tier 2.
+   - Cascade-skip any quests that depend on the now-failed quest (if they haven't already been processed).
+   - Note: there is no re-plan loop at this stage. The failure is recorded for the next run.
+
+**Under `--no-confirm`:** skip the interactive UAT checklist. All deferred items remain marked `tier_2_deferred` in the step files. The parent process decides how to handle Tier 2 review.
+
+**Known limitation — batch-executor.ps1 divergence:** The batch executor script (`batch-executor.ps1`) implements its own execution loop independently and does not defer Tier 2 verification. In `--batch` mode, the batch script still runs Tier 2 inline (blocking on UAT mid-loop). This creates inconsistent UAT behavior between Pi CLI/Claude modes (deferred) and batch mode (inline). Aligning batch mode is a separate change.
 
 ### 9. Cleanup
 
@@ -352,8 +434,12 @@ After the run report:
 - **Clean up:** No scratch files to clean — the consolidated `step-<sid>.html` format eliminates separate input/output YAML files.
 - Ask before cleanup (even if nothing to delete — the user may want to remove old-format files from prior runs).
 
+**Under `--no-confirm`:** skip the ask-before-cleanup prompt. Default to PRESERVE all files (the conservative choice). The parent process can clean up afterward if desired.
+
 ### 10. VCS Artifact Policy
 Read `vcs_artifacts.execution` from `.liang/project.yaml`. Apply the policy for execution artifacts (`.run/`, `lessons.yaml`): `"ignore"` applies VCS ignore rules silently, `"commit"` leaves artifacts trackable, `"ask"` falls back to legacy prompt behavior. If `vcs_artifacts` is absent, treat as `"ask"` and write the user's answer to `project.yaml`. Apply policy once after chain completes.
+
+**Under `--no-confirm`:** if `vcs_artifacts.execution` is `"ask"` or absent, treat it as `"ignore"` (apply ignore rules silently). Do NOT write the choice back to `project.yaml` under `--no-confirm` — the parent decides persistent policy.
 
 ### 11. Commit Suggestion
 
@@ -381,6 +467,8 @@ git commit -m "Campaign: <campaign-title> — <passed>/<total> quests passed"
 ```
 
 Replace placeholders with actual values. This is always a **suggestion**. Never execute the commit automatically.
+
+**Under `--no-confirm`:** skip the commit suggestion entirely. The parent process owns commit decisions for sweep-aggregated artifacts.
 
 ### 12. Open Prompt
 
@@ -456,7 +544,7 @@ This skill must never:
 11. **Spawn children that inherit parent context.** Clean context isolation.
 12. **Delete lessons.yaml, run reports, completion markers, or step-*.html files during cleanup.**
 13. **Execute quests whose dependencies have not all passed.**
-14. **Silently resume an interrupted run.** Always ask on crash recovery.
+14. **Silently resume an interrupted run when invoked interactively.** Under `--no-confirm`, default to Resume from last checkpoint per the §4 Crash Recovery note; the parent process owns the Restart decision.
 15. **Process campaigns with workflow other than "general".** This executor only handles general workflow campaigns. TDD campaigns belong to liang-quest-tdd-executor; quick campaigns belong to liang-quest-quick.
 16. **Never dispatch Claude subagents in Pi CLI or batch modes.** Only `--claude` mode may use subagents.
 17. **Never invoke re-plan-child on retry 1.** First retry is always lesson-only.
@@ -470,7 +558,7 @@ This skill must never:
 - **Child timeout:** Kill, failure with `failure_type: "timeout"`.
 - **Precondition failure:** Drift detected. Enter re-plan loop with precondition context.
 - **Postcondition failure:** Implementation incomplete. Enter re-plan loop.
-- **Tier 2 "no" answer:** Step failed verification. Enter re-plan loop with criterion details.
+- **Tier 2 "no" answer (UAT batch §8a):** Step failed acceptance review post-run. Quest status downgraded from `passed` to `failed`. Lesson extracted with `failure_type: "uat_rejected"`. Cascade-skip dependents not yet processed. No re-plan available post-run.
 - **Manifest write fails:** Warn, continue. Manifest is stale but plan execution is valid.
 - **Plan YAML invalid or unsupported schema:** Skip quest with reason.
 - **All quests skipped or failed:** Produce run report anyway.
@@ -483,6 +571,8 @@ This skill must never:
 - **Polling detects stale timestamp:** If `current_step_started_at` hasn't changed for an extended period, warn about potential hang.
 - **Lesson-only retry fails (retry 1):** Expected for conceptual failures. Automatic escalation to re-plan-child on retry 2 handles this.
 - **Pi CLI invocation fails:** Report the spawn error with the exact command attempted. Offer to retry or skip the step.
+- **--no-confirm fallback failure:** If a gate's documented `--no-confirm` default cannot be applied (e.g., crash recovery default-Resume is invoked but the on-disk state is unrecoverable), exit with code 3, write a structured failure message to stderr describing which gate's default failed, and do not attempt further quests.
+- **Exit code emission failure:** If the underlying Pi CLI cannot surface a non-zero exit code to the parent process (infrastructure limitation), log the intended exit code to stderr as the last line in the format `EXEC_EXIT_CODE: <n>`. Parent processes (the sweep script) should parse this line as a fallback when Pi CLI's native exit code is unavailable.
 
 ## Visual Tone (Run Report)
 
