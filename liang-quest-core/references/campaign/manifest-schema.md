@@ -44,7 +44,17 @@ notes: string
 tags: [string]
 generated_by: string
 schema_version: string
+campaign_depends_on: [string]  # campaign_id values (per dc001) that must complete before this campaign runs; optional; empty list or absence = no cross-campaign dependencies
 ```
+
+### Cross-Campaign Dependencies
+
+`campaign_depends_on` is an optional list of `campaign_id` values declaring that this campaign requires another campaign to complete (all quests `passed`) before it can be safely run.
+
+- Format: list of `campaign_id` strings (per crosscut decision dc001 in `camp-2026-05-24-batch-campaign-sweep`). NOT slugs (slugs can drift on rename) and NOT paths (paths shift on directory moves).
+- Default semantics: absence of the field OR an empty list means "no cross-campaign dependencies."
+- Validation: each referenced `campaign_id` should match an existing campaign's `campaign_id` within the same workspace. The cartographer is responsible for ensuring referenced campaigns exist at write time. Consumers (e.g., a sweep orchestrator script) should toposort by these edges and detect cycles.
+- Backward compatibility: campaigns generated before this field existed (`schema_version` < 4) continue to validate. Missing field is interpreted as empty list.
 
 ### Executor-Managed Fields (on quest entries)
 
@@ -119,3 +129,4 @@ Before writing any campaign files:
 - The `depends_on` graph must be acyclic.
 - All slugs must be lowercase ASCII with hyphens, no spaces or special characters.
 - `created_at` must be valid ISO 8601.
+- When `campaign_depends_on` is present, each entry must be a non-empty string. Cross-campaign target existence is the cartographer's responsibility, not a manifest validation rule.

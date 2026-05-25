@@ -471,7 +471,7 @@ Use this style:
 To continue in a clean context, copy and paste this into a new session:
 
 ```
-liang-quest-cartographer <report-path>
+skill:liang-quest-cartographer <report-path>
 ```
 
 Where `<report-path>` is the actual saved path of the report just written (e.g., `.liang/brainstorm-reports/2026-05-21_1430-my-topic.html`).
@@ -482,7 +482,7 @@ Rules:
 
 - Always suggest `liang-quest-cartographer` as the downstream skill, since that is the next step in the pipeline.
 - Use the literal report path, not a placeholder.
-- Do not include invocation-method prefixes (no `/liang-pi`, no `pi skill`). The command should be agent/platform agnostic — just the skill name and the path.
+- Always use the `skill:` prefix. This is the canonical Skill tool invocation format — it produces a copy-pasteable command. Do not use wrapper prefixes (`/liang-pi`, `pi skill`) or bare skill names without the prefix.
 - Present it as a suggestion, not an action. Do not invoke the cartographer automatically.
 - Include a one-line offer to open the report in the browser. Do not present it as a multi-option prompt — just a brief mention. If the user asks to open it, use the platform-appropriate default opener.
 - This is the final interaction of the brainstorm session.

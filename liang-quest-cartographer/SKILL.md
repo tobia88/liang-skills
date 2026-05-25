@@ -104,6 +104,15 @@ Build a complete in-memory Campaign object:
 - Ordered quest list with stable IDs (`q001`, `q002`, …).
 - Full Quest Contract for each quest, following the **Tiered Schema** (see `references/schema.md`).
 
+#### Cross-Campaign Dependencies (Optional)
+
+If the source Brainstorm/Strategy Report EXPLICITLY declares that this campaign depends on another campaign's outputs (e.g., "this requires campaign X to be complete first"), populate the manifest's optional `campaign_depends_on` field with the prerequisite campaign_id values.
+
+- Use `campaign_id` strings, NOT slugs, NOT paths (per crosscut constraint dc001 in `camp-2026-05-24-batch-campaign-sweep`).
+- Do NOT infer cross-campaign dependencies from indirect signals (shared file paths, mentioned topics, etc.). Only record what the brainstorm explicitly says.
+- When in doubt, leave the field empty. The downstream sweep orchestrator interprets absence as "no cross-campaign dependencies."
+- Verify referenced campaign_ids resolve to existing campaign manifests in `.liang/campaigns/` at decomposition time. If a referenced campaign_id cannot be resolved, stop and ask the user how to proceed — do not silently fabricate a placeholder id.
+
 ### 6. Validate (Still In Memory)
 
 Before any file write, validate:
@@ -112,6 +121,7 @@ Before any file write, validate:
 - All Required Core fields are present in both the manifest and each Quest Contract.
 - `depends_on` references exist within the Campaign and are acyclic.
 - Quest IDs are unique within the Campaign.
+- When `campaign_depends_on` is populated, every entry resolves to an existing campaign_id in `.liang/campaigns/` at the time of write.
 
 If validation fails, do not write anything. Report the failure and stop or correct.
 
@@ -176,19 +186,19 @@ To plan quests in a clean context, copy and paste the appropriate command:
 **TDD workflow:**
 
 ```
-liang-quest-tdd-tactician <campaign-path>
+skill:liang-quest-tdd-tactician <campaign-path>
 ```
 
 **General workflow:**
 
 ```
-liang-quest-general-tactician <campaign-path>
+skill:liang-quest-general-tactician <campaign-path>
 ```
 
 **Quick workflow (single-pass, no plan step):**
 
 ```
-liang-quest-quick <campaign-path>
+skill:liang-quest-quick <campaign-path>
 ```
 
 Where `<campaign-path>` is the relative path to the campaign directory (see `liang-quest-core/references/campaign/protocol.md` for directory layout). The tactician operates in campaign chain mode — it reads the manifest, discovers all eligible quests, and plans them in dependency order.
@@ -197,7 +207,7 @@ Rules:
 
 - Always suggest all three downstream skills (`liang-quest-tdd-tactician`, `liang-quest-general-tactician`, and `liang-quest-quick`) so the user can pick the appropriate workflow.
 - Use the campaign directory path, not an individual quest path. The tactician chains through all eligible quests automatically.
-- Do not include invocation-method prefixes (no `/liang-pi`, no `pi skill`). The command should be agent/platform agnostic — just the skill name and the path.
+- Always use the `skill:` prefix. This is the canonical Skill tool invocation format — it produces a copy-pasteable command. Do not use wrapper prefixes (`/liang-pi`, `pi skill`) or bare skill names without the prefix.
 - Present it as a suggestion, not an action. Do not invoke any downstream skill automatically.
 - This is the final interaction of the cartographer session.
 
@@ -215,6 +225,8 @@ Required Core keys:
 
 - `campaign_id`, `slug`, `title`, `created_at`, `source_report`, `lens`, `summary`
 - `quests[]` with `id`, `title`, `path`, `priority`, `readiness`, `status`, `depends_on` (workflow is not included — it is stamped at campaign level downstream)
+
+An optional `campaign_depends_on: [campaign_id, ...]` field at manifest top level records prerequisite campaigns. See `references/schema.md` and `liang-quest-core/references/manifest-schema.md` for the full schema.
 
 ### Manifest HTML
 

@@ -1,0 +1,349 @@
+<!--
+  liang-quick-brainstorm lite report template
+  Placeholder tokens (UPPERCASE_SNAKE_CASE; the skill substitutes these):
+    [REPORT_TITLE], [REPORT_SUBTITLE], [GENERATED_TIMESTAMP], [PLANNING_LENS],
+    [READINESS_LEVEL], [PUSHBACK_BUDGET_USAGE], [TRIGGERED_SIGNALS_LIST],
+    [MAIN_QUEST_LABEL], [MAIN_QUEST_ANSWER], [VICTORY_CONDITIONS_LIST],
+    [SCOPE_BOUNDARY_ANSWER], [NON_GOALS_LIST], [TOP_RISK_ANSWER],
+    [PLANNER_HANDOFF_ANSWER], [TOPIC_SLUG]
+  Conditional blocks (emit/strip using comment markers):
+    BANNER_BLOCK_START / BANNER_BLOCK_END — scope-creep banner section
+-->
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>[REPORT_TITLE] &mdash; Lite Strategy Report</title>
+  <style>
+    :root {
+      --bg: #f6f1e8;
+      --paper: #fffaf0;
+      --paper-2: #fffdf8;
+      --ink: #252338;
+      --muted: #6f6984;
+      --line: rgba(45, 40, 70, 0.14);
+      --deep: #17182e;
+      --deep-2: #232245;
+      --gold: #d6a84f;
+      --gold-2: #f3d58b;
+      --blue: #4b7bd8;
+      --violet: #7b5cc8;
+      --danger: #b85757;
+      --ok: #3f8f6b;
+      --warn: #b8872c;
+      --shadow: 0 18px 50px rgba(31, 27, 49, 0.12);
+      --radius: 18px;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      background:
+        radial-gradient(circle at top left, rgba(214,168,79,0.18), transparent 30rem),
+        radial-gradient(circle at top right, rgba(75,123,216,0.16), transparent 28rem),
+        var(--bg);
+      color: var(--ink);
+      font: 16px/1.65 ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    .page {
+      width: min(960px, calc(100% - 32px));
+      margin: 0 auto;
+      padding: 32px 0 56px;
+    }
+
+    /* ── Hero ────────────────────────────────────── */
+    .hero {
+      position: relative;
+      overflow: hidden;
+      border-radius: 28px;
+      padding: 34px;
+      background:
+        linear-gradient(135deg, rgba(214,168,79,0.16), transparent 28%),
+        linear-gradient(145deg, var(--deep), var(--deep-2));
+      color: #fff8e8;
+      box-shadow: var(--shadow);
+    }
+
+    .eyebrow {
+      margin: 0 0 10px;
+      color: var(--gold-2);
+      font-size: 0.8rem;
+      font-weight: 800;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+    }
+
+    h1, h2, h3 { margin: 0; line-height: 1.2; }
+
+    h1 {
+      font-size: clamp(1.8rem, 3.5vw, 2.6rem);
+      letter-spacing: -0.04em;
+    }
+
+    .subtitle {
+      max-width: 780px;
+      margin: 14px 0 0;
+      color: rgba(255,248,232,0.82);
+      font-size: 1.05rem;
+    }
+
+    /* ── Meta Grid ──────────────────────────────── */
+    .meta-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 22px;
+    }
+
+    .meta-card {
+      padding: 14px 16px;
+      border: 1px solid rgba(255,255,255,0.14);
+      border-radius: 16px;
+      background: rgba(255,255,255,0.07);
+    }
+
+    .meta-label {
+      display: block;
+      color: rgba(255,248,232,0.62);
+      font-size: 0.72rem;
+      font-weight: 800;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+    }
+
+    .meta-value {
+      display: block;
+      margin-top: 4px;
+      font-weight: 800;
+    }
+
+    /* ── Sections ───────────────────────────────── */
+    .section {
+      margin-top: 24px;
+    }
+
+    /* ── Cards ──────────────────────────────────── */
+    .card {
+      padding: 22px;
+      margin-bottom: 16px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: linear-gradient(180deg, var(--paper-2), var(--paper));
+      box-shadow: 0 12px 28px rgba(31, 27, 49, 0.07);
+    }
+
+    .card h3 {
+      margin-bottom: 10px;
+      color: var(--deep-2);
+      font-size: 1.08rem;
+    }
+
+    .card p { margin: 6px 0; }
+    .card ul { margin: 6px 0; padding-left: 1.2rem; }
+    .card li { margin-bottom: 4px; }
+
+    /* ── Card accent variants ──────────────────── */
+    .card.callout { border-left: 4px solid var(--gold); }
+    .card.ok       { border-left: 4px solid var(--ok); }
+    .card.info     { border-left: 4px solid var(--blue); }
+    .card.warn     { border-left: 4px solid var(--warn); }
+    .card.danger   { border-left: 4px solid var(--danger); }
+    .card.violet   { border-left: 4px solid var(--violet); }
+
+    .gate-label {
+      font-size: 0.82rem;
+      font-weight: 700;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-bottom: 6px;
+    }
+
+    /* ── Scope-Creep Banner ────────────────────── */
+    .banner {
+      padding: 16px 20px;
+      border-radius: var(--radius);
+      border-left: 5px solid var(--warn);
+      background: rgba(184, 135, 44, 0.08);
+    }
+
+    .banner strong {
+      display: block;
+      margin-bottom: 6px;
+      color: var(--warn);
+      font-size: 0.9rem;
+    }
+
+    .banner p {
+      margin: 4px 0;
+      font-size: 0.92rem;
+      line-height: 1.5;
+    }
+
+    .banner code {
+      background: rgba(184, 135, 44, 0.15);
+      padding: 1px 6px;
+      border-radius: 4px;
+      font-size: 0.9em;
+    }
+
+    /* ── Footer ─────────────────────────────────── */
+    .footer {
+      margin-top: 34px;
+      padding: 20px 0 0;
+      color: var(--muted);
+      font-size: 0.9rem;
+      text-align: center;
+    }
+
+    .footer code {
+      background: rgba(23, 24, 46, 0.06);
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 0.9em;
+    }
+
+    /* ── Responsive ─────────────────────────────── */
+    @media (max-width: 860px) {
+      .meta-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+
+    @media (max-width: 560px) {
+      .page {
+        width: min(100% - 20px, 960px);
+        padding-top: 16px;
+      }
+
+      .hero {
+        padding: 24px;
+        border-radius: 22px;
+      }
+
+      .meta-grid {
+        grid-template-columns: 1fr;
+      }
+
+      h1 {
+        font-size: 1.5rem;
+      }
+    }
+
+    /* ── Print ──────────────────────────────────── */
+    @media print {
+      body {
+        background: #fff;
+        color: #111;
+      }
+
+      .hero {
+        box-shadow: none;
+        border-radius: 0;
+      }
+
+      .card {
+        box-shadow: none;
+        break-inside: avoid;
+      }
+
+      .page {
+        width: 100%;
+        padding: 0;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+
+    <!-- ── Hero ──────────────────────────────────── -->
+    <header class="hero">
+      <p class="eyebrow">LITE STRATEGY REPORT</p>
+      <h1>[REPORT_TITLE]</h1>
+      <p class="subtitle">[REPORT_SUBTITLE]</p>
+      <section class="meta-grid">
+        <div class="meta-card">
+          <span class="meta-label">Generated</span>
+          <span class="meta-value">[GENERATED_TIMESTAMP]</span>
+        </div>
+        <div class="meta-card">
+          <span class="meta-label">Planning Lens</span>
+          <span class="meta-value">[PLANNING_LENS]</span>
+        </div>
+        <div class="meta-card">
+          <span class="meta-label">Readiness</span>
+          <span class="meta-value">[READINESS_LEVEL]</span>
+        </div>
+        <div class="meta-card">
+          <span class="meta-label">Pushback Budget</span>
+          <span class="meta-value">[PUSHBACK_BUDGET_USAGE]</span>
+        </div>
+      </section>
+    </header>
+
+    <!-- BANNER_BLOCK_START -->
+    <section class="section banner-section">
+      <article class="banner warn">
+        <strong>&#9888; Scope-Creep Banner</strong>
+        <p>[TRIGGERED_SIGNALS_LIST]</p>
+        <p>This may be a multi-quest project. Consider re-running with <code>skill:liang-relentless-brainstorm &lt;topic&gt;</code>.</p>
+      </article>
+    </section>
+    <!-- BANNER_BLOCK_END -->
+
+    <!-- ── 5 Gate Cards ──────────────────────────── -->
+    <section class="section">
+
+      <!-- Card 1 — Main Quest -->
+      <article class="card callout">
+        <h3>1. Main Quest</h3>
+        <p class="gate-label">[MAIN_QUEST_LABEL]</p>
+        <p>[MAIN_QUEST_ANSWER]</p>
+      </article>
+
+      <!-- Card 2 — Victory Condition -->
+      <article class="card ok">
+        <h3>2. Victory Condition</h3>
+        <ul>
+          [VICTORY_CONDITIONS_LIST]
+        </ul>
+      </article>
+
+      <!-- Card 3 — Scope + Non-goals -->
+      <article class="card info">
+        <h3>3. Scope &amp; Non-goals</h3>
+        <p><strong>In scope:</strong> [SCOPE_BOUNDARY_ANSWER]</p>
+        <p><strong>Non-goals:</strong></p>
+        <ul>
+          [NON_GOALS_LIST]
+        </ul>
+      </article>
+
+      <!-- Card 4 — Top Risk -->
+      <article class="card warn">
+        <h3>4. Top Risk</h3>
+        <p>[TOP_RISK_ANSWER]</p>
+      </article>
+
+      <!-- Card 5 — Planner Handoff -->
+      <article class="card info">
+        <h3>5. Planner Handoff</h3>
+        <p>[PLANNER_HANDOFF_ANSWER]</p>
+      </article>
+
+    </section>
+
+    <!-- ── Footer ─────────────────────────────────── -->
+    <footer class="footer">
+      Generated by liang-quick-brainstorm on [GENERATED_TIMESTAMP].
+      Source slug: <code>[TOPIC_SLUG]</code>.
+      Treat as private working notes unless intentionally shared.
+    </footer>
+
+  </main>
+</body>
+</html>

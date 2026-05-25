@@ -56,6 +56,7 @@ notes: string                # campaign-level free-form notes
 tags: [string]               # arbitrary tags
 generated_by: string         # skill name + version
 schema_version: string       # bumped when this schema changes
+campaign_depends_on: [string]  # campaign_id values (per dc001) of campaigns that must complete before this one; optional; absence = no cross-campaign deps
 ```
 
 ## Quest Contract YAML
@@ -137,6 +138,15 @@ Downstream skills (tacticians and quick) assign workflow when they first process
 - `general` — the general tactician planned the campaign
 - `quick` — the quick skill executed the campaign directly
 
+## Cross-Campaign Dependencies
+
+`campaign_depends_on` declares that this campaign depends on another campaign completing (all quests `passed`) before it can safely run.
+
+- Format: list of `campaign_id` values. Per crosscut decision dc001 (in `camp-2026-05-24-batch-campaign-sweep`), use `campaign_id` strings — not slugs, not paths.
+- Default: absent or empty list means no cross-campaign dependencies.
+- When to populate: the cartographer should populate this field when the source Brainstorm/Strategy Report explicitly declares that this campaign builds on outputs of another campaign. Inferring cross-campaign deps from indirect signals is NOT in scope; if the brainstorm doesn't say it, leave the field empty.
+- Consumer responsibility: downstream tools (e.g., a multi-campaign sweep orchestrator) toposort by these edges and detect cycles. The cartographer does NOT enforce existence of referenced campaigns at write time — it just records the declared dependency. Consumers handle missing-target errors.
+
 ## Validation Rules
 
 Before any file is written:
@@ -149,6 +159,7 @@ Before any file is written:
 - All slugs must be lowercase ASCII with hyphens, no spaces or special characters.
 - `created_at` must be a valid ISO 8601 date or datetime.
 - `workflow`, when present at campaign level, must be exactly `"tdd"`, `"general"`, or `"quick"`. In v3, workflow is campaign-level only (stamped downstream). Per-quest workflow fields from v1/v2 are ignored.
+- When `campaign_depends_on` is present, each entry must be a non-empty string. The cartographer does NOT verify cross-campaign target existence; that is a consumer-side check.
 
 If any rule fails, the skill must not write files.
 
@@ -161,6 +172,8 @@ If any rule fails, the skill must not write files.
 
 ## Schema Versioning
 
+Current schema represents v4 (adds optional `campaign_depends_on`). v3 and earlier remain valid.
+
 If this schema changes:
 
 - Bump `schema_version` in new manifests.
@@ -169,3 +182,5 @@ If this schema changes:
 ### Backward Compatibility
 
 v1 campaigns have workflow per quest in Required Core, assigned by the cartographer. v2 campaigns have workflow per quest as Downstream-Stamped. v3 campaigns have workflow at campaign level only. When a v3 tool encounters a v1/v2 campaign with per-quest workflow values, it ignores them and stamps campaign-level workflow on first contact. The schema_version field in the manifest (Optional Extensions) indicates which version generated the campaign. Absence of schema_version implies v1.
+
+v4 campaigns add optional `campaign_depends_on` (campaign_id list) at the manifest top level. Tools that don't understand v4 will see an unknown optional field and should ignore it gracefully. Campaigns at schema_version 1–3 implicitly have empty cross-campaign dependencies.

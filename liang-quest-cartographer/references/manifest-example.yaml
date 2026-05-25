@@ -1,6 +1,7 @@
 # Canonical example of a Campaign manifest.yaml.
 # This file is illustrative; the skill generates real values per Campaign.
 # Schema source of truth: references/schema.md
+# Schema version: 4 (adds optional campaign_depends_on; v1–v3 manifests remain valid)
 
 campaign_id: "camp-2026-05-17-example-campaign"
 slug: "example-campaign"
@@ -48,5 +49,10 @@ notes: "Generated as a static handoff; regenerate instead of editing."
 tags:
   - "example"
   - "skill-creation"
+# Optional cross-campaign dependencies (uncomment + populate only when this campaign requires
+# another campaign to complete first; per crosscut constraint dc001, use campaign_id values
+# — not slugs, not paths). Absence or empty list = no cross-campaign dependencies.
+# campaign_depends_on:
+#   - "camp-2026-05-20-prior-prerequisite-campaign"
 generated_by: "liang-quest-cartographer"
-schema_version: "3"
+schema_version: "4"
