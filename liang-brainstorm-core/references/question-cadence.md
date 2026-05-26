@@ -39,6 +39,6 @@ Manual:
 Describe in your own words.
 ```
 
-Source: extracted from liang-relentless-brainstorm/SKILL.md Core Contract
+Source: extracted from liang-brainstorm-relentless/SKILL.md Core Contract
 (lines 14-20) per dc001. Rendering format explicitly documented per
-liang-quick-brainstorm/SKILL.md (lines 21-40).
+liang-brainstorm-quick/SKILL.md (lines 21-40).

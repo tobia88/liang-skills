@@ -29,6 +29,6 @@ Use JRPG labels sparingly and functionally:
 Avoid making `Codex` the official artifact name because it can be confused
 with GPT/OpenAI Codex. If used, use it only as occasional flavor.
 
-Source: extracted from liang-relentless-brainstorm/SKILL.md Terminology
+Source: extracted from liang-brainstorm-relentless/SKILL.md Terminology
 section (lines 30-48) per dc001. Variant-specific terms (Quick's Pushback
 Budget, Scope-Creep Banner, Mini-Campaign) stay inline in each variant.

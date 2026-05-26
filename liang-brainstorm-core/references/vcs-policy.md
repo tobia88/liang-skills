@@ -47,5 +47,5 @@ C. Decide later; write the report without changing VCS rules.
 
 Do not silently modify Git ignore rules.
 
-Source: extracted from liang-relentless-brainstorm/SKILL.md VCS Artifact
+Source: extracted from liang-brainstorm-relentless/SKILL.md VCS Artifact
 Policy section (lines 433-461) per dc001.
