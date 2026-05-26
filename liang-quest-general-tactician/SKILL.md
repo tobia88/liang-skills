@@ -624,7 +624,7 @@ Match the existing family:
 ## Relationship to Other Skills
 
 - **Upstream:** `liang-quest-cartographer` produces Quest Contracts this skill consumes.
-- **Further upstream:** `liang-relentless-brainstorm` produces Strategy Reports.
+- **Further upstream:** `liang-brainstorm-relentless` produces Strategy Reports.
 - **Downstream:** `liang-quest-general-executor` consumes `plan.html` and steps through the steps.
 - **Shared foundation:** `liang-quest-core` provides shared reference documents consumed at activation time.
 - **Parallel:** `liang-quest-tdd-tactician` uses TDD cycles; this skill uses ordered steps.

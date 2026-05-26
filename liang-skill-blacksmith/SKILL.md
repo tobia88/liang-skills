@@ -173,7 +173,7 @@ Never propose or apply changes in verify mode. Verify is strictly read-only.
 
 - Does **not** sit in the brainstorm → cartographer → tactician → executor pipeline. Operates independently as a post-authoring quality tool.
 - Operates on SKILL.md files produced by any skill or authored manually.
-- Will **not** trigger `liang-relentless-brainstorm`, `liang-quest-cartographer`, `liang-quest-general-tactician`, `liang-quest-tdd-tactician`, or any executor.
+- Will **not** trigger `liang-brainstorm-relentless`, `liang-quest-cartographer`, `liang-quest-general-tactician`, `liang-quest-tdd-tactician`, or any executor.
 - May be suggested as a follow-up after any skill writes or modifies a SKILL.md.
 - References patterns from `liang-quest-core` for shared conventions (YAML-in-HTML-comment, family visual style) but does not consume or produce campaign/quest artifacts.
 

@@ -650,7 +650,7 @@ Match the existing family:
 ## Relationship to Other Skills
 
 - **Upstream:** `liang-quest-cartographer` produces the Quest Contracts this skill consumes.
-- **Further upstream:** `liang-relentless-brainstorm` produces the Strategy Reports the Cartographer consumes.
+- **Further upstream:** `liang-brainstorm-relentless` produces the Strategy Reports the Cartographer consumes.
 - **Downstream:** `liang-quest-tdd-executor` consumes `plan.html` and steps through the cycles.
 - **Shared contracts:**
   - `.liang/project.yaml` — workspace-wide config. The Tactician bootstraps it on first run; the Executor reads it. `schema_version: 1`.
