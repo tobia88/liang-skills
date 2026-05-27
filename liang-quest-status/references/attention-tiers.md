@@ -17,11 +17,12 @@ The status skill uses these tiers to highlight campaigns needing attention.
 | Status Value | Tier | Rationale |
 |-------------|------|-----------|
 | `failed` | ALERT | Execution failed; requires investigation |
-| `blocked` | ALERT | External dependency prevents progress |
+| `blocked` | ALERT | External dependency prevents progress (deprecated cartographer chain) |
 | `in_progress` | ACTIVE | Currently being executed |
-| `ready_for_planning` | ACTIVE | Awaiting tactician action |
-| `planned` | ACTIVE | Awaiting executor action |
-| `needs_clarification` | INFO | Quest contract has gaps; not actionable yet |
+| `ready` | ACTIVE | Planner-native quest ready to execute (canonical pipeline) |
+| `ready_for_planning` | ACTIVE | Awaiting tactician action (deprecated cartographer chain) |
+| `planned` | ACTIVE | Awaiting executor action (deprecated cartographer chain) |
+| `needs_clarification` | INFO | Quest contract has gaps; not actionable yet (deprecated cartographer chain) |
 | `skipped` | INFO | Skipped due to dependency failure |
 | `passed` | PASSED | Completed successfully |
 

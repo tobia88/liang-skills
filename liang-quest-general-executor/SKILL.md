@@ -3,7 +3,12 @@ name: liang-quest-general-executor
 description: "Executes step plans from liang-quest-general-tactician. Reads shared references from liang-quest-core at activation time. Builds a dependency-ordered quest queue from campaign manifest and processes plan.html via child Pi sub-invocations (execute-child, verify-child, re-plan-child). Two-tier verification: Tier 1 command-based (inline), Tier 2 yes/no checklist (deferred to post-run UAT batch prompt for AFK-safe execution). Validates pre/postconditions per step. On failure, extracts lessons and delegates re-planning. Tracks manifest status, cascade-skips dependents, manages .run/ dirs, supports crash recovery, produces HTML run report. Three execution modes: Pi CLI, Claude subagents, or --batch. Tiered retry: lesson-only then re-plan-child."
 ---
 
-# Liang Quest Executor
+> **DEPRECATED** — Use `liang-quest-planner` + `liang-quest-executor` for new work.
+> This skill is retained for in-flight campaigns and reference. Do not start new
+> campaigns against it. See `liang-quest-core/references/campaign/protocol.md`
+> for the canonical pipeline.
+
+# Liang Quest General Executor (Legacy)
 
 You are Liang's General Quest Executor — the execution skill for non-TDD quests in the JRPG planning family.
 

@@ -61,8 +61,8 @@ b. Detect schema version (reference `references/field-registry.md` Version-Aware
    - `"2"`: v2 rules
    - `"3"`: v3 rules
    - Other: best-effort parse with WARN indicator
-c. Extract campaign-level fields: `campaign_id`, `title`, `created_at`, `schema_version`, `workflow` (campaign-level for v3, ignore per-quest for v1/v2)
-d. Extract quest-level fields for each quest: `id`, `title`, `status`, `depends_on`, `priority`, `current_cycle`, `total_cycles`, `started_at`, `completed_at`, `skip_reason`
+c. Extract campaign-level fields: `campaign_id`, `title`, `created_at`, `schema_version`, `workflow` (campaign-level for v3, ignore per-quest for v1/v2, absent in v4)
+d. Extract quest-level fields for each quest: `id`, `title`, `status`, `depends_on`, `priority` (deprecated chain), `difficulty` (canonical), `file` (canonical) or `path` (deprecated chain), `current_cycle`, `total_cycles`, `started_at`, `completed_at`, `skip_reason`
 
 ### 4. Compute Derived Statistics
 
@@ -86,7 +86,7 @@ b. **Total elapsed time:**
 
 For each quest, map status to tier per `references/attention-tiers.md`:
 - **ALERT:** `failed`, `blocked`
-- **ACTIVE:** `in_progress`, `ready_for_planning`, `planned`
+- **ACTIVE:** `in_progress`, `ready` (canonical), `ready_for_planning` (deprecated), `planned` (deprecated)
 - **INFO:** `needs_clarification`, `skipped`
 - **PASSED:** `passed`
 - Unknown status: default to INFO
@@ -179,6 +179,8 @@ Explicit exclusions from scope:
 
 ## Relationship to Other Skills
 
-- **Upstream:** all quest pipeline skills produce the campaign manifests this skill reads (cartographer, tacticians, executors, quick)
-- **Parallel:** this skill is a read-only observer, not a pipeline stage
-- **Shared:** liang-quest-core provides the campaign directory convention
+- **Upstream (canonical):** `liang-quest-planner` writes the canonical (v4) manifest this skill reads; `liang-quest-executor` mutates quest status as it runs.
+- **Upstream (deprecated chain):** `liang-quest-cartographer`, `liang-quest-general-tactician`, `liang-quest-tdd-tactician`, `liang-quest-general-executor`, `liang-quest-tdd-executor` produce v1–v3 manifests that this skill still parses for in-flight campaigns.
+- **Upstream (parallel pipeline):** `liang-quest-quick` produces v3-shaped manifests with `workflow: "quick"` at campaign level.
+- **Parallel:** this skill is a read-only observer, not a pipeline stage.
+- **Shared:** `liang-quest-core` provides the campaign directory convention and the canonical manifest schema.

@@ -40,33 +40,38 @@ Documents the field union across schema versions v1, v2, and v3.
 
 ### Optional / Enrichment
 
-| Field | Type | v1 | v2 | v3 | Purpose |
-|-------|------|:--:|:--:|:--:|---------|
-| `priority` | string | Y | Y | Y | Display enrichment in expanded view |
-| `path` | string | Y | Y | Y | Quest file path |
-| `readiness` | string | Y | Y | Y | Planning readiness |
-| `workflow` | string | opt | opt | N | Per-quest workflow (v1/v2 only); ignored in v3 |
-| `current_cycle` | integer | opt | opt | opt | Progress: current step/cycle index |
-| `total_cycles` | integer | opt | opt | opt | Progress: total step/cycle count |
-| `started_at` | string (ISO 8601) | opt | opt | opt | Elapsed time computation |
-| `completed_at` | string (ISO 8601) | opt | opt | opt | Elapsed time computation |
-| `current_step_started_at` | string (ISO 8601) | N | opt | opt | Progress polling timestamp |
-| `skip_reason` | string | N | N | def | Reason for skipped quests |
+Cross-version notes: `v4` is the planner-native (canonical) schema produced by `liang-quest-planner` (no workflow field, uses `file` instead of `path`, status is `ready`). `v1`–`v3` belong to the deprecated cartographer/tactician chain.
+
+| Field | Type | v1 | v2 | v3 | v4 | Purpose |
+|-------|------|:--:|:--:|:--:|:--:|---------|
+| `priority` | string | Y | Y | Y | N | Display enrichment (deprecated chain only) |
+| `path` | string | Y | Y | Y | N | Quest file path (deprecated chain: `quest-NNN-slug/index.html`) |
+| `file` | string | N | N | N | Y | Quest file path (canonical: `quest-NNN-name.md`) |
+| `difficulty` | string | N | N | N | Y | `easy` / `medium` / `hard` (canonical only) |
+| `readiness` | string | Y | Y | Y | N | Planning readiness (deprecated chain only) |
+| `workflow` | string | opt | opt | N | N | Per-quest workflow (v1/v2 only); ignored in v3; absent in v4 |
+| `current_cycle` | integer | opt | opt | opt | opt | Progress: current step/cycle index |
+| `total_cycles` | integer | opt | opt | opt | opt | Progress: total step/cycle count |
+| `started_at` | string (ISO 8601) | opt | opt | opt | opt | Elapsed time computation |
+| `completed_at` | string (ISO 8601) | opt | opt | opt | opt | Elapsed time computation |
+| `current_step_started_at` | string (ISO 8601) | N | opt | opt | N | Progress polling timestamp (deprecated chain only) |
+| `skip_reason` | string | N | N | def | def | Reason for skipped quests |
 
 ## Status Vocabulary
 
-Complete set of quest status values across the pipeline:
+Complete set of quest status values across the pipeline. The canonical pipeline (`liang-quest-planner` → `liang-quest-executor`) uses the compact set `ready / in_progress / passed / failed / skipped`. The deprecated cartographer/tactician chain adds `ready_for_planning`, `needs_clarification`, `blocked`, `planned`.
 
 | Status | Source Skill | Meaning |
 |--------|-------------|---------|
-| `ready_for_planning` | Cartographer | Quest contract complete, awaiting tactician |
-| `needs_clarification` | Cartographer | Quest contract has gaps |
-| `blocked` | Cartographer | External dependency prevents progress |
-| `planned` | Tactician | Plan written, awaiting executor |
+| `ready` | Planner (canonical) | Quest is planned and ready to execute |
 | `in_progress` | Executor | Currently being executed |
 | `passed` | Executor | Completed successfully |
 | `failed` | Executor | Execution failed |
 | `skipped` | Executor | Cascade-skipped due to dependency failure |
+| `ready_for_planning` | Cartographer (deprecated) | Quest contract complete, awaiting tactician |
+| `needs_clarification` | Cartographer (deprecated) | Quest contract has gaps |
+| `blocked` | Cartographer (deprecated) | External dependency prevents progress |
+| `planned` | Tactician (deprecated) | Plan written, awaiting executor |
 
 ## Version-Aware Parsing
 
@@ -74,9 +79,10 @@ Complete set of quest status values across the pipeline:
 
 | Version | Detection | Behavior |
 |---------|-----------|----------|
-| v1 | `schema_version` absent or `"1"` | Per-quest `workflow` field may be present. `generated_by` may use legacy name `"liang-brainstorm-campaign-cartographer"`. |
-| v2 | `schema_version: "2"` | Per-quest `workflow` field. `current_step_started_at` may appear on quest entries. |
-| v3 | `schema_version: "3"` | Campaign-level `workflow` field. Per-quest `workflow` fields are ignored if present. |
+| v1 | `schema_version` absent or `"1"` | Deprecated cartographer chain. Per-quest `workflow` field may be present. `generated_by` may use legacy name `"liang-brainstorm-campaign-cartographer"`. |
+| v2 | `schema_version: "2"` | Deprecated cartographer chain. Per-quest `workflow` field. `current_step_started_at` may appear on quest entries. |
+| v3 | `schema_version: "3"` | Deprecated cartographer chain. Campaign-level `workflow` field. Per-quest `workflow` fields are ignored if present. |
+| v4 | `schema_version: "4"` OR canonical-format detection (no `workflow` field, quest uses `file` not `path`, quest `difficulty` present) | Canonical planner-native schema. No workflow field. Quests use `file` (not `path`) and have `difficulty`. Status vocabulary uses `ready` (not `ready_for_planning`/`planned`). |
 
 ### Unknown Versions
 

@@ -1,0 +1,36 @@
+# Example manifest.yaml for liang-quest-planner campaigns.
+# This file is illustrative; the skill generates real values per campaign.
+# Schema defined by liang-quest-planner (independent of liang-quest-core per dc001).
+#
+# `difficulty` is load-bearing: downstream executors route the quest to the
+# model named in .liang/project.yaml's `execution_by_difficulty` mapping.
+# Values: "easy" | "medium" | "hard". See SKILL.md Phase 2a for criteria.
+
+campaign_id: "campaign-example-project"
+title: "Example Project: Build Authentication Module"
+created_at: "2026-05-26T15:00:00+08:00"
+source: "brainstorm"
+quest_count: 3
+quests:
+  - id: "q001"
+    title: "Define Auth API Schema"
+    file: "quest-001-define-auth-api-schema.md"
+    depends_on: []
+    difficulty: "easy"        # single-file YAML/struct definition
+    status: "ready"
+
+  - id: "q002"
+    title: "Implement Token Validation"
+    file: "quest-002-implement-token-validation.md"
+    depends_on:
+      - "q001"
+    difficulty: "medium"      # multi-file, introduces validation helper
+    status: "ready"
+
+  - id: "q003"
+    title: "Wire Auth Middleware"
+    file: "quest-003-wire-auth-middleware.md"
+    depends_on:
+      - "q001"
+    difficulty: "hard"        # cross-system integration with the request pipeline
+    status: "ready"

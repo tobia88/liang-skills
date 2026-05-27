@@ -2,17 +2,38 @@
 
 Shared protocol for how campaigns operate across the JRPG quest planning family.
 
-## Campaign Lifecycle
+## Pipelines
+
+### Canonical: Planner → Executor
+
+Input layout (produced by `liang-quest-planner`):
+
+```
+.liang/campaigns/campaign-<slug>/
+  plan.html                       # campaign-level editorial dossier
+  quest-001-<name>.md             # executable "do" doc (steps + code blocks)
+  quest-002-<name>.md
+  manifest.yaml
+```
+
+Status path: `ready` → `in_progress` → `passed` | `failed` | `skipped`
+Downstream executor: `liang-quest-executor`
+
+No workflow stamp. The planner-native pipeline has a single executor — there is no workflow discriminator. The `workflow` field belongs to the deprecated cartographer/tactician chain only.
+
+### Deprecated: Cartographer → Tactician → Executor
 
 ```
 Brainstorm Report
     ↓
-Campaign Cartographer → Campaign (manifest + quest contracts)
+Campaign Cartographer → Campaign (manifest + quest contracts in per-quest folders)
     ↓
 Tactician (TDD or General) → plan.html per quest
     ↓
 Executor (TDD or General) → run report
 ```
+
+Retained for in-flight campaigns and reference. **Do not start new campaigns against this pipeline.** Each skill in this chain carries a DEPRECATED banner pointing to the canonical planner → executor pair.
 
 ## Layered Truth
 

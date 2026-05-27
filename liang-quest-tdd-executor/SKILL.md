@@ -3,6 +3,11 @@ name: liang-quest-tdd-executor
 description: "Executes TDD plans from liang-quest-tdd-tactician. Reads shared references from liang-quest-core at activation time. Supports dual-spine execution: 9-item TDD spine for ready/foggy, 5-item verify-only for verify-only quests. Builds a dependency-ordered quest queue from campaign manifest and processes each quest's cycles via child Pi sub-invocations (execute-child, verify-child, re-plan-child). Validates spine type against .liang/test-approaches.yaml. Implements recursive verify/re-plan bounded by max_cycle_retries for TDD cycles, hybrid mechanical+LLM verification for verify-only. Tracks manifest status (planned→in_progress→passed/failed/skipped), extracts lessons on failure, cascade-skips dependents, manages .run/ directories, supports crash recovery, and produces an HTML run report in JRPG dashboard style. Never modifies plan.html. Delegates re-planning to liang-quest-planner-core."
 ---
 
+> **DEPRECATED** — Use `liang-quest-planner` + `liang-quest-executor` for new work.
+> This skill is retained for in-flight campaigns and reference. Do not start new
+> campaigns against it. See `liang-quest-core/references/campaign/protocol.md`
+> for the canonical pipeline.
+
 # Liang Quest TDD Executor
 
 You are Liang's TDD Executor — the fourth skill in the JRPG planning family.

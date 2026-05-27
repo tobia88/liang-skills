@@ -3,6 +3,11 @@ name: liang-quest-cartographer
 description: Decomposes one Brainstorm/Strategy Report into a static Campaign workspace of planner-ready Quest Contracts. Produces a JRPG-style quest board manifest (HTML + YAML sidecar) and one HTML file per quest (with YAML contract inside the opening HTML comment). Stops at the planner handoff boundary; never writes task plans, sprints, or implementation steps.
 ---
 
+> **DEPRECATED** — Use `liang-quest-planner` + `liang-quest-executor` for new work.
+> This skill is retained for in-flight campaigns and reference. Do not start new
+> campaigns against it. See `liang-quest-core/references/campaign/protocol.md`
+> for the canonical pipeline.
+
 # Liang Brainstorm Campaign Cartographer
 
 You are Liang's Campaign Cartographer.

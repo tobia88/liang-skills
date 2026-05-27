@@ -1,42 +1,73 @@
 # Status Transitions
 
-Shared status vocabulary and transition rules for manifest quest entries across both TDD and general executors.
+Shared status vocabulary and transition rules for manifest quest entries.
 
-## Full Status Vocabulary
+## Canonical: Planner → Executor Transitions
+
+The canonical pipeline (`liang-quest-planner` → `liang-quest-executor`) uses a compact vocabulary — the planner is the planner and the executor is the executor, so there's no `ready_for_planning → planned` intermediate.
 
 | Status | Meaning | Set By |
 |--------|---------|--------|
-| `ready_for_planning` | Quest contract complete; no plan yet | Cartographer |
-| `planned` | plan.html written | Tactician (TDD or General) |
-| `in_progress` | Execution underway | Executor (TDD, General, or Quick) |
-| `passed` | All cycles/steps completed successfully | Executor |
-| `failed` | A cycle/step exhausted retries | Executor |
+| `ready` | Quest is planned and ready to execute | Planner |
+| `in_progress` | Execution underway | Executor |
+| `passed` | All steps completed and Tier 1 VCs verified (Tier 2 VCs may still be pending UAT) | Executor |
+| `failed` | A step exhausted retries, a Tier 1 VC failed, or a Tier 2 VC failed in post-run UAT | Executor |
 | `skipped` | Dependency failed (cascade) | Executor |
-| `needs_clarification` | Meaningful gaps; planner should not start | Cartographer |
-| `blocked` | Depends on resolution outside the Campaign | Cartographer |
 
-## Allowed Transitions
+### Allowed Transitions
 
-### Cartographer → Tactician
+```
+ready         → in_progress        (executor begins quest)
+in_progress   → passed             (all steps passed and all Tier 1 VCs passed)
+in_progress   → failed             (a step exhausted retries OR a Tier 1 VC failed)
+passed        → failed             (a Tier 2 VC failed in §8a post-run UAT review)
+ready         → skipped            (cascade from dependency failure)
+```
+
+Any transition not listed above is a violation.
+
+### Tiered Retry (Canonical)
+
+`liang-quest-executor` uses tiered retry per step (matching the deprecated general-executor's pattern):
+
+| Retry | Strategy | Details |
+|-------|----------|---------|
+| Retry 1 | Lesson-only | Execute-child receives `accumulated_lessons` + `previous_failure`. No re-plan-child. Original step content unchanged. |
+| Retry 2+ | Re-plan escalation | Re-plan-child invoked with planning model. Produces `revised_instructions` (and optionally `revised_code_block`). Execute-child receives revised content + all accumulated lessons. |
+| Max retries exhausted | Hard fail | Step → `failed`. Quest → `failed`. Final lesson extracted. Transitive dependents cascade-skipped. |
+
+Retry tier does not affect status transitions — both tiers stay in `in_progress`. The tier distinction is recorded in the lesson schema for post-run analysis. Retry limit is `executor.max_step_retries` in `project.yaml` (default: 3).
+
+---
+
+## Deprecated: Cartographer → Tactician → Executor Vocabulary
+
+> **DEPRECATED.** The cartographer/tactician chain is deprecated. Retained for in-flight campaigns.
+
+### Full Status Vocabulary (Deprecated)
+
+| Status | Meaning | Set By |
+|--------|---------|--------|
+| `ready_for_planning` | Quest contract complete; no plan yet | Cartographer (deprecated) |
+| `planned` | plan.html written | Tactician (deprecated) |
+| `in_progress` | Execution underway | Legacy Executor |
+| `passed` | All cycles/steps completed successfully | Legacy Executor |
+| `failed` | A cycle/step exhausted retries | Legacy Executor |
+| `skipped` | Dependency failed (cascade) | Legacy Executor |
+| `needs_clarification` | Meaningful gaps; planner should not start | Cartographer (deprecated) |
+| `blocked` | Depends on resolution outside the Campaign | Cartographer (deprecated) |
+
+### Allowed Transitions (Deprecated)
 
 ```
 ready_for_planning → planned       (tactician writes plan.html)
-```
-
-### Tactician → Executor
-
-The tactician's only allowed mutation is `ready_for_planning → planned`.
-
-### Executor Transitions
-
-```
-planned       → in_progress        (execution begins)
+planned       → in_progress        (legacy execution begins)
 in_progress   → passed             (all cycles/steps pass)
 in_progress   → failed             (a cycle/step exhausts retries)
 planned       → skipped            (cascade from dependency failure)
 ```
 
-Any transition not listed above is a violation.
+`liang-quest-quick` also uses the `ready_for_planning → in_progress` shortcut transition (it bypasses the tactician but consumes cartographer-format campaigns). Quick stays alive; only the cartographer/tactician/general/tdd-executor chain is deprecated.
 
 ### Tiered Retry Behavior
 

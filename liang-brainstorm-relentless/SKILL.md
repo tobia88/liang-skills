@@ -388,11 +388,25 @@ Use this style:
 
 **Next Move**
 
-To continue in a clean context, copy and paste this into a new session:
+Two paths forward — pick whichever fits your situation:
+
+**Option A — Same-Context Planner** (stay in this session)
+
+```
+skill:liang-quest-planner
+```
+
+Best when the brainstorm was focused, context window has room, and you want to plan immediately. The planner reads decisions directly from this conversation — no file argument needed.
+
+**Option B — New-Session Cartographer** (start fresh)
+
+Copy and paste this into a new session:
 
 ```
 skill:liang-quest-cartographer <report-path>
 ```
+
+Best when the brainstorm was long, you want a clean context for planning, or you prefer the file-based pipeline. Uses the saved HTML report as input.
 
 Where `<report-path>` is the actual saved path of the report just written (e.g., `.liang/brainstorm-reports/2026-05-21_1430-my-topic.html`).
 
@@ -400,11 +414,11 @@ If you'd like to preview the report first, I can open it in your default browser
 
 Rules:
 
-- Always suggest `liang-quest-cartographer` as the downstream skill, since that is the next step in the pipeline.
-- Use the literal report path, not a placeholder.
-- Always use the `skill:` prefix. This is the canonical Skill tool invocation format — it produces a copy-pasteable command. Do not use wrapper prefixes (`/liang-pi`, `pi skill`) or bare skill names without the prefix.
-- Present it as a suggestion, not an action. Do not invoke the cartographer automatically.
-- Include a one-line offer to open the report in the browser. Do not present it as a multi-option prompt — just a brief mention. If the user asks to open it, use the platform-appropriate default opener.
+- Present both options as equal alternatives. Neither is deprecated or preferred — each suits different situations.
+- For the planner option (A), use `skill:liang-quest-planner` with no arguments. Same-context activation; it reads the brainstorm from conversation context.
+- For the cartographer option (B), use the literal report path, not a placeholder.
+- Always use the `skill:` prefix for both options. This is the canonical Skill tool invocation format.
+- Present as suggestions, not actions. Do not invoke either skill automatically.
 - This is the final interaction of the brainstorm session.
 
 ## Final HTML Strategy Report

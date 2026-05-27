@@ -1,9 +1,18 @@
 ---
 name: liang-quest-quick
-description: "Single-pass execution skill for the JRPG quest planning family. Consumes campaign manifests and executes quests directly via scout+execute without the tactician+executor pipeline. Reads quest contracts from index.html, scouts the codebase, executes in a single context, verifies victory conditions, and produces a JRPG-style run report. No planning artifacts, no child processes, no retries, no .run/ directories. Status path: ready_for_planning to in_progress to passed/failed/skipped. project.yaml optional."
+description: "DEPRECATED. Retained only for in-flight cartographer-format campaigns. Single-pass execution skill that consumes cartographer-format campaign manifests and executes quests via scout+execute. New work should use liang-brainstorm-quick's in-session subagent dispatch (Option A) or liang-quest-planner (Option B) instead — both run in the same session with no file handoff."
 ---
 
 # Liang Quest Quick
+
+> **DEPRECATED — do not invoke for new work.**
+>
+> This skill is retained only for existing cartographer-format campaigns on disk. The canonical replacement is:
+>
+> - **Apply immediately**: `liang-brainstorm-quick` finalization presents an in-session sonnet subagent dispatch (Option A) that executes the brainstorm directly with no file handoff.
+> - **Plan first**: `liang-quest-planner` (same-session, reads conversation).
+>
+> Cartographer is also deprecated. When the last cartographer-format campaign is processed, this skill can be archived.
 
 You are Liang's Quick Quest Executor — the lightweight execution skill for the JRPG planning family.
 
@@ -177,7 +186,7 @@ Read `vcs_artifacts.execution` from `.liang/project.yaml` to determine how to ha
 - **`"commit"`** — Leave artifacts trackable. Do not apply ignore rules.
 - **`"ask"`** — Ask the user how to handle VCS ignore rules (legacy behavior).
 
-**Fallback (missing config):** If `.liang/project.yaml` exists but `vcs_artifacts` is absent, treat as `"ask"`. After the user answers, write their choice to `project.yaml` under `vcs_artifacts.execution` so subsequent runs are silent. If `project.yaml` does not exist (quest-quick can operate without it), use `"ask"` behavior without writing — the tactician's first-run interview owns `project.yaml` creation.
+**Fallback (missing config):** If `.liang/project.yaml` exists but `vcs_artifacts` is absent, treat as `"ask"`. After the user answers, write their choice to `project.yaml` under `vcs_artifacts.execution` so subsequent runs are silent. If `project.yaml` does not exist (quest-quick can operate without it), use `"ask"` behavior without writing — `liang-quest-executor`'s interactive bootstrap is the canonical owner of `project.yaml` creation. Quick does not bootstrap.
 
 Do **not** silently change Git ignore rules. Apply policy once after the entire chain completes.
 
@@ -266,12 +275,12 @@ This skill must never:
 4. **Create `.run/` directories or checkpoint state files.**
 5. **Process quests without upfront confirmation.**
 6. **Modify, overwrite, or delete `plan.html` files.**
-8. **Silently change Git ignore rules.**
-9. **Read or include secrets, `.env`, `.env.*`, `.git/`, credentials, tokens, dependency folders, build outputs, or large binaries.**
-10. **Use VCS-specific wording in YAML keys.**
-11. **Execute quests whose dependencies have not all passed.**
-12. **Silently resume an interrupted run.**
-13. **Write workflow to quest entries or quest contract HTML files.** Workflow stamp writes to `manifest.yaml` top level only. Never write workflow to quest entries or quest contract HTML files.
+7. **Silently change Git ignore rules.**
+8. **Read or include secrets, `.env`, `.env.*`, `.git/`, credentials, tokens, dependency folders, build outputs, or large binaries.**
+9. **Use VCS-specific wording in YAML keys.**
+10. **Execute quests whose dependencies have not all passed.**
+11. **Silently resume an interrupted run.**
+12. **Write workflow to quest entries or quest contract HTML files.** Workflow stamp writes to `manifest.yaml` top level only. Never write workflow to quest entries or quest contract HTML files.
 
 If the user asks for any of the above, decline and explain the boundary, then offer the closest in-scope alternative.
 
@@ -298,11 +307,14 @@ Match the existing family style, plus Quick-specific elements:
 
 ## Relationship to Other Skills
 
-- **Upstream:** `liang-quest-cartographer` produces Campaign manifests and Quest Contracts.
-- **Parallel:** `liang-quest-general-executor` handles general step plans; `liang-quest-tdd-executor` handles TDD cycle plans. This skill bypasses the tactician+executor pipeline entirely.
+- **Canonical pipeline (separate from this skill):** `liang-quest-planner` → `liang-quest-executor` is the canonical planning+execution pair. It uses a different input format (flat `quest-NNN-*.md` files + campaign `plan.html`) and is unrelated to this skill's cartographer-format pipeline.
+- **Upstream (deprecated, retained for in-flight campaigns):** `liang-quest-cartographer` produces the per-quest-folder cartographer-format manifests (`quest-NNN-slug/index.html`) that this skill consumes.
+- **Parallel (deprecated):** `liang-quest-general-executor` and `liang-quest-tdd-executor` process cartographer-format campaigns via a tactician+executor pipeline. This skill bypasses that pipeline for straightforward quests.
 - **Shared foundation:** `liang-quest-core` provides shared reference documents consumed at activation time.
-- **Shared contracts:** `.liang/project.yaml` — workspace-wide config. Optional for Quick (unlike general/TDD which require it).
+- **Shared contracts:** `.liang/project.yaml` — workspace-wide config. Optional for Quick. The canonical `liang-quest-executor` owns the interactive bootstrap when the file is missing; Quick does not bootstrap.
 - **Not downstream of any tactician.** This skill bypasses the tactician+executor pipeline entirely. There is no `liang-quest-quick-tactician`.
+
+Quick remains live for cartographer-format campaigns; the canonical pipeline for new work is planner → executor.
 
 ## Reference Files
 

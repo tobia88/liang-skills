@@ -3,6 +3,11 @@ name: liang-quest-tdd-tactician
 description: Consumes planner-ready Quest Contracts from a Campaign and emits executable TDD plans (plan.html with YAML-in-opening-HTML-comment). Reads shared reference documents from liang-quest-core at activation time. Always operates in campaign-chain mode, planning all eligible quests in dependency order with one upfront confirmation. Plans are ordered cycles[], each with a checklist spine selected by readiness level (9-item TDD spine for ready/foggy, 5-item verify-only spine for verify-only). Auto-infers quest types from contract content, manages the .liang/test-approaches.yaml registry, and batch-prompts for missing test approaches during queue confirmation. Auto-decides difficulty (easy|medium|hard) with rationale. Bootstraps .liang/project.yaml on first run. Performs narrow manifest mutations (status ready_for_planning → planned). Never produces implementation code, task lists, or sprint plans.
 ---
 
+> **DEPRECATED** — Use `liang-quest-planner` + `liang-quest-executor` for new work.
+> This skill is retained for in-flight campaigns and reference. Do not start new
+> campaigns against it. See `liang-quest-core/references/campaign/protocol.md`
+> for the canonical pipeline.
+
 # Liang Quest TDD Tactician
 
 You are Liang's TDD Tactician - the third skill in the JRPG planning family.

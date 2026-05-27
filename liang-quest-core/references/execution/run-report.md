@@ -1,6 +1,8 @@
 # Run Report Schema
 
-Shared run report format for both TDD and general executors.
+Shared run report format. The canonical `liang-quest-executor` (planner-native) and the deprecated `liang-quest-general-executor` produce reports of similar shape — both include step-level results, tiered retry history, `.run/` child I/O references, and a deferred Tier 2 UAT section. `liang-quest-tdd-executor` adds TDD-cycle-specific fields. `liang-quest-quick` (cartographer-format quick path) produces the leanest report — no retries, no `.run/`, no Tier 2 deferral.
+
+The YAML schema below is the shared envelope. Per-executor specifics are called out per field.
 
 ## File Location
 
@@ -13,7 +15,7 @@ Shared run report format for both TDD and general executors.
 ```yaml
 run_id: string                 # "run-<iso-8601-timestamp>"
 campaign_id: string
-workflow: "tdd" | "general" | "quick"   # from campaign-level workflow
+workflow: "tdd" | "general" | "quick"   # ONLY for deprecated executors; planner-native omits this field
 started_at: string             # ISO 8601
 completed_at: string           # ISO 8601
 duration_seconds: integer
@@ -36,17 +38,28 @@ quests:
         confidence: "high" | "medium" | "low"
         justification: string
 
-    # General-specific
-    steps_completed: integer                  # present for general quests
-    steps_total: integer                      # present for general quests
-    step_retries_used: integer                # present for general quests
+    # General / planner-native specific
+    steps_completed: integer                  # present for general + planner-native quests
+    steps_total: integer                      # present for general + planner-native quests
+    step_retries_used: integer                # present for general + planner-native quests
     lesson_only_retries: integer              # count of lesson-only (tier 1) retries across all steps
     replan_retries: integer                    # count of re-plan escalation (tier 2+) retries across all steps
-    step_results:                             # present for general quests
+    step_results:                             # present for general + planner-native quests
       - step_id: string
         status: "passed" | "failed"
-        verification_tier: 1 | 2
+        verification_tier: 1 | 2              # for deprecated general; planner-native omits (verification is quest-level)
         attempts: integer
+
+    # Planner-native specific (quest-level VC verification)
+    victory_conditions_checked: integer       # count of VCs in the quest's checklist
+    victory_conditions_passed: integer        # count of VCs that passed (Tier 1 + post-UAT Tier 2)
+    tier_2_deferred_count: integer            # count of VCs deferred to UAT
+    vc_results:                               # present for planner-native quests
+      - vc_index: integer
+        vc_text: string
+        tier: 1 | 2
+        status: "passed" | "failed" | "tier_2_deferred"
+        verification_method: "inline_pattern" | "verify_child" | "uat_batch"
 
     # Shared
     skip_reason: string                       # only when skipped

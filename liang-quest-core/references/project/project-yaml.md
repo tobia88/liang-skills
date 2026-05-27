@@ -29,9 +29,9 @@ created_at: string           # ISO 8601
 
 ```yaml
 executor:
-  max_cycle_retries: integer     # default: 3; max retry attempts per cycle/step
+  max_step_retries: integer      # default: 3; max retry attempts per step. Read by canonical liang-quest-executor and deprecated liang-quest-general-executor.
   child_timeout_seconds: integer # default: 300; max time per child invocation
-  max_step_retries: integer      # default: 3; alias for general executor (same as max_cycle_retries)
+  max_cycle_retries: integer     # default: 3; deprecated alias for max_step_retries — used by liang-quest-tdd-executor (deprecated) only. Canonical executor reads max_step_retries.
 ```
 
 If the `executor` block is absent, use defaults silently.
@@ -72,7 +72,9 @@ created_at: "2026-05-19T22:31:00+08:00"
 
 ## First-Run Interview
 
-The tactician (whichever runs first) bootstraps `project.yaml` via an interactive interview. Questions are asked one at a time, in order:
+The canonical `liang-quest-executor` bootstraps `project.yaml` via an interactive interview when the file is missing. (Historically the deprecated tacticians bootstrapped — the canonical pipeline has no tactician, so the executor took over the bootstrap role.) `liang-quest-quick` does NOT bootstrap; it operates without `project.yaml` when absent.
+
+Questions are asked one at a time, in order:
 
 1. **VCS** — "Which version control system does this project use?" Offer: `git`, `perforce`, `none`.
 
@@ -108,7 +110,7 @@ The `models.verify` field is required by both executors. If absent when an execu
 
 ## Rules
 
-- The tactician creates `project.yaml`; the executor reads it.
+- The canonical `liang-quest-executor` creates `project.yaml` when absent and reads it on every run. (The deprecated tacticians also created it in the legacy chain; preserved for in-flight campaigns.)
 - The executor may add the `executor` block if absent (extension, not core change).
 - The executor may add `models.verify` via interactive prompt if absent.
 - No skill may extend the schema beyond defined fields without a version bump.
