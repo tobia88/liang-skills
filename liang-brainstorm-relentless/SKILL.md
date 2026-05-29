@@ -1,6 +1,6 @@
 ---
 name: liang-brainstorm-relentless
-description: Relentless one-question-at-a-time brainstorming for software/project planning, game dev, skill creation, and general project decisions. Uses a functional JRPG strategy structure, challenges vague answers and risky choices, offers 4 options plus recommendation/tradeoff/confidence/manual input, and creates a polished final HTML Strategy Report when brainstorming is complete.
+description: Relentless one-question-at-a-time brainstorming for software/project planning, game dev, skill creation, and general project decisions. Uses a functional JRPG strategy structure, challenges vague answers and risky choices, offers 4 options plus recommendation/tradeoff/confidence/manual input, and creates a polished final Markdown Strategy Report when brainstorming is complete.
 ---
 
 # Liang Relentless Brainstorm
@@ -26,7 +26,7 @@ At activation, read these shared reference files from `liang-brainstorm-core/ref
 - Be firm, respectful, and producer-style. Never insult, mock, moralize, or make the user defend themselves personally.
 - Use functional JRPG/game strategy structure, not full roleplay.
 - Keep in-session notes in chat only. **Do not create files during brainstorming.**
-- Generate the HTML Strategy Report **only when brainstorming is complete or explicitly finalized**.
+- Generate the Markdown Strategy Report **only when brainstorming is complete or explicitly finalized**.
 - Stop at a decision memo. Do not turn this skill into implementation planning. The final report may include **one immediate next move**, not a task list, sprint plan, architecture checklist, or milestones.
 
 ## Terminology
@@ -159,7 +159,7 @@ Use phases with adaptive branching:
 4. **Scope Boundary** — must-have, non-goals, side quests.
 5. **Branching Paths** — alternatives, recommendation, tradeoffs.
 6. **Boss Board** — risks, assumptions, contradictions, mitigations.
-7. **Strategy Report** — readiness check and final HTML generation.
+7. **Strategy Report** — readiness check and final Markdown generation.
 
 Choose the next question by this priority:
 
@@ -368,12 +368,12 @@ Guarded finalization sequence:
 3. Ask whether to continue or finalize anyway.
 4. Prepare final report content.
 5. Auto-generate the report filename. Do not ask the user to confirm or edit it.
-   - Format: `.liang/brainstorm-reports/<YYYY-MM-DD>_<HHMM>-<topic-slug>.html`
+   - Format: `.liang/brainstorm-reports/<YYYY-MM-DD>_<HHMM>-<topic-slug>.md`
    - `<HHMM>` is the current local time (24h) at the moment of finalization.
    - The timestamp makes each filename naturally unique; no collision handling needed.
 6. Ask Git/privacy handling only at finalization.
 7. Create `.liang/brainstorm-reports/` if needed.
-8. Write the final self-contained HTML Strategy Report.
+8. Write the final Markdown Strategy Report.
 9. Tell the user the saved path and proceed directly to the Next Move Prompt.
 
 ### VCS Artifact Policy
@@ -388,65 +388,45 @@ Use this style:
 
 **Next Move**
 
-Two paths forward — pick whichever fits your situation:
-
-**Option A — Same-Context Planner** (stay in this session)
+Planning is the natural next step. Hand off to the planner with the same command either way:
 
 ```
 skill:liang-quest-planner
 ```
 
-Best when the brainstorm was focused, context window has room, and you want to plan immediately. The planner reads decisions directly from this conversation — no file argument needed.
-
-**Option B — New-Session Cartographer** (start fresh)
-
-Copy and paste this into a new session:
-
-```
-skill:liang-quest-cartographer <report-path>
-```
-
-Best when the brainstorm was long, you want a clean context for planning, or you prefer the file-based pipeline. Uses the saved HTML report as input.
-
-Where `<report-path>` is the actual saved path of the report just written (e.g., `.liang/brainstorm-reports/2026-05-21_1430-my-topic.html`).
+- **Same session** (default) — run it now. The planner reads decisions directly from this conversation; no argument needed. Best when the brainstorm was focused and context has room.
+- **Fresh session** — paste the command into a new session and point the planner at the saved report path when prompted (e.g., `.liang/brainstorm-reports/2026-05-21_1430-my-topic.md`). Best when the brainstorm was long and you want a clean context.
 
 If you'd like to preview the report first, I can open it in your default browser — just say so.
 
 Rules:
 
-- Present both options as equal alternatives. Neither is deprecated or preferred — each suits different situations.
-- For the planner option (A), use `skill:liang-quest-planner` with no arguments. Same-context activation; it reads the brainstorm from conversation context.
-- For the cartographer option (B), use the literal report path, not a placeholder.
-- Always use the `skill:` prefix for both options. This is the canonical Skill tool invocation format.
-- Present as suggestions, not actions. Do not invoke either skill automatically.
+- Present the two situations as equal alternatives. Neither is deprecated or preferred — the command is identical; only *when/where* you run it differs.
+- Always use the `skill:` prefix. This is the canonical Skill tool invocation format.
+- Present as a suggestion, not an action. Do not invoke the planner automatically.
 - This is the final interaction of the brainstorm session.
 
-## Final HTML Strategy Report
+## Final Markdown Strategy Report
 
-At finalization, read `references/hybrid-strategy-report-template.md` and write a polished static HTML report.
+At finalization, read `references/hybrid-strategy-report-template.md` and write a polished Markdown report.
 
 Report requirements:
 
-- self-contained `.html`
-- CSS only, no JavaScript
-- no external dependencies
-- no embedded JSON in v1
-- polished static Hybrid Strategy Report style
-- dark hero/header, light readable cards, subtle gold/blue/purple accents
-- responsive layout
-- native `<details>`/`<summary>` for collapsible Quest Log
+- single self-contained `.md` file
+- standard Markdown only (headings, tables, lists, blockquotes, `<details>`/`<summary>` for the collapsible Quest Log)
+- no inline CSS, no embedded HTML styling, no external dependencies
 - formal term: `Strategy Report`
 - JRPG section labels allowed: Main Quest, Victory Conditions, Boss Board, Fog of War, Side Quests, Quest Log
-- HTML-escape user/project content
+- do not include raw secrets, tokens, `.env` contents, credentials, or large file excerpts
 
 Use a **Two-Layer Strategy Report** structure:
 
-1. Hero Header
+1. Header
    - title
    - date
    - planning lens
    - readiness
-   - status badges
+   - status
 2. Quick Read
    - shareable summary
    - final recommendation

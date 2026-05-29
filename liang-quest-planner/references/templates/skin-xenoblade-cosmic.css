@@ -1,0 +1,109 @@
+/* =========================================================================
+   liang-quest-planner — skin-xenoblade-cosmic.css  (Layer 3)
+
+   Direction: Xenoblade-cosmic (design-contract §2.5) — systems / cosmic /
+   large-scale / orbital / abstract architecture.
+
+   §9.1 audit:  --syn-ty (#f0b8ff cosmic-rose) != --code-fg (~#d0d8f0 stellar) OK
+                --syn-nm (#6a4ba8 deep violet)  != --syn-kw (#8c5fd9 violet) OK
+   ========================================================================= */
+
+:root {
+  /* surfaces + text — deep space, nebula blue, cosmic violet, stellar white */
+  --bg:          #0a0b1f;
+  --surface:     #111436;
+  --surface-alt: #1a1e4a;
+  --ink:         #b8d4ff;
+  --ink-muted:   #5a6585;
+  --accent:      #8c5fd9;   /* cosmic violet */
+  --accent-2:    #2a3d8f;   /* nebula blue */
+  --rule:        rgba(184, 212, 255, 0.16);
+
+  /* code block */
+  --code-bg: #08091a;
+  --code-fg: #d0d8f0;
+
+  /* six syntax tokens — audited values from §9.2 */
+  --syn-cm: #5a6585;
+  --syn-kw: #8c5fd9;
+  --syn-ty: #f0b8ff;       /* bump from pale-blue to cosmic-rose */
+  --syn-mc: #a8c8ff;
+  --syn-st: #d4c5ff;
+  --syn-nm: #6a4ba8;       /* bump from kw-match to deep violet */
+
+  /* difficulty — cool -> warm -> hot (§9.5) */
+  --diff-easy:   #4fa0a0;
+  --diff-medium: #b8a060;
+  --diff-hard:   #d95f5f;
+
+  /* decision pills */
+  --pill-rec: #4fa0a0;
+  --pill-rej: #c06060;
+  --pill-def: #5a6585;
+
+  /* typography — futurist sans display, clean sans body */
+  --font-display: "Avenir Next Heavy", "Avenir Heavy", Optima, "Gill Sans Bold", sans-serif;
+  --font-body:    "Avenir Next", Avenir, Optima, "Gill Sans", sans-serif;
+  --font-mono:    "JetBrains Mono", "IBM Plex Mono", Consolas, monospace;
+
+  /* feel */
+  --radius: 12px;
+  --shadow: 0 8px 32px rgba(140, 95, 217, 0.12);
+}
+
+/* ---- motif: nebula gradients, orbital rings, holographic strokes ---- */
+
+/* nebula gradient on body */
+body {
+  background:
+    radial-gradient(ellipse at 30% 20%, rgba(42, 61, 143, 0.35), transparent 55%),
+    radial-gradient(ellipse at 70% 60%, rgba(140, 95, 217, 0.2), transparent 55%),
+    var(--bg);
+}
+
+/* holographic accent on the folio bar */
+.folio-bar {
+  border-bottom: 1px solid rgba(184, 212, 255, 0.25);
+  color: var(--ink-muted);
+  text-shadow: 0 0 8px rgba(140, 95, 217, 0.3);
+}
+
+/* orbital ring around campaign title */
+.campaign-title {
+  text-shadow: 0 0 20px rgba(140, 95, 217, 0.4);
+}
+
+/* floating section cards with depth */
+.quest {
+  background: var(--surface);
+  border: 1px solid rgba(184, 212, 255, 0.12);
+  border-radius: var(--radius);
+  padding: 28px;
+  box-shadow: var(--shadow);
+}
+
+/* holographic accent strokes */
+.quest-header {
+  border-bottom: 1px solid rgba(140, 95, 217, 0.25);
+  padding-bottom: 14px;
+}
+
+.step::before {
+  color: var(--accent);
+  text-shadow: 0 0 6px rgba(140, 95, 217, 0.5);
+}
+
+.code-path {
+  background: var(--surface-alt);
+  color: var(--accent-2);
+  border-bottom: 1px solid rgba(140, 95, 217, 0.2);
+}
+
+.note-card {
+  background: var(--surface);
+  border: 1px solid rgba(184, 212, 255, 0.12);
+}
+
+.diff-badge, .pill {
+  background: var(--surface-alt);
+}

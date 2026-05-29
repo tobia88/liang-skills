@@ -557,10 +557,8 @@ Match the family style:
 ## Relationship to Other Skills
 
 - **Upstream:** `liang-quest-planner` produces the campaign this skill consumes. Same-context planner + child-process-orchestrating executor is the canonical pair.
-- **Shared foundation:** `liang-quest-core` provides shared reference documents (protocol, manifest schema, status transitions, child contracts, run report) consumed at activation time.
-- **Parallel:** `liang-quest-quick` is a sibling executor for cartographer-format campaigns (per-quest folders with `index.html`). Quick is single-context, no children, no retries; this skill orchestrates children with retries.
+- **Shared foundation:** `liang-quest-core` — shared protocol, manifest schema, status transitions, run report.
 - **Shared contracts:** `.liang/project.yaml` — workspace-wide config. Required.
-- **Deprecated siblings:** `liang-quest-cartographer`, `liang-quest-general-tactician`, `liang-quest-tdd-tactician`, `liang-quest-general-executor`, `liang-quest-tdd-executor` — the old cartographer → tactician → executor chain. Each carries a DEPRECATED banner pointing here.
 
 ## Reference Files
 

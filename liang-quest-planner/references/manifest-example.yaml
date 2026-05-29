@@ -6,7 +6,7 @@
 # model named in .liang/project.yaml's `execution_by_difficulty` mapping.
 # Values: "easy" | "medium" | "hard". See SKILL.md Phase 2a for criteria.
 
-campaign_id: "campaign-example-project"
+campaign_id: "campaign-2026-05-26-1500-example-project"
 title: "Example Project: Build Authentication Module"
 created_at: "2026-05-26T15:00:00+08:00"
 source: "brainstorm"

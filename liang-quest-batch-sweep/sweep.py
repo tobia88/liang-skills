@@ -3,17 +3,13 @@ liang-quest-batch-sweep — sweep.py
 
 Multi-campaign orchestrator script. Discovers all eligible campaigns under
 .liang/campaigns/, resolves cross-campaign dependencies via the optional
-`campaign_depends_on` manifest field (campaign_id values, per dc001),
-toposorts the campaign DAG (rejecting cycles), runs pre-flight validation,
-and dispatches one executor invocation per campaign via Pi CLI with
---no-confirm (per q001 of camp-2026-05-24-batch-campaign-sweep).
+`campaign_depends_on` manifest field, toposorts the campaign DAG (rejecting
+cycles), runs pre-flight validation, and dispatches one executor invocation
+per campaign via Pi CLI with --no-confirm.
 
 NAMING: this file is the "sweep script" — the OUTER multi-campaign
-orchestrator. It is distinct from the "batch executor script" already
-documented inside liang-quest-general-executor under --batch mode, which
-orchestrates a SINGLE campaign internally. Per dc006, do not conflate the
-two. The sweep script invokes the executor (which may or may not use its
-own --batch mode) once per eligible campaign.
+orchestrator. It invokes liang-quest-executor (which may use its own --batch
+mode internally) once per eligible campaign.
 
 State lives on disk in manifest.yaml status fields. The script is
 idempotent on relaunch: campaigns with status passed/skipped are skipped;
@@ -23,7 +19,7 @@ planned/failed are run. Manifest mutations use write-to-temp-then-rename
 Exit codes (matching the executor's contract from q001):
   0 — all campaigns passed
   1 — at least one campaign failed
-  2 — configuration error (no campaigns eligible, workflow mismatch, etc.)
+  2 — configuration error (no campaigns eligible, etc.)
   3 — unexpected crash
 
 Usage: python sweep.py [--dry-run] [--workspace <path>]
@@ -33,6 +29,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import shutil
 import sys
 import subprocess
 import tempfile
@@ -46,7 +43,7 @@ import yaml  # pyyaml; see requirements.txt
 CAMPAIGNS_DIR_NAME = ".liang/campaigns"
 PROJECT_YAML_PATH = ".liang/project.yaml"
 SWEEP_REPORTS_DIR_NAME = ".liang/sweep-reports"
-EXECUTOR_SKILL_NAME = "liang-quest-general-executor"
+EXECUTOR_SKILL_NAME = "liang-quest-executor"
 
 EXIT_OK = 0
 EXIT_QUEST_FAILED = 1
@@ -55,8 +52,6 @@ EXIT_CRASH = 3
 
 RUNNABLE_STATUSES = {"planned", "failed"}
 SKIPPABLE_STATUSES = {"passed", "skipped"}
-REQUIRED_WORKFLOW = "general"  # per dc005
-
 
 def discover_campaigns(workspace: Path) -> list[dict[str, Any]]:
     """
@@ -92,8 +87,7 @@ def toposort_campaigns(campaigns: list[dict[str, Any]]) -> list[dict[str, Any]]:
     Per dc001, campaign_depends_on values are campaign_id strings. Missing
     field or empty list = no cross-campaign deps. Raises ValueError on
     cycle detection. Campaigns whose declared deps don't resolve to known
-    campaign_ids are kept (treated as roots) — the cartographer is
-    responsible for declaring valid deps; the sweep script tolerates
+    campaign_ids are kept (treated as roots) — the sweep script tolerates
     missing references rather than blocking the whole sweep.
     """
     by_id: dict[str, dict[str, Any]] = {c["campaign_id"]: c for c in campaigns}
@@ -155,10 +149,9 @@ def preflight_campaign(campaign: dict[str, Any]) -> tuple[list[str], list[str]]:
     Blocking errors prevent the campaign from being dispatched.
 
     Checks performed:
-      1. workflow field is 'general' (per dc005 — refuse non-general in v1).
-      2. quests[] is a non-empty list.
-      3. Every quest has a path that resolves to an existing index.html.
-      4. Every quest with status 'planned' has a sibling plan.html.
+      1. quests[] is a non-empty list.
+      2. Campaign has a campaign-level plan.html.
+      3. Every quest has a file field that resolves to an existing .md file.
     """
     blocking: list[str] = []
     warnings: list[str] = []
@@ -166,32 +159,24 @@ def preflight_campaign(campaign: dict[str, Any]) -> tuple[list[str], list[str]]:
     campaign_dir = campaign["campaign_dir"]
     cid = campaign.get("campaign_id", "<unknown>")
 
-    workflow = campaign.get("workflow")
-    if workflow is None:
-        blocking.append(f"{cid}: missing workflow stamp; run tactician first")
-    elif workflow != REQUIRED_WORKFLOW:
-        blocking.append(
-            f"{cid}: workflow is '{workflow}', expected '{REQUIRED_WORKFLOW}' (dc005)"
-        )
-
     quests = campaign.get("quests")
     if not isinstance(quests, list) or len(quests) == 0:
         blocking.append(f"{cid}: quests[] is missing or empty")
         return blocking, warnings
 
+    plan_html = campaign_dir / "plan.html"
+    if not plan_html.is_file():
+        blocking.append(f"{cid}: campaign plan.html missing at {plan_html}")
+
     for quest in quests:
         qid = quest.get("id", "<unknown>")
-        quest_path = quest.get("path")
-        if not quest_path:
-            blocking.append(f"{cid}/{qid}: missing path")
+        quest_file = quest.get("file")
+        if not quest_file:
+            blocking.append(f"{cid}/{qid}: missing file")
             continue
-        quest_index = campaign_dir / quest_path
-        if not quest_index.is_file():
-            blocking.append(f"{cid}/{qid}: quest index.html not found at {quest_index}")
-        if quest.get("status") == "planned":
-            plan_html = quest_index.parent / "plan.html"
-            if not plan_html.is_file():
-                blocking.append(f"{cid}/{qid}: status=planned but plan.html missing at {plan_html}")
+        quest_md = campaign_dir / quest_file
+        if not quest_md.is_file():
+            blocking.append(f"{cid}/{qid}: quest markdown not found at {quest_md}")
 
     return blocking, warnings
 
@@ -264,7 +249,7 @@ def dispatch_campaign(campaign: dict[str, Any], dry_run: bool = False) -> int:
     In dry-run mode, prints the command and returns 0 without invoking.
 
     The exact pi CLI argument layout follows the pattern documented in
-    liang-quest-general-executor/SKILL.md (Pi CLI mode child invocation
+    liang-quest-executor/SKILL.md (Pi CLI mode child invocation
     style). If pi cannot surface a non-zero exit code natively (per the
     q001 Failure Modes 'Exit code emission failure' entry), this function
     parses the stderr's LAST line for 'EXEC_EXIT_CODE: <n>' as a fallback.
@@ -272,8 +257,13 @@ def dispatch_campaign(campaign: dict[str, Any], dry_run: bool = False) -> int:
     campaign_dir = campaign["campaign_dir"]
     cid = campaign.get("campaign_id", "<unknown>")
 
+    # Resolve the pi launcher to its full path. On Windows the npm shim is
+    # `pi.cmd`, and subprocess (shell=False) uses CreateProcess, which does NOT
+    # apply PATHEXT — so bare "pi" raises FileNotFoundError. shutil.which honors
+    # PATHEXT and is a no-op (returns the resolved path) on POSIX.
+    pi_exe = shutil.which("pi") or "pi"
     cmd = [
-        "pi",
+        pi_exe,
         "--skill", EXECUTOR_SKILL_NAME,
         "--no-confirm",
         str(campaign_dir),
@@ -531,9 +521,15 @@ def main(argv: list[str] | None = None) -> int:
         print(f"[sweep] {e}", file=sys.stderr)
         return EXIT_CONFIG_ERROR
 
-    # Per-campaign pre-flight — collect blocking errors
+    # Per-campaign pre-flight — collect blocking errors.
+    # Skip campaigns where all quests are already terminal (passed/skipped/failed)
+    # — they don't need structural validation.
+    TERMINAL_STATUSES = {"passed", "skipped", "failed"}
     blocked_ids: set[str] = set()
     for c in ordered:
+        quest_statuses = [q.get("status") for q in c.get("quests", [])]
+        if quest_statuses and all(s in TERMINAL_STATUSES for s in quest_statuses):
+            continue
         blocking, warnings = preflight_campaign(c)
         for w in warnings:
             print(f"[sweep] warning: {w}", file=sys.stderr)

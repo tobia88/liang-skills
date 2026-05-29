@@ -1,0 +1,109 @@
+/* =========================================================================
+   liang-quest-planner — skin-nier-monochrome.css  (Layer 3)
+
+   Direction: NieR-monochrome (design-contract §2.7) — data / analytics /
+   observability / brutalist / instrumentation.
+   Palette VERIFIED in the NieR bug-sweep campaign (2026-05-27, §9.2).
+
+   Layer 3 = :root variable block (all values base.css consumes) + motif
+   rules (pure CSS on the canonical classes). No new markup, no JS.
+
+   §9.1 audit:  --syn-ty (#dcc89c sand)  !=  --code-fg (#f0ede5 bone)  OK
+                --syn-nm (#a78a6e bronze) != --syn-kw (#e36744 rust)   OK
+   ========================================================================= */
+
+:root {
+  /* surfaces + text — bone paper, ink, rust accent */
+  --bg:          #f6f3eb;
+  --surface:     #f1ece0;
+  --surface-alt: #e7e1d2;
+  --ink:         #1a1a1a;
+  --ink-muted:   #4a4a4a;
+  --accent:      #b8442f;   /* rust */
+  --accent-2:    #4a4a4a;   /* slate */
+  --rule:        rgba(26, 26, 26, 0.22);
+
+  /* code block */
+  --code-bg: #1a1a1a;
+  --code-fg: #f0ede5;       /* bone identifier tone */
+
+  /* six syntax tokens — verified values, use as-is for NieR */
+  --syn-cm: #7a7a7a;
+  --syn-kw: #e36744;
+  --syn-ty: #dcc89c;
+  --syn-mc: #ff8159;
+  --syn-st: #b8b5a8;
+  --syn-nm: #a78a6e;
+
+  /* difficulty — cool -> warm -> hot (§9.5) */
+  --diff-easy:   #4f7a4a;
+  --diff-medium: #b8882f;
+  --diff-hard:   #b8442f;
+
+  /* decision pills */
+  --pill-rec: #4f7a4a;
+  --pill-rej: #8a3a2c;
+  --pill-def: #6a6a6a;
+
+  /* typography — heavy sans display, clean sans body, mono used heavily */
+  --font-display: "Avenir Next", "Franklin Gothic", "Gill Sans", "Helvetica Neue", system-ui, sans-serif;
+  --font-body:    "Helvetica Neue", "Avenir Next", Optima, system-ui, sans-serif;
+  --font-mono:    "JetBrains Mono", "IBM Plex Mono", "Cascadia Mono", Consolas, monospace;
+
+  /* feel — brutalist sharp corners, no elevation */
+  --radius: 0;
+  --shadow: none;
+}
+
+/* ---- motif: hard single-stroke rules + technical readout framing ----- */
+
+/* instrument-panel folio bar with a leading directive glyph */
+.folio-bar {
+  border-bottom: 2px solid var(--ink);
+  color: var(--ink);
+}
+.folio-bar::before {
+  content: "//";
+  color: var(--accent);
+  margin-right: 6px;
+  font-weight: 700;
+}
+
+/* oversized faded identifier glyph behind each quest header (readout) */
+.quests { counter-reset: qn; }
+.quest { position: relative; counter-increment: qn; }
+.quest-header {
+  border-left: 3px solid var(--accent);
+  padding-left: 18px;
+}
+.quest-header::before {
+  content: counter(qn, decimal-leading-zero);
+  position: absolute;
+  top: -10px;
+  right: 0;
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: clamp(3rem, 9vw, 6.5rem);
+  line-height: 1;
+  color: rgba(26, 26, 26, 0.06);
+  z-index: 0;
+  pointer-events: none;
+}
+.quest-header > * { position: relative; z-index: 1; }
+
+/* terminal-style code-path readout */
+.code-path {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--accent);
+  border-bottom: 1px solid var(--ink);
+}
+
+/* hard single-stroke section rules above campaign-level headings */
+.toc-heading, .notes-heading {
+  border-top: 2px solid var(--ink);
+  padding-top: 14px;
+}
+
+/* heavier difficulty/pill weight to suit the brutalist face */
+.diff-badge, .pill { font-weight: 800; }

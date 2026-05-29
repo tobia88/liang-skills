@@ -134,44 +134,82 @@ The planner picks one direction per campaign automatically. Match in this order:
 
 ---
 
-## 4. Delegation Protocol
+## 4. Assembly Protocol
 
-The planner soft-delegates HTML generation to the `frontend-design:frontend-design` skill when available.
+The planner assembles `plan.html` from three fixed layers rather than regenerating CSS every run or hand-delegating to `frontend-design`.
 
-### 4.1 Detection
+1. **Generate ONLY the fixed-body HTML** per `references/templates/class-contract.md` — the variable per-campaign content (masthead, TOC, quest sections, notes, footer). The HTML structure and class names are identical regardless of which aesthetic direction is chosen. No theme needs bespoke markup.
+2. **Read the two CSS layers from disk** — `references/templates/base.css` (all structure + all 14 pitfall fixes, zero hardcoded colors) and `references/templates/skin-<chosen>.css` (the `:root` variable block + motif rules for the chosen direction).
+3. **Inline the layers into a single `<style>` block** — `base.css` first, then the skin, then `mockup.css` **only if** the campaign is UI-bearing and a wireframe is composed (§10). The CSS cascade is deliberate: skins override nothing structural, only variables and optional motif rules; `mockup.css` consumes the same skin variables and adds only wireframe classes.
+4. **Output remains a single self-contained file** — the contract's `self_contained` and `no_external_deps` clauses (§1) are satisfied by inlining the authoring sources at generation time. The `.css` files live in the skill's `references/templates/` directory; they never ship beside `plan.html`.
 
-Check whether `frontend-design:frontend-design` (or the bare alias `frontend-design`) appears in the current environment's skill list. If neither is present, fall back to inline generation.
+### 4.1 Body-Only Generation Contract
 
-### 4.2 Delegation Prompt Composition
+The planner generates **only the fixed semantic body** — no inline CSS, no `<style>` block, no palette selection in the body markup. The body skeleton is defined in `references/templates/class-contract.md` and is identical across all aesthetic directions.
 
-When delegating, the prompt to `frontend-design:frontend-design` must include:
+### 4.2 Delegation Scope (optional)
 
-1. **Output path**: the absolute path to `plan.html` in the campaign folder
-2. **Chosen aesthetic direction**: name, palette hex anchors, typography pairing, decorative motif, layout direction (copy verbatim from the catalog entry above)
-3. **Content map**: the full Decision Summary content to render — hero metadata, TOC, per-quest sections, campaign notes, footer attribution
-4. **HTML Quality Contract**: all nine clauses verbatim from section 1 above
-5. **CSS Pitfall Guardrails**: all clauses verbatim from section 5 below
-6. **Anti-patterns**: section 6 below verbatim
-7. **Required Content Map**: the structural elements every output must contain
+If `frontend-design:frontend-design` is available, it may be invoked **only** for body-content generation — generating the fixed-structure HTML skeleton per `class-contract.md`. CSS is never delegated; the planner always reads and inlines `base.css` + the chosen skin itself. If `frontend-design` is unavailable or fails, the planner generates the body inline.
 
-### 4.3 Fallback
+### 4.3 Verification
 
-If delegation is unavailable, fails, or produces output that obviously violates the quality contract (e.g., the file isn't written, or a quick visual check fails), the planner generates the HTML inline using the same direction, palette, contract, and pitfall guardrails. The fallback path produces correct HTML — just with less of the specialist polish frontend-design adds.
-
-### 4.4 Verification
-
-Regardless of path, after generation:
+Regardless of path, after assembly:
 
 - Confirm the file exists at the expected path
 - Spot-check that anchor IDs match `href` values for the TOC
 - Confirm no `<script>` tags appear in the output
 - Confirm the output is a single self-contained file
+- Run the Visual Spot-Check (§4.4) before auto-opening in the browser
+
+### 4.4 Visual Spot-Check
+
+Take Playwright screenshots at **375px viewport width only**, sampling the two content extremes plus the decisions table:
+
+1. **Longest-content quest** — the quest with the most steps + longest code block.
+2. **Shortest-content quest** — the quest with the fewest steps + shortest code block.
+3. **Decisions table section** — the `notes-wide` block containing the Locked Decisions table (a known §5.5 / §5.11 risk at narrow widths).
+
+`base.css` + every skin have been pre-audited at 1440 / 720 / 375 (§5 pitfall fixes, §9 syntax-token contrast, responsive collapse). Only **content-driven layout breaks** remain — overflow in unusually long inline `<code>` that wasn't in the fixture, edge cases in per-campaign objective lists, very long file-path labels in code blocks. Sampling the extremes catches both sides of the failure spectrum.
+
+**Python invocation** (assumes `playwright` is installed):
+
+```python
+from playwright.sync_api import sync_playwright
+URL = "file:///<absolute-path-to-plan.html>"
+OUT = "<absolute-path-to-screenshot-dir>"
+with sync_playwright() as p:
+    b = p.chromium.launch()
+    c = b.new_context(viewport={"width": 375, "height": 800})
+    pg = c.new_page()
+    pg.goto(URL)
+    pg.locator("#qNNN").screenshot(path=f"{OUT}/longest-375.png")     # longest quest ID
+    pg.locator("#qMMM").screenshot(path=f"{OUT}/shortest-375.png")    # shortest quest ID
+    pg.locator(".notes-wide").screenshot(path=f"{OUT}/notes-table-375.png")
+    b.close()
+```
+
+**If Playwright is unavailable**, skip the screenshot loop silently and proceed to auto-open — the user becomes the visual audit.
+
+---
+
+## 4a. Templates Reference
+
+The three-layer generation model is backed by authoring sources in `references/templates/`. The planner reads these at generation time; they never ship beside `plan.html`.
+
+| File | Role | Notes |
+|------|------|-------|
+| `references/templates/class-contract.md` | Fixed body structure + CSS variable interface | The single source of truth for class names, HTML skeleton, and the skin variable contract. Read by the planner's body generator. |
+| `references/templates/base.css` | Shared structure + all 14 pitfall fixes (§5.1–5.14) | Written and visually audited **once**. Contains zero hardcoded colors — every visual value is a `var(--x)` resolved by the skin. **§5.1–5.14 are baked into this file — the planner must not re-derive them per campaign.** |
+| `references/templates/skin-<name>.css` | Per-direction palette + motif | Naming convention: `skin-` + lowercase-hyphenated direction slug (e.g., `skin-nier-monochrome.css`, `skin-ff-gold.css`). Each skin defines the full `:root` variable block plus optional motif rules. |
+| `references/templates/mockup.css` | Generic UI-wireframe kit (Layer 4, conditional) | Zero hardcoded colors — consumes the skin's variable interface. Inlined **only** when a UI wireframe is composed (§10). Provides reusable primitives (frame, tabs, toolbar, fields, grouped lists, data grid, split panes, status bar, empty state, inline annotation badges). |
+
+When the planner picks an aesthetic direction, it resolves the skin filename as `skin-<lowercase-hyphenated-direction>.css` and reads it from `references/templates/`.
 
 ---
 
 ## 5. CSS Pitfall Guardrails
 
-These are common AI-generated CSS bugs the generator must actively avoid. Codify them here so both delegated and fallback paths know to watch for them.
+These are common AI-generated CSS bugs now **baked into `base.css` — the planner does not re-derive these rules per campaign.** They are preserved here as documentation of what `base.css` solves.
 
 ### 5.1 — Do not use `display: grid` or `display: flex` on `<li>`, `<p>`, or `<a>` elements that contain mixed inline content
 
@@ -376,6 +414,60 @@ pre code .kw { color: var(--syn-kw); font-weight: 600; }
 
 Equivalent alternative: scope the inline-code rule with `:not(pre) > code` so it never matches `pre code` in the first place. Either approach works; the explicit reset is louder and easier to audit.
 
+### 5.13 — Asymmetric content in 2-column grids leaves empty space
+
+**Bug**: A `grid-template-columns: 2fr 1fr` quest body (or any 2-column grid where one column carries the bulk of the content) stretches both grid cells to the row's intrinsic height. When the heavy column (steps + code blocks + rationale) is much taller than the light column (Dependencies + Victory Conditions), the light column finishes early and the rest of its cell renders as a visible paper-colored void — often 60-70% of the quest card height when step counts diverge across quests.
+
+**Symptom**: The sidebar finishes ~30% down the quest card; the remaining vertical space is empty cream/paper with no content. The bug is invisible on quests with short step lists and dramatic on quests with long step lists, so it grows asymmetrically as content varies across the campaign.
+
+**Fix**, in order of preference for dossier/brief aesthetics:
+
+1. **Restructure to footer (preferred)** — main content fills full width, sidebar content moves to a 2-column footer strip below with a horizontal rule above. Sequential reading flow (steps → code → rationale → deps + VC). No dead space. Footer collapses to single column on narrow viewports.
+
+   ```css
+   .quest-main { /* full-width main column */ }
+   .quest-footer {
+     display: grid;
+     grid-template-columns: 1fr 1fr;
+     gap: 20px;
+     margin-top: 32px;
+     padding-top: 24px;
+     border-top: 1px solid var(--rule);
+   }
+   @media (max-width: 720px) {
+     .quest-footer { grid-template-columns: 1fr; gap: 14px; }
+   }
+   ```
+
+2. **Sticky sidebar (alternative)** — `position: sticky; align-self: start; top: 16px` on the sidebar so it follows the user as they scroll through the long main column. Empty space below is still visible at first paint, but the aside stays useful while reading. Acceptable when the sidebar layout intent is structural to the aesthetic.
+
+**When to apply**: any quest decomposition where step counts vary substantially across quests (e.g., 3 steps in one, 10 in another). If every quest has roughly equal step counts the 2-column grid works fine.
+
+### 5.14 — Inline `<code>` overflows narrow containers (generalization of §5.5)
+
+**Bug**: §5.5 covers `<code>` inside `<td>` table cells. The same root cause hits *any* container narrower than ~400px that holds user-derived inline `<code>` — sidebar cards, callout boxes, footer cells, narrow grid items. Long identifiers (regex strings, command lines, file paths, fully-qualified type names) extend past the container's right edge and render as visible overflow into the paper-colored space beside the card.
+
+**Symptom**: A Victory Condition like `grep -rE 'ready_for_planning\|needs_clarification\|...'` runs off the right edge of a 300px sidebar card. The text is visible but extends into adjacent grid space, breaking the card's visual containment.
+
+**Fix**: Apply both the container reset *and* code-level wrapping. The container needs `min-width: 0` to override grid items' default `min-width: auto`; the inline code needs explicit break rules because `word-break: break-word` does not inherit through `<code>` boundaries reliably.
+
+```css
+.aside-card, .sidebar-card, .callout {
+  min-width: 0;          /* override grid item default */
+  /* ...rest of card styling... */
+}
+.aside-card code:not(pre code) {
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+.aside-card ul li {
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+```
+
+**Generalized rule**: any container narrower than ~400px holding user-derived inline `<code>` needs the same three properties (`min-width: 0` on container, `word-break: break-word` + `overflow-wrap: anywhere` on code). Apply this proactively to every sidebar/footer/callout pattern, not only when the bug appears in a specific quest's content.
+
 ---
 
 ## 6. Anti-Patterns
@@ -410,11 +502,13 @@ Every `plan.html` must contain these structural elements, regardless of aestheti
 4. **Campaign notes** with risks and open questions
 5. **Footer** with generator attribution and timestamp
 
+**Conditional:** a single **UI Layout Wireframe** section (§10) between the TOC and the first quest, included **only** for UI-bearing campaigns. Not required for backend / data / refactor campaigns.
+
 ---
 
 ## 8. Version & Provenance
 
-- Contract version: 1.4
+- Contract version: 1.7
 - Authored: 2026-05-27
 - Owning skill: `liang-quest-planner`
 - Companion skill (soft dependency): `frontend-design:frontend-design`
@@ -423,6 +517,9 @@ Every `plan.html` must contain these structural elements, regardless of aestheti
   - v1.2 — added §5.8 (reading margins and desktop content width); codifies tech-blog default widths (`max-width: 1080–1200px`, `48–64px` side padding) after the planner shipped a cramped 880px / 32px default that the user flagged as too tight to read.
   - v1.3 — added §5.9 (don't uppercase identifier-bearing titles), §5.10 (pills need `white-space: nowrap`), §5.11 (multi-column tables don't fit auto-fit cards); revised §5.8 to bump the default range to `1280–1400px` after 1120px still felt cramped on 1920px+ displays with 2:1 quest-body grids.
   - v1.4 — added §5.12 (inline-`code` base styling leaks into `<pre><code>`); strengthened §9.1 with explicit `.ty ≠ --code-fg` and `.nm ≠ .kw` rules + an "identifier default" note treating `--code-fg` as a sixth syntax color; audited §9.2 palette starting points (NieR-monochrome re-tuned and verified, other directions annotated with required first-use bumps); added the `pre code` reset and `--code-fg` declaration to §9.3 skeleton. Driven by the interaction-system bug-sweep campaign where the NieR starting palette made types vanish into identifiers and numbers merge with keywords; lesson generalized so future palettes catch the same bugs before the user does.
+  - v1.5 — added §5.13 (asymmetric content in 2-col grids leaves empty space — restructure-to-footer preferred over sticky sidebar); added §5.14 (inline `<code>` overflows narrow containers, generalizes §5.5 from tables to any narrow card); promoted Playwright screenshot loop from §9.2 syntax-palette-only mention to a mandatory §4.5 Visual Self-Audit with three viewports (1440/720/375), an extreme-sampling rule (longest-content quest + shortest-content quest, never middle), and an audit checklist mapped to §1 + §5. Also added `Run the Visual Self-Audit (§4.5)` as a §4.4 verification step. Driven by the finish-pipeline-cleanup campaign where q002's long step list left a 65% empty void in the right sidebar, q003's Victory Conditions regex strings overflowed the narrow aside card, and three rounds of screenshot inspection caught issues that the post-generation "ok the file exists" verification did not.
+  - v1.6 — layered architecture: §4 becomes an Assembly Protocol (body generated per class-contract.md, base.css + skin-<name>.css inlined, CSS never regenerated per run); frontend-design delegation scoped to body-content only (§4.2); §4.5 collapses to a longest+shortest 375px spot-check plus decisions table (§4.4); §4a Templates Reference section added documenting the three-layer model and the skin naming convention; §5.1–5.14 marked baked-into-base.css (planner must not re-derive); §9.3 split between base.css (token rules + pre code reset) and skins (`:root` palette variables).
+  - v1.7 — added §10 (UI Wireframe Mockup) + conditional Layer 4 `mockup.css`: optional skin-matched wireframe for UI-bearing campaigns, with inline-badge annotations. Lesson baked in (class-contract hard-rule 6): mockup colors come from skin vars on explicit surface backgrounds, and active/checked/selected states use accent borders + text, never fills behind text — making the dark-on-light fall-through bug that prompted this structurally impossible.
 
 ---
 
@@ -468,21 +565,17 @@ Hex values are starting points, not prescriptions — tune for the 4.5:1 contras
 
 ### 9.3 — CSS Skeleton
 
+The token rules live in `base.css` (the `pre code` block and the six `pre code .cm/.kw/.ty/.mc/.st/.nm` rules, the `pre code` reset per §5.12, and the print collapse). Each `skin-*.css` defines the palette variables in `:root` — `--code-bg`, `--code-fg`, and the six `--syn-*` properties. The skin never touches the token rules themselves; the base never declares the variables it consumes. This is the layered split.
+
+**Base.css skeleton** (do not copy-paste — read the file at generation time):
+
 ```css
 :root {
-  /* Code-block surface + the de-facto identifier color (see §9.1) — both
-     must be picked per-direction. --code-fg must differ perceptibly from
-     --syn-ty or every type name reads as identifier-tone. */
-  --code-bg: #1a1a1a;
-  --code-fg: #f0ede5;
-
-  /* Six syntax-token colors. Tune per-direction; see §9.2. */
-  --syn-cm: #7a7a7a;
-  --syn-kw: #e36744;
-  --syn-ty: #dcc89c;
-  --syn-mc: #ff8159;
-  --syn-st: #b8b5a8;
-  --syn-nm: #a78a6e;
+  /* Declared by the skin, consumed here — base.css never sets these. */
+  --code-bg: ;  /* from skin */
+  --code-fg: ;  /* from skin — MUST differ from --syn-ty (§9.1) */
+  --syn-cm: ; --syn-kw: ; --syn-ty: ;
+  --syn-mc: ; --syn-st: ; --syn-nm: ;
 }
 
 pre {
@@ -491,10 +584,9 @@ pre {
   /* ...sizing, padding, overflow... */
 }
 
-/* CRITICAL: reset every inherited property on pre code so the bare `code`
-   rule used for inline code in prose does NOT leak into the dark code
-   block. Without this reset, unwrapped tokens (parens, braces, semicolons,
-   plain identifiers) vanish into the background. See Pitfall §5.12. */
+/* §5.12 — CRITICAL reset: the bare code { } rule used for inline code
+   in prose does NOT leak into pre code. Without this, unwrapped tokens
+   (parens, braces, semicolons, identifiers) vanish into the background. */
 pre code {
   color: var(--code-fg);
   background: transparent;
@@ -520,7 +612,22 @@ pre code .nm { color: var(--syn-nm); }
 }
 ```
 
-Declare both `--code-fg` and the `--syn-*` custom properties in `:root` so they can be tuned per-direction without touching the highlighting CSS itself. The `pre code` reset is the load-bearing line — every inline `code { color: ...; background: ...; border: ...; padding: ...; }` rule for prose elsewhere in the stylesheet *will* match `pre code` unless this reset short-circuits it.
+**Skin `:root` block** (the variables base.css consumes for syntax highlighting):
+
+```css
+:root {
+  --code-bg: #1a1a1a;
+  --code-fg: #f0ede5;
+  --syn-cm: #7a7a7a;
+  --syn-kw: #e36744;
+  --syn-ty: #dcc89c;
+  --syn-mc: #ff8159;
+  --syn-st: #b8b5a8;
+  --syn-nm: #a78a6e;
+}
+```
+
+The planner reads `base.css` verbatim, reads the chosen skin's `:root` block, and inlines both into `<style>` at generation time. The CSS cascade is automatic — base comes first (token rules reference variables), skin comes second (variables resolve into the token rules).
 
 ### 9.4 — Markup Shape
 
@@ -543,3 +650,20 @@ Each quest carries a `difficulty` value (`easy` / `medium` / `hard`) visible in 
   - `medium` — gold or amber accent
   - `hard` — vermilion or signal-red accent
 - Adapt the exact shade to the direction's palette; the *relative* ordering (cool → warm → hot) carries the meaning.
+
+---
+
+## 10. UI Wireframe Mockup
+
+For UI-bearing campaigns, `plan.html` includes one skin-matched **UI Layout Wireframe** between the TOC and the first quest, composed from the `mockup.css` kit (Layer 4) — so the reader can picture the result before the build steps.
+
+**Trigger (auto-detect in Phase 2).** Include when the campaign produces something a user looks at or interacts with; skip when it has no visual surface.
+
+- **Include** — editor tools / panels (Slate, ImGui), app screens, dashboards, HUDs / in-game UI, forms, settings, CLIs with structured output, dialogs, browser extensions.
+- **Skip** — backend, data pipelines, refactors, build / CI, library / API surfaces, algorithm work, migrations.
+
+Read the signals already in the Decision Summary (Main Quest, Planning Lens, quest titles mentioning panels / screens / views / lists). Announce the choice in one sentence; the user can drop it in Phase 3. When ambiguous, lean toward including a lightweight one.
+
+**Compose** one `ui-mock-section` from only the primitives the UI needs (full kit + skeleton in `class-contract.md`) — one representative state at a realistic size, not multiple screens or a flow. Show an `ui-mock-empty` state when it documents a real UX decision. Annotate with **inline numbered badges** (`ui-mock-badge`) in normal flow plus a `ui-mock-legend` below — never absolutely-positioned overlays (they misalign on reflow at narrow widths).
+
+**Compliance.** The mockup obeys the `class-contract.md` skin hard-rule (colors from skin vars only; explicit surface backgrounds; accent borders + accent text, never fills behind text) — that rule is what makes the dark-on-light fall-through bug impossible. It also clears §1: responsive (grids scroll internally, panes stack at 560px), no JS, print-safe. The §4.4 spot-check at 375px covers it.

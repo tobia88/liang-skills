@@ -1,6 +1,6 @@
 ---
 name: liang-quest-core
-description: Shared reference foundation for the JRPG quest planning family. Contains campaign protocol, manifest schema, plan schemas, status transitions, child process contracts, run report format, and project.yaml contract. The canonical pipeline skills (liang-quest-planner, liang-quest-executor) plus liang-quest-quick and liang-quest-status read from this skill's references/ at activation time. Deprecated cartographer/tactician/executor skills also read from here for in-flight campaigns. This skill has no behavioral logic — it is a pure reference library.
+description: Shared reference foundation for the JRPG quest planning family. Contains campaign protocol, manifest schema, plan schemas, status transitions, child process contracts, run report format, and project.yaml contract. The canonical pipeline skills (liang-quest-planner, liang-quest-executor) plus liang-quest-status read from this skill's references/ at activation time. This skill has no behavioral logic — it is a pure reference library.
 ---
 
 # Liang Quest Core
@@ -13,10 +13,9 @@ This skill contains **no behavioral logic**. It exists solely as a structured li
 
 | Subdirectory | Contents | Primary Consumers |
 |---|---|---|
-| `references/campaign/` | Campaign protocol, manifest schema | All family skills (canonical + deprecated chain + quick + status) |
-| `references/plan-schema/` | Common plan envelope, TDD cycle schema, general step schema, test approaches | Deprecated tacticians only — canonical pipeline does not use these (planner writes flat quest `.md` files instead) |
-| `references/execution/` | Status transitions, child process contracts, run report format | Canonical executor + deprecated executors + quick |
-| `references/project/` | `project.yaml` contract | Canonical executor + quick + deprecated chain |
+| `references/campaign/`  | Campaign protocol, manifest schema | planner, executor, status |
+| `references/execution/` | Status transitions, child process contracts, run report format | executor |
+| `references/project/`   | `project.yaml` contract | executor |
 
 ## Schema Version
 
@@ -26,10 +25,7 @@ The quest planning family uses integer schema versioning. All skills reference t
 
 | Version | Changes |
 |---------|---------|
-| 1 | Initial schema. `workflow` is Required Core in both manifest and quest contract, assigned by the cartographer. |
-| 2 | `workflow` moves from Required Core to Downstream-Stamped on quest entries. Tacticians and quick stamp workflow per quest in the manifest on first contact. Cartographer produces workflow-agnostic quest contracts. v1 campaigns remain valid; pre-existing workflow values are treated as informational. |
-| 3 | `workflow` moves from quest-level to campaign-level. Tacticians and quick stamp workflow once at manifest top-level, not per quest. Executors check campaign-level workflow at startup instead of filtering per quest. Per-quest workflow fields in v1/v2 campaigns are ignored. |
-| 4 | **Canonical planner-native schema.** `workflow` field removed entirely — the canonical pipeline has a single executor and no workflow discriminator. Quest entries use `file` (path to a flat `quest-NNN-name.md`) instead of `path` (path to a per-quest folder's `index.html`). Quest entries carry `difficulty: easy\|medium\|hard` for downstream model routing. Status vocabulary tightens to `ready / in_progress / passed / failed / skipped` (no `ready_for_planning`/`planned`/`needs_clarification`/`blocked`). v1–v3 campaigns remain valid for in-flight cartographer-format work. |
+| 4 | **Canonical planner-native schema.** `workflow` field removed entirely — the canonical pipeline has a single executor and no workflow discriminator. Quest entries use `file` (path to a flat `quest-NNN-name.md`) instead of `path` (path to a per-quest folder's `index.html`). Quest entries carry `difficulty: easy\|medium\|hard` for downstream model routing. Status vocabulary tightens to `ready / in_progress / passed / failed / skipped` (no `ready_for_planning`/`planned`/`needs_clarification`/`blocked`). |
 
 Skills should check `schema_version` when parsing campaign artifacts and handle v1, v2, v3, and v4 gracefully. Canonical pipeline campaigns (v4) can also be detected structurally: no `workflow` field at any level, quest entries have `file` and `difficulty`, status is `ready`.
 
@@ -37,63 +33,34 @@ The declaration must be prominent and unambiguous — any skill reading quest-co
 
 ## Family Skills
 
-### Canonical Pipeline (current)
-
 | Skill | Role | Reads From Core |
 |---|---|---|
 | **liang-quest-core** | Shared references (this skill) | — |
 | **liang-quest-planner** | Same-context campaign planner — extracts decisions from in-session conversation, writes `plan.html` + flat `quest-NNN-*.md` files + `manifest.yaml` | `campaign/` (manifest schema, protocol) |
 | **liang-quest-executor** | Planner-native executor — spawns child processes per step (Pi CLI / Claude subagents / batch), tiered retry, quest-level VC verification with Tier 1 inline + Tier 2 deferred UAT | `campaign/`, `execution/`, `project/` |
-
-### Live Sibling Pipelines
-
-| Skill | Role | Reads From Core |
-|---|---|---|
-| **liang-quest-quick** | Single-pass executor for cartographer-format campaigns (per-quest folders with `index.html`). No planning layer, no children, no retries. | `campaign/`, `execution/`, `project/` |
-| **liang-quest-status** | Read-only campaign status dashboard. Scans all manifests across all formats (v1–v4) and renders an adaptive markdown view. | `campaign/` (protocol) |
-
-### Deprecated (retained for in-flight campaigns)
-
-| Skill | Role | Status |
-|---|---|---|
-| **liang-quest-cartographer** | Cartographer-format campaign manifest writer | Deprecated — use `liang-quest-planner` for new work |
-| **liang-quest-general-tactician** | Plans general-workflow `plan.html` per quest | Deprecated |
-| **liang-quest-tdd-tactician** | Plans TDD-workflow `plan.html` per quest | Deprecated |
-| **liang-quest-general-executor** | Executes general-workflow plans with child processes | Deprecated — use `liang-quest-executor` |
-| **liang-quest-tdd-executor** | Executes TDD-workflow plans with child processes | Deprecated |
-
-Each deprecated skill carries a DEPRECATED banner pointing to the canonical pair.
+| **liang-quest-status** | Read-only campaign status dashboard. Scans all manifests across all formats and renders an adaptive markdown view. | `campaign/` (protocol) |
 
 ## Composition Mechanism
 
 Family skills consume core references via **reference inclusion** — they read the relevant subdirectories at activation time. This is not delegation or embedding; the core's documents become part of the consuming skill's context.
 
 - **Planner** reads `campaign/` (manifest schema, protocol).
-- **Executor + quick + deprecated executors** read `campaign/`, `execution/`, `project/`.
+- **Executor** reads `campaign/`, `execution/`, `project/`.
 - **Status** reads `campaign/` (protocol — for the campaign directory convention).
-- **Deprecated tacticians** read `campaign/`, `plan-schema/`.
 
 ## Reference Index
 
 ### campaign/
-- `protocol.md` — Campaign lifecycle, canonical (planner → executor) and deprecated (cartographer → tactician → executor) pipelines, Layered Truth principle.
-- `manifest-schema.md` — Canonical (v4) and deprecated (v1–v3) manifest.yaml schemas. Canonical schema is the source of truth for new work.
-
-### plan-schema/
-> Used by the deprecated cartographer/tactician chain only. The canonical pipeline does not produce `plan.html` per quest — planner writes flat quest `.md` files instead.
-
-- `common.md` — Shared plan envelope fields, difficulty vocabulary, readiness vocabulary, YAML conventions, schema versioning.
-- `tdd-cycles.md` — TDD cycle plan schema (deprecated).
-- `general-steps.md` — General step plan schema (deprecated).
-- `test-approaches.md` — Test approaches registry schema (deprecated).
+- `protocol.md` — Campaign lifecycle for the canonical planner → executor pipeline. Layered Truth principle.
+- `manifest-schema.md` — Canonical (v4) manifest.yaml schema. Source of truth.
 
 ### execution/
-- `status-transitions.md` — Manifest status vocabulary, allowed transitions (canonical + deprecated), executor-owned fields, tiered retry behavior.
-- `child-contracts.md` — Child process I/O contracts. "Planner-Native" sections cover the canonical executor; sections below the deprecation banner cover the deprecated TDD/general executors.
-- `run-report.md` — Run report schema and visual conventions shared by the canonical executor, the deprecated executors, and quick.
+- `status-transitions.md` — Manifest status vocabulary, allowed transitions, executor-owned fields, tiered retry behavior.
+- `child-contracts.md` — Child process I/O contracts for the canonical executor.
+- `run-report.md` — Run report schema and visual conventions for the canonical executor.
 
 ### project/
-- `project-yaml.md` — `.liang/project.yaml` schema, first-run interview contract, executor extensions.
+- `project-yaml.md` — `project.yaml` contract.
 
 ## Boundaries
 

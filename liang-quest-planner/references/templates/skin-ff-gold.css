@@ -1,0 +1,91 @@
+/* =========================================================================
+   liang-quest-planner — skin-ff-gold.css  (Layer 3)
+
+   Direction: FF-gold (design-contract §2.2) — infrastructure / systems /
+   foundational / classical / deliberate.
+
+   §9.1 audit:  --syn-ty (#e8b860 rich gold) != --code-fg (~#f0ede5 parchment) OK
+                --syn-nm (#9a7a3c muted bronze) != --syn-kw (#c49a3c gold)    OK
+   ========================================================================= */
+
+:root {
+  /* surfaces + text — deep umber, antique gold, parchment */
+  --bg:          #f7eccf;
+  --surface:     #f2e3c0;
+  --surface-alt: #e8d7ad;
+  --ink:         #2a1f0e;
+  --ink-muted:   #4a3818;
+  --accent:      #c49a3c;   /* antique gold */
+  --accent-2:    #4a3818;   /* warm dark */
+  --rule:        rgba(42, 31, 14, 0.22);
+
+  /* code block */
+  --code-bg: #2a1f0e;
+  --code-fg: #f7eccf;
+
+  /* six syntax tokens — audited values from §9.2 */
+  --syn-cm: #7a6f56;
+  --syn-kw: #c49a3c;
+  --syn-ty: #e8b860;       /* bump from parchment to rich gold */
+  --syn-mc: #e8c060;
+  --syn-st: #f3d58b;
+  --syn-nm: #9a7a3c;       /* bump from gold-match to muted bronze */
+
+  /* difficulty — cool -> warm -> hot (§9.5) */
+  --diff-easy:   #5a7a3c;
+  --diff-medium: #c49a3c;
+  --diff-hard:   #b8442f;
+
+  /* decision pills */
+  --pill-rec: #5a7a3c;
+  --pill-rej: #8a3a2c;
+  --pill-def: #6a5a3c;
+
+  /* typography — classical serif display, refined serif body */
+  --font-display: "Goudy Old Style", "Hoefler Text", "Big Caslon", "Palatino Linotype", serif;
+  --font-body:    "Iowan Old Style", Charter, "Sitka Text", Georgia, serif;
+  --font-mono:    "IBM Plex Mono", Consolas, monospace;
+
+  /* feel */
+  --radius: 6px;
+  --shadow: none;
+}
+
+/* ---- motif: ornamental gilt-style, scroll-edge dividers ------------ */
+
+/* illuminated initial on campaign title */
+.campaign-title::first-letter {
+  color: var(--accent);
+  font-size: 1.2em;
+}
+
+.folio-bar {
+  border-bottom: 1px solid var(--accent);
+  font-style: italic;
+  color: var(--ink-muted);
+}
+
+/* ornamental rule above section headings */
+.toc-heading, .notes-heading {
+  border-top: 2px solid var(--accent);
+  padding-top: 12px;
+}
+
+/* gilt frame around quest sections */
+.quest {
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  padding: 24px;
+  background: linear-gradient(180deg, var(--surface), var(--bg));
+}
+
+/* scroll-edge divider between steps */
+.step + .step {
+  border-top: 1px dotted var(--rule);
+  padding-top: 22px;
+}
+
+.code-path {
+  font-style: italic;
+  color: var(--ink-muted);
+}

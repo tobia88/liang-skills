@@ -1,0 +1,115 @@
+/* =========================================================================
+   liang-quest-planner — skin-chrono-pixel.css  (Layer 3)
+
+   Direction: Chrono-pixel (design-contract §2.4) — retro / terminal /
+   hacker aesthetic / pixel-art.
+
+   §9.1 audit:  --syn-ty (#f4e6a3 amber) != --code-fg (~#e8e8f0 white) OK
+                --syn-nm (#a8c4d0 muted teal) != --syn-kw (#5fc6c2 cyan) OK
+   ========================================================================= */
+
+:root {
+  /* surfaces + text — twilight, terminal cyan, sunset rose, cathode amber */
+  --bg:          #1e1f3d;
+  --surface:     #262845;
+  --surface-alt: #303258;
+  --ink:         #f4e6a3;
+  --ink-muted:   #7a7ca0;
+  --accent:      #5fc6c2;   /* terminal cyan */
+  --accent-2:    #f0a1d4;   /* sunset rose */
+  --rule:        rgba(244, 230, 163, 0.18);
+
+  /* code block */
+  --code-bg: #121330;
+  --code-fg: #e8e8f0;
+
+  /* six syntax tokens — audited values from §9.2 */
+  --syn-cm: #7a7ca0;
+  --syn-kw: #5fc6c2;
+  --syn-ty: #f4e6a3;
+  --syn-mc: #f0a1d4;
+  --syn-st: #f4e6a3;
+  --syn-nm: #a8c4d0;       /* bump from kw-match to muted teal */
+
+  /* difficulty — cool -> warm -> hot (§9.5) */
+  --diff-easy:   #5fc6c2;
+  --diff-medium: #f4e6a3;
+  --diff-hard:   #f0a1d4;
+
+  /* decision pills */
+  --pill-rec: #5fc6c2;
+  --pill-rej: #f08080;
+  --pill-def: #7a7ca0;
+
+  /* typography — all monospace, terminal feel */
+  --font-display: "Cascadia Code", "JetBrains Mono", "IBM Plex Mono", Consolas, monospace;
+  --font-body:    "Cascadia Code", "JetBrains Mono", "IBM Plex Mono", Consolas, monospace;
+  --font-mono:    "Cascadia Code", "JetBrains Mono", "IBM Plex Mono", Consolas, monospace;
+
+  /* feel */
+  --radius: 0;
+  --shadow: none;
+}
+
+/* ---- motif: CRT scanlines, pixel-art accents, terminal blocks ------- */
+
+/* CRT scanline overlay */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0, 0, 0, 0.08) 2px,
+    rgba(0, 0, 0, 0.08) 4px
+  );
+  pointer-events: none;
+  z-index: 9999;
+}
+
+/* pixel-art square-cornered framing */
+.folio-bar {
+  border-bottom: 2px solid var(--accent);
+  font-family: var(--font-mono);
+  color: var(--accent);
+}
+
+/* step-shaped headings */
+.toc-heading, .notes-heading {
+  border-bottom: 2px solid var(--accent);
+  padding-bottom: 8px;
+  color: var(--accent);
+}
+
+/* terminal-style prompt before campaign title */
+.campaign-title::before {
+  content: "> ";
+  color: var(--accent);
+}
+
+/* ASCII-art-inspired dividers */
+.quest + .quest {
+  border-top: 2px dashed var(--rule);
+  padding-top: 28px;
+}
+
+/* glitched text overlay on quest IDs */
+.quest-eyebrow {
+  color: var(--accent-2);
+  text-shadow: 1px 0 var(--accent);
+}
+
+.code-path {
+  background: var(--surface-alt);
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+/* difficulty badges in terminal colors */
+.diff-badge {
+  background: var(--surface-alt);
+  border-color: currentColor;
+}

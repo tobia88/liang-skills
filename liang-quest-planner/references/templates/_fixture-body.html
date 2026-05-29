@@ -1,0 +1,201 @@
+<!doctype html>
+<!--
+_fixture-body.html — test fixture for skin visual audits.
+
+Covers every base.css class so a single 375px screenshot per skin
+reveals token-vanishing, overflow, and contrast issues without
+needing a real campaign body.
+
+Do NOT commit this file. It is a skin-audit tool, not a shipped template.
+-->
+<header class="masthead">
+  <div class="folio-bar">
+    <span>campaign-fixture</span><span>2026-05-28</span><span>8 quests</span><span>Skin Audit</span>
+  </div>
+  <p class="eyebrow">AUDIT LENS</p>
+  <h1 class="campaign-title">CSS Variable Audit Fixture</h1>
+  <dl class="masthead-meta">
+    <div class="meta-item"><dt>Slug</dt><dd>skin-audit-fixture</dd></div>
+    <div class="meta-item"><dt>Date</dt><dd>2026-05-28</dd></div>
+    <div class="meta-item"><dt>Quests</dt><dd>2</dd></div>
+    <div class="meta-item"><dt>Lens</dt><dd>Skin Validation</dd></div>
+  </dl>
+</header>
+
+<nav class="toc">
+  <h2 class="toc-heading">Quests</h2>
+  <ol class="toc-list">
+    <li class="toc-item">
+      <a href="#q001">Long Content Quest with Many Steps and a Very Long Title That Wraps</a>
+      <span class="diff-badge diff-medium">medium</span>
+      <span class="dep-state">none</span>
+    </li>
+    <li class="toc-item">
+      <a href="#q002">Short Quest</a>
+      <span class="diff-badge diff-easy">easy</span>
+      <span class="dep-state">depends: q001</span>
+    </li>
+  </ol>
+</nav>
+
+<main class="quests">
+  <section class="quest" id="q001">
+    <header class="quest-header">
+      <span class="eyebrow quest-eyebrow">Quest 001</span>
+      <span class="diff-badge diff-medium">medium</span>
+      <h2 class="quest-title">Long Content Quest with Many Steps and a Very Long Title That Wraps</h2>
+      <p class="quest-purpose">Validates that long step lists with code blocks render without overflow, that the footer pattern avoids the §5.13 asymmetric-grid void, and that inline <code>very_long_fully_qualified_identifiers_like_this_one</code> don't break their containers at 375px.</p>
+    </header>
+
+    <div class="quest-main">
+      <ol class="steps">
+        <li class="step">
+          <h3 class="step-title">Step 1: Create a file with syntax highlighting</h3>
+          <p class="step-desc">Write a header file that exercises every syntax token class so the audit catches vanishing-token bugs.</p>
+          <figure class="code">
+            <figcaption class="code-path">src/SomeLongPath/Subdirectory/AuditFixture.h</figcaption>
+            <pre><code><span class="cm">// Audit fixture — exercises every token class</span>
+<span class="mc">UCLASS</span>(<span class="mc">Blueprintable</span>)
+<span class="kw">class</span> <span class="ty">UAuditFixtureComponent</span> : <span class="kw">public</span> <span class="ty">UActorComponent</span>
+{
+    <span class="mc">GENERATED_BODY</span>()
+
+<span class="kw">public</span>:
+    <span class="mc">UPROPERTY</span>(<span class="mc">EditAnywhere</span>, <span class="mc">BlueprintReadWrite</span>)
+    <span class="ty">TArray</span>&lt;<span class="ty">FString</span>&gt; VeryLongIdentifierNameForOverflowTesting;
+
+    <span class="kw">static</span> <span class="kw">const</span> <span class="kw">float</span> MaxCooldown = <span class="nm">3.5f</span>;
+    <span class="kw">static</span> <span class="kw">const</span> <span class="kw">int32</span> MaxRetries = <span class="nm">5</span>;
+};</code></pre>
+          </figure>
+        </li>
+        <li class="step">
+          <h3 class="step-title">Step 2: Verify string and number tokens</h3>
+          <p class="step-desc">Add a function that uses string literals, numeric constants, and keywords so the audit catches <code>.nm == .kw</code> and <code>.st</code> visibility bugs.</p>
+          <figure class="code">
+            <figcaption class="code-path">src/AuditStrings.cpp</figcaption>
+            <pre><code><span class="cm">// String + number token audit</span>
+<span class="kw">void</span> <span class="ty">UAuditFixtureComponent</span>::TickComponent(<span class="kw">float</span> DeltaTime)
+{
+    <span class="ty">FString</span> Label = <span class="st">"very_long_identifier_string_for_overflow_testing_375px"</span>;
+    <span class="kw">if</span> (DeltaTime &gt; <span class="nm">0.016f</span>)
+    {
+        <span class="kw">return</span>;
+    }
+    <span class="kw">int32</span> Count = <span class="nm">42</span> + <span class="nm">0xFF</span>;
+}</code></pre>
+          </figure>
+        </li>
+        <li class="step">
+          <h3 class="step-title">Step 3: Add many more steps to test footer void resistance</h3>
+          <p class="step-desc">This step exists to make the quest long so we can verify the footer pattern doesn't leave a §5.13 void. The quest has 6 steps.</p>
+        </li>
+        <li class="step">
+          <h3 class="step-title">Step 4: Yet another step for length</h3>
+          <p class="step-desc">Longer content means the footer strip is further from the header, amplifying any void issue.</p>
+        </li>
+        <li class="step">
+          <h3 class="step-title">Step 5: Almost done padding</h3>
+          <p class="step-desc">This step contains no code block — just prose to test mixed-content step lists with some code-heavy and some text-only steps.</p>
+        </li>
+        <li class="step">
+          <h3 class="step-title">Step 6: Final step with inline code overflow risk</h3>
+          <p class="step-desc">This step tests inline code overflow with a regex: <code>grep -rE 'ready_for_planning|needs_clarification|deferred_to_followup' .</code> and a long file path <code>/very/deep/directory/structure/that/might/overflow/a/375px/card/at/some/point/config.yaml</code>.</p>
+        </li>
+      </ol>
+      <p class="rationale">This long quest validates base.css + skin integrity under extreme content conditions.</p>
+    </div>
+
+    <footer class="quest-footer">
+      <div class="quest-footer-col deps">
+        <h4 class="footer-heading">Dependencies</h4>
+        <ul class="dep-list"><li>none</li></ul>
+      </div>
+      <div class="quest-footer-col victory">
+        <h4 class="footer-heading">Victory Conditions</h4>
+        <ul class="vc-list">
+          <li>No horizontal overflow at 375px viewport</li>
+          <li>Every syntax token class visible against code background</li>
+          <li><code>grep -rE 'token_vanish|overflow|contrast_fail' .</code> returns clean</li>
+        </ul>
+      </div>
+    </footer>
+  </section>
+
+  <section class="quest" id="q002">
+    <header class="quest-header">
+      <span class="eyebrow quest-eyebrow">Quest 002</span>
+      <span class="diff-badge diff-easy">easy</span>
+      <h2 class="quest-title">Short Quest</h2>
+      <p class="quest-purpose">Validates that short quests render cleanly with no §5.13 void.</p>
+    </header>
+
+    <div class="quest-main">
+      <ol class="steps">
+        <li class="step">
+          <h3 class="step-title">Step 1: Quick config change</h3>
+          <p class="step-desc">Update the config value from <code>false</code> to <code>true</code>.</p>
+        </li>
+      </ol>
+      <p class="rationale">The shortest possible quest — validates the footer strip stays compact.</p>
+    </div>
+
+    <footer class="quest-footer">
+      <div class="quest-footer-col deps">
+        <h4 class="footer-heading">Dependencies</h4>
+        <ul class="dep-list"><li>q001 — fixture dependency</li></ul>
+      </div>
+      <div class="quest-footer-col victory">
+        <h4 class="footer-heading">Victory Conditions</h4>
+        <ul class="vc-list"><li>Short quest renders without empty void</li></ul>
+      </div>
+    </footer>
+  </section>
+</main>
+
+<section class="notes">
+  <h2 class="notes-heading">Campaign Notes</h2>
+  <div class="notes-grid">
+    <div class="note-card risk">
+      <h3 class="note-card-title">Risks</h3>
+      <ul>
+        <li>Token vanishing: <code>.ty</code> may match <code>--code-fg</code></li>
+        <li>Number blending: <code>.nm</code> may share color with <code>.kw</code></li>
+        <li>Inline-code-overflow-at-375px-with-very-long-identifiers</li>
+      </ul>
+    </div>
+    <div class="note-card question">
+      <h3 class="note-card-title">Open Questions</h3>
+      <ul>
+        <li>Does the skin pass both §9.1 audits?</li>
+        <li>Is the 375px viewport free of outer horizontal scroll?</li>
+      </ul>
+    </div>
+  </div>
+  <div class="notes-wide">
+    <div class="note-card">
+      <h3 class="note-card-title">Locked Decisions</h3>
+      <table class="decisions">
+        <thead>
+          <tr><th>Path</th><th>Status</th><th>Reason</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Use base.css + skin layering for all plan.html generation</td>
+            <td><span class="pill pill-recommended">recommended</span></td>
+            <td>Layered architecture eliminates per-run CSS regeneration; base.css pre-audited for all 14 pitfalls</td>
+          </tr>
+          <tr>
+            <td>Keep per-run CSS generation (old v1.5 approach)</td>
+            <td><span class="pill pill-rejected">rejected</span></td>
+            <td>Reintroduces pitfall surface; skin variables &amp; token rules are pre-verified; per-run generation is wasteful and error-prone</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<footer class="page-footer">
+  <p class="attribution">Skin Audit Fixture — generated 2026-05-28</p>
+</footer>

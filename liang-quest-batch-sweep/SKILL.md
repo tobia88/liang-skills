@@ -1,6 +1,6 @@
 ---
 name: liang-quest-batch-sweep
-description: Launches a multi-campaign sweep across all eligible Campaigns under .liang/campaigns/. Wraps the deterministic sweep.py script with human-facing UX — pre-flight report, explicit user confirmation, live launch, post-sweep summary. Trigger only when the user explicitly asks for a batch sweep of multiple campaigns ("sweep all campaigns", "run all eligible campaigns", "batch sweep"). Do NOT activate from generic "run this campaign" or "execute this quest" — those go to liang-quest-general-executor. Co-located with sweep.py (the multi-campaign orchestrator) inside this skill folder; both are required to operate.
+description: Launches a multi-campaign sweep across all eligible Campaigns under .liang/campaigns/. Wraps the deterministic sweep.py script with human-facing UX — pre-flight report, explicit user confirmation, live launch, post-sweep summary. Trigger only when the user explicitly asks for a batch sweep of multiple campaigns ("sweep all campaigns", "run all eligible campaigns", "batch sweep"). Do NOT activate from generic "run this campaign" or "execute this quest" — those go to liang-quest-executor. Co-located with sweep.py (the multi-campaign orchestrator) inside this skill folder; both are required to operate.
 ---
 
 # Liang Quest Batch Sweep
@@ -23,7 +23,7 @@ What this skill DOES is:
 
 Per the crosscut decision in `camp-2026-05-24-batch-campaign-sweep` (constraint dc006):
 - **"sweep script"** is `sweep.py` — the outer multi-campaign orchestrator. That's what this skill wraps.
-- **"batch executor script"** is the per-campaign script documented inside liang-quest-general-executor's `--batch` mode. That's a different artifact at a different layer.
+- **"batch executor script"** is the per-campaign script documented inside liang-quest-executor's `--batch` mode. That's a different artifact at a different layer.
 - Do NOT conflate the two in user-facing messages.
 
 ## Core Contract
@@ -44,8 +44,8 @@ Activate **only** when:
 
 Do **not** activate from:
 
-- "run this quest" / "execute this campaign" (generic, single-campaign intent) — these go to `liang-quest-general-executor`.
-- "plan this" / "break this down" — these go to a tactician.
+- "run this quest" / "execute this campaign" (generic, single-campaign intent) — these go to `liang-quest-executor`.
+- "plan this" / "break this down" — these go to `liang-quest-planner`.
 - "what campaigns are pending?" — this is a status query, not a sweep request.
 
 If the user's intent is ambiguous about whether they want one campaign or many, ask before activating.
@@ -57,13 +57,15 @@ Run these four phases in order. Do not skip ahead.
 ### 1. Pre-Flight Report
 
 1. Verify `sweep.py` exists alongside this SKILL.md. If not, abort with: "sweep.py is missing in this skill folder. Has it been built? See q003 of camp-2026-05-24-batch-campaign-sweep."
-2. Verify the workspace contains `.liang/project.yaml`. If absent, abort with: "No `.liang/project.yaml` found. Run a tactician first to bootstrap the project."
-3. Invoke `python sweep.py --dry-run` from the workspace root.
-4. Parse the script's stdout/stderr and surface a human-readable preview:
+2. Verify the workspace contains `.liang/project.yaml`. If absent, abort with: "No `.liang/project.yaml` found. Run `liang-quest-planner` first to bootstrap the project."
+3. Invoke `python sweep-preflight.py --workspace <root>` (co-located deep preflight). This catches the config/environment errors `sweep.py --dry-run` cannot — executor §2/§3 hard-block gates, model resolvability, the model API key, pi being spawnable from subprocess (the Windows `pi.cmd` trap), and that a governance context file (`CLAUDE.md`/`AGENTS.md`) is present and un-shadowed. If it exits non-zero (any FAIL), surface the failures and STOP — do not proceed.
+4. Invoke `python sweep.py --dry-run` from the workspace root.
+5. Parse the scripts' stdout/stderr and surface a human-readable preview:
+   - The deep-preflight PASS/WARN/FAIL summary.
    - Total campaigns discovered.
    - For each campaign in toposorted order: campaign_id, current status counts (planned / passed / failed / skipped), the action the sweep would take (RUN / SKIP-already-terminal / BLOCK-on-preflight / CASCADE-SKIP).
    - Any blocking pre-flight errors with the specific campaign_id and the reason.
-5. If the dry-run returned a non-zero exit code, surface the error verbatim and STOP — do not proceed to Confirm.
+6. If either script returned a non-zero exit code, surface the error verbatim and STOP — do not proceed to Confirm.
 
 ### 2. Confirmation Gate
 
@@ -71,7 +73,8 @@ Present the pre-flight summary and ask: "Run the sweep? It will dispatch the exe
 
 - If the user declines, stop. Do not invoke the script in live mode.
 - If the user confirms, proceed to Launch.
-- Do NOT add escape hatches like "auto-confirm" or "yes-to-all" flags. The confirmation gate is the primary safety net for this skill.
+- Do NOT add "auto-confirm" / "yes-to-all" **flags to this interactive flow**. The confirmation gate is the primary safety net when the skill is invoked interactively.
+- **Exception — Unattended Mode.** A separate documented entry point, `sweep-afk.py` (see the Unattended Mode section), runs the sweep with no interactive prompt. This is permitted because *deliberately invoking that script is itself the explicit go-ahead* — it does not bypass a gate the user is sitting in front of. The interactive flow above keeps its confirmation gate unchanged; the two paths are distinct.
 
 ### 3. Launch
 
@@ -98,11 +101,33 @@ Do NOT attempt to retry, re-plan, or interpret failures yourself. The script's e
 3. If no sweep report was generated (script crashed before s06 of q003's plan), say so explicitly and point at the script's stderr.
 4. Do not suggest next actions beyond opening the sweep report — failures and retries are the user's call.
 
+## Unattended Mode (`sweep-afk.py`)
+
+For fire-and-AFK runs across **any** liang-quest-planner workspace, the skill ships `sweep-afk.py` — a single-command harness co-located with `sweep.py`. It is the deliberate, no-prompt alternative to the interactive flow above; running it IS the user's authorization (see the Confirmation Gate exception).
+
+It chains four phases and returns sweep.py's exit code:
+
+1. **Preflight** — runs `sweep-preflight.py`; aborts before launch on any FAIL.
+2. **Sweep** — runs `sweep.py` live (campaigns dispatched with `--no-confirm`). Per-step pi children run in fresh contexts; pi auto-injects the workspace `CLAUDE.md` governance.
+3. **Reconcile** — runs `p4 reconcile` on **only the source files this run touched** (read from `.run/*/step-*.html`, mtime-scoped). This makes VCS correctness independent of whether an execute-child remembered `p4 edit`/`p4 add`. It never submits. Skipped on non-Perforce projects (p4 absent → prints the file list for manual handling).
+4. **Report** — surfaces the sweep report, every run report, and any deferred Tier-2 UAT items the user must still judge (`--no-confirm` defers, never auto-accepts, Tier-2 VCs).
+
+Invocation (from any workspace root):
+
+```
+python <this-skill-dir>/sweep-afk.py --workspace <root> --dry-run   # validate; runs/opens nothing
+python <this-skill-dir>/sweep-afk.py --workspace <root>             # fire and walk away
+```
+
+Flags: `--dry-run` (preflight + `sweep.py --dry-run`, no execution), `--no-reconcile` (print the touched-file list instead of opening), `--probe` (one live model call in preflight to confirm the key round-trips). Always run `--dry-run --probe` once before the first unattended run on a new machine.
+
+**Cross-platform note:** both `sweep.py` and `sweep-preflight.py` resolve the `pi` launcher via `shutil.which("pi")` before spawning — on Windows the npm shim is `pi.cmd` and bare `["pi", ...]` under `subprocess(shell=False)` raises `FileNotFoundError`. Keep that resolution if editing the spawn sites.
+
 ## Boundaries — Hard Stops
 
 This skill must never:
 
-1. **Skip the Confirmation Gate.** Always require explicit user confirmation before launching the script in live mode.
+1. **Skip the Confirmation Gate in the interactive flow.** When invoked interactively, always require explicit user confirmation before launching in live mode. (The `sweep-afk.py` unattended entry point is the one documented exception — invoking it is itself the explicit authorization.)
 2. **Re-implement campaign discovery, toposort, dispatch, status updates, or report generation.** Those live in sweep.py.
 3. **Modify any manifest.yaml, plan.html, or run-report-*.html file.** All on-disk mutations are sweep.py's job.
 4. **Retry or re-plan on failure.** The script's exit code is the final outcome.
@@ -114,7 +139,7 @@ This skill must never:
 ## Failure Modes
 
 - **sweep.py missing:** Abort in Pre-Flight Report. Point at q003 of `camp-2026-05-24-batch-campaign-sweep` for the build instructions.
-- **.liang/project.yaml missing:** Abort in Pre-Flight Report. Direct the user to run a tactician first.
+- **.liang/project.yaml missing:** Abort in Pre-Flight Report. Direct the user to run `liang-quest-planner` first.
 - **Dry-run exits non-zero:** Surface the script's stderr verbatim and STOP. Do not proceed to Confirm.
 - **User declines at Confirmation Gate:** Stop. Do not invoke the script in live mode. Do not nag.
 - **Live launch exits with code 1:** A campaign failed legitimately. Surface the sweep report and the failed campaign_id(s); do not retry.
@@ -125,8 +150,8 @@ This skill must never:
 
 ## Relationship to Other Skills
 
-- **Upstream:** `liang-quest-general-tactician` (and `liang-quest-tdd-tactician`, indirectly) produce the `plan.html` files this skill's sweeps execute. Tactician stamps `workflow: general` at campaign level — sweep.py refuses any other workflow per dc005.
-- **Downstream (per campaign):** `liang-quest-general-executor` is what sweep.py invokes once per eligible campaign with `--no-confirm` (per q001 of this campaign).
+- **Upstream:** `liang-quest-planner` produces the `manifest.yaml` files this skill's sweeps execute.
+- **Downstream (per campaign):** `liang-quest-executor` is what sweep.py invokes once per eligible campaign with `--no-confirm`.
 - **Parallel:** None. This is the only multi-campaign orchestrator in the family.
 - **Shared contracts:**
   - `.liang/project.yaml` — workspace-wide config; sweep.py reads but does not write.
@@ -136,6 +161,8 @@ This skill must never:
 ## Reference Files
 
 - `sweep.py` — the multi-campaign orchestrator script. Co-located with this SKILL.md.
+- `sweep-preflight.py` — deep preflight (executor §2/§3 gates + pi runtime). Read-only; used in Phase 1 and by `sweep-afk.py`.
+- `sweep-afk.py` — unattended fire-and-AFK harness (preflight → sweep → p4 reconcile → report). The skill's no-prompt entry point.
 - `requirements.txt` — Python dependencies (currently: `pyyaml>=6.0`).
 
 Always read the script when planning changes to this skill — the script's CLI and exit codes are the source of truth.

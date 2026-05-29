@@ -1,0 +1,92 @@
+/* =========================================================================
+   liang-quest-planner — skin-persona-blue.css  (Layer 3)
+
+   Direction: Persona-blue (design-contract §2.1) — narrative / dialogue /
+   character work / high-contrast asymmetric.
+
+   §9.1 audit:  --syn-ty (#a8c0e8 cobalt-tint) != --code-fg (~#e8e4d8 cream) OK
+                --syn-nm (#c0a040 muted gold)  != --syn-kw (#f0c64a chrome)  OK
+   ========================================================================= */
+
+:root {
+  /* surfaces + text — deep cobalt, chrome yellow, paper cream */
+  --bg:          #efe9d9;
+  --surface:     #e8e1cd;
+  --surface-alt: #d9d0b8;
+  --ink:         #102447;
+  --ink-muted:   #3a4568;
+  --accent:      #d94545;   /* signal red */
+  --accent-2:    #f0c64a;   /* chrome yellow */
+  --rule:        rgba(16, 36, 71, 0.18);
+
+  /* code block */
+  --code-bg: #102447;
+  --code-fg: #e8e4d8;
+
+  /* six syntax tokens — audited values from §9.2 */
+  --syn-cm: #6a7da0;
+  --syn-kw: #f0c64a;
+  --syn-ty: #a8c0e8;
+  --syn-mc: #d94545;
+  --syn-st: #f0c64a;
+  --syn-nm: #c0a040;
+
+  /* difficulty — cool -> warm -> hot (§9.5) */
+  --diff-easy:   #4f7a4a;
+  --diff-medium: #c49a3c;
+  --diff-hard:   #c44545;
+
+  /* decision pills */
+  --pill-rec: #4f7a4a;
+  --pill-rej: #8a3a2c;
+  --pill-def: #6a7da0;
+
+  /* typography — display condensed sans, body modern serif */
+  --font-display: "Franklin Gothic Medium", "Trebuchet MS", "Helvetica Neue Condensed", "Impact", sans-serif;
+  --font-body:    Charter, "Sitka Text", Constantia, Georgia, serif;
+  --font-mono:    "JetBrains Mono", "Cascadia Mono", Consolas, monospace;
+
+  /* feel */
+  --radius: 4px;
+  --shadow: 0 4px 16px rgba(16, 36, 71, 0.10);
+}
+
+/* ---- motif: high-contrast asymmetric framing ------------------------ */
+
+.folio-bar {
+  border-bottom: 2px solid var(--accent);
+  color: var(--ink-muted);
+}
+
+/* slanted accent bar behind campaign title */
+.masthead {
+  position: relative;
+  border-left: 5px solid var(--accent);
+  padding-left: 24px;
+}
+
+/* geometric speech-bubble framing for quest headers */
+.quest-header {
+  border-left: 4px solid var(--accent-2);
+  padding-left: 16px;
+}
+
+/* oversized arrow markers (slanted) */
+.quest::before {
+  content: "";
+  position: absolute;
+  top: 0; left: -8px;
+  width: 0; height: 0;
+  border-left: 10px solid transparent;
+  border-bottom: 14px solid var(--accent-2);
+  opacity: 0.3;
+}
+
+.code-path {
+  background: var(--surface-alt);
+  border-left: 3px solid var(--accent);
+}
+
+/* accent-colored emphasis on difficulty badges */
+.diff-badge { font-weight: 700; }
+.diff-hard { border-color: var(--accent); }

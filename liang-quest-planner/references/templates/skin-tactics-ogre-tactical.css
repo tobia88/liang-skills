@@ -1,0 +1,152 @@
+/* =========================================================================
+   liang-quest-planner — skin-tactics-ogre-tactical.css  (Layer 3)
+
+   Direction: Tactics-Ogre-tactical (design-contract §2.8) — planning /
+   strategy / dossier / editorial / command.
+
+   §9.1 audit:  --syn-ty (#d8b365 gold) != --code-fg (~#f0e8d4 cream) OK
+                --syn-nm (#d8b365 gold) == --syn-ty — permitted per §9.1
+                (numbers share with .ty when palette is constrained)
+   ========================================================================= */
+
+:root {
+  /* surfaces + text — deep ink, tactical orange, cream paper, slate */
+  --bg:          #f0e8d4;
+  --surface:     #e8dfc6;
+  --surface-alt: #dbcfb0;
+  --ink:         #2a2e3d;
+  --ink-muted:   #7a8a9a;
+  --accent:      #d97757;   /* tactical orange */
+  --accent-2:    #c8341c;   /* vermilion editorial-red */
+  --rule:        rgba(42, 46, 61, 0.18);
+
+  /* code block */
+  --code-bg: #2a2e3d;
+  --code-fg: #f0e8d4;
+
+  /* six syntax tokens — audited values from §9.2 */
+  --syn-cm: #8b9aac;
+  --syn-kw: #e89570;
+  --syn-ty: #d8b365;
+  --syn-mc: #e85f3c;
+  --syn-st: #f5d442;
+  --syn-nm: #d8b365;       /* shares with .ty — permitted */
+
+  /* difficulty — cool -> warm -> hot (§9.5) */
+  --diff-easy:   #4f7a5a;
+  --diff-medium: #b88a3c;
+  --diff-hard:   #c8341c;
+
+  /* decision pills */
+  --pill-rec: #4f7a5a;
+  --pill-rej: #c8341c;
+  --pill-def: #7a8a9a;
+
+  /* typography — editorial serif display, characterful serif body */
+  --font-display: "Big Caslon", "Bodoni 72", Didot, "Hoefler Text", Baskerville, serif;
+  --font-body:    Charter, "Sitka Text", Constantia, Georgia, serif;
+  --font-mono:    Iosevka, "JetBrains Mono", Consolas, monospace;
+
+  /* feel */
+  --radius: 2px;
+  --shadow: 0 2px 8px rgba(42, 46, 61, 0.08);
+}
+
+/* ---- motif: hex-frame, faction-color coding, dossier folio bars ----- */
+
+/* editorial dossier folio bar with metadata */
+.folio-bar {
+  display: flex;
+  gap: 16px;
+  border-bottom: 3px solid var(--ink);
+  padding-bottom: 10px;
+  margin-bottom: 20px;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink-muted);
+}
+
+/* oversized roman-numeral section marks */
+.quest {
+  counter-reset: tactic;
+  position: relative;
+  border-left: 3px solid var(--accent);
+  padding-left: 24px;
+}
+
+.quest-header::before {
+  content: "";
+  position: absolute;
+  top: 4px;
+  left: -36px;
+  width: 8px;
+  height: 8px;
+  background: var(--accent-2);
+  transform: rotate(45deg);
+}
+
+/* tactical-map sigil on TOC */
+.toc {
+  border: 1px solid var(--rule);
+  background: var(--surface);
+}
+
+.toc-heading {
+  background: var(--ink);
+  color: var(--surface);
+  padding: 8px 16px;
+  margin: 0;
+  font-family: var(--font-mono);
+  letter-spacing: 0.1em;
+}
+
+/* editorial red accent for danger-zone items */
+.diff-hard {
+  color: var(--accent-2);
+  border-color: var(--accent-2);
+}
+
+/* hand-set drop caps on quest purpose */
+.quest-purpose::first-letter {
+  initial-letter: 2;
+  color: var(--accent);
+  font-family: var(--font-display);
+  font-weight: 700;
+  margin-right: 6px;
+}
+
+/* dossier filed-bar metadata strip */
+.code-path {
+  background: var(--ink);
+  color: var(--surface);
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: 0.7rem;
+  border-bottom: 2px solid var(--accent);
+}
+
+/* paint-chip catalog grid for notes */
+.note-card {
+  border-top: 3px solid var(--accent);
+  background: var(--surface);
+}
+
+/* vermilion editorial-red emphasis on certain elements */
+.rationale {
+  border-left-color: var(--accent-2);
+}
+
+.pill-rejected {
+  color: var(--accent-2);
+  border-color: var(--accent-2);
+}
+
+/* editorial 2-column note with hanging numerals */
+.step::before {
+  font-family: var(--font-display);
+  font-size: 1.1rem;
+  color: var(--accent);
+}

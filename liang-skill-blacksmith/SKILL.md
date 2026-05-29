@@ -136,7 +136,7 @@ Never propose or apply changes in verify mode. Verify is strictly read-only.
 
 1. Never auto-apply changes without explicit user approval.
 2. Never generate new content: no new sections, no new boundaries, no new failure modes. Edit existing text only.
-3. Never trigger other pipeline skills (brainstorm, cartographer, tactician, executor).
+3. Never trigger other pipeline skills (brainstorm, planner, executor).
 4. Never process non-SKILL.md files (source code, configs, HTML templates, campaign artifacts).
 5. Never modify target files during the discovery loop. Discovery is read-only.
 6. Never invent rubric checks beyond the built-in set and optional override file.
@@ -171,9 +171,9 @@ Never propose or apply changes in verify mode. Verify is strictly read-only.
 
 ## Relationship to Other Skills
 
-- Does **not** sit in the brainstorm → cartographer → tactician → executor pipeline. Operates independently as a post-authoring quality tool.
+- Does **not** sit in the brainstorm → planner → executor pipeline. Operates independently as a post-authoring quality tool.
 - Operates on SKILL.md files produced by any skill or authored manually.
-- Will **not** trigger `liang-brainstorm-relentless`, `liang-quest-cartographer`, `liang-quest-general-tactician`, `liang-quest-tdd-tactician`, or any executor.
+- Will **not** trigger `liang-brainstorm-relentless` or any executor.
 - May be suggested as a follow-up after any skill writes or modifies a SKILL.md.
 - References patterns from `liang-quest-core` for shared conventions (YAML-in-HTML-comment, family visual style) but does not consume or produce campaign/quest artifacts.
 

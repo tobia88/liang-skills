@@ -1,0 +1,359 @@
+/* =========================================================================
+   liang-quest-planner — mockup.css  (Layer 4, CONDITIONAL)
+
+   Generic UI-wireframe kit for the optional "UI Layout Wireframe" section.
+   Inlined after base.css + skin only when a campaign is UI-bearing.
+
+   Like base.css: ZERO hardcoded colors — every value is a var(--x) from the
+   skin interface (class-contract.md) or a color-mix() of those vars, so the
+   mockup matches the plan's skin. Contrast is structural: every text-bearing
+   container sets an explicit var(--surface) background, and active/checked/
+   selected states use accent BORDERS + TEXT, never fills behind text — so the
+   dark-on-light fall-through bug is impossible on any skin. No JS; responsive;
+   annotations are inline badges in normal flow (never absolute overlays).
+   ========================================================================= */
+
+/* ---- section wrapper + heading --------------------------------------- */
+.ui-mock-section { margin: 48px 0 8px; }
+.ui-mock-section > h2 {
+  font-family: var(--font-display);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.9rem;
+  color: var(--ink-muted);
+  margin: 0 0 18px;
+  border-top: 2px solid var(--accent);
+  padding-top: 12px;
+}
+
+/* ---- the frame ------------------------------------------------------- */
+.ui-mock {
+  max-width: 720px;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: var(--surface);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 0.9rem;
+  line-height: 1.45;
+  box-shadow: var(--shadow);
+}
+
+/* ---- title / tab bar ------------------------------------------------- */
+.ui-mock-titlebar {
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+  background: var(--surface-alt);
+  border-bottom: 1px solid var(--rule);
+  min-height: 30px;
+}
+.ui-mock-tab {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 14px;
+  font-family: var(--font-display);
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--ink-muted);
+  border-right: 1px solid var(--rule);
+}
+.ui-mock-tab.is-active {
+  color: var(--ink);
+  background: var(--surface);
+  border-top: 2px solid var(--accent);   /* accent stripe, not a fill */
+}
+/* optional browser/terminal chrome dots */
+.ui-mock-dots { display: flex; align-items: center; gap: 6px; padding: 0 12px; }
+.ui-mock-dots::before {
+  content: "";
+  width: 10px; height: 10px; border-radius: 50%;
+  background: var(--rule);
+  box-shadow: 16px 0 0 var(--rule), 32px 0 0 var(--rule);
+}
+
+/* ---- toolbar / header strip ------------------------------------------ */
+.ui-mock-toolbar {
+  padding: 12px 14px;
+  background: var(--surface-alt);
+  border-bottom: 1px solid var(--rule);
+}
+.ui-mock-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.ui-mock-row:last-child { margin-bottom: 0; }
+.ui-mock-label {
+  font-family: var(--font-display);
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ink-muted);
+  min-width: 56px;
+  flex-shrink: 0;
+}
+
+/* ---- form controls --------------------------------------------------- */
+.ui-mock-field {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--bg);
+  border: 1px solid var(--rule);
+  border-radius: calc(var(--radius) * 0.6);
+  padding: 6px 10px;
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+.ui-mock-swatch {
+  width: 14px; height: 14px;
+  border-radius: 3px;
+  background: var(--accent);
+  flex-shrink: 0;
+}
+.ui-mock-btn {
+  font-family: var(--font-display);
+  font-size: 0.76rem;
+  font-weight: 700;
+  padding: 5px 14px;
+  border: 1px solid var(--rule);
+  border-radius: calc(var(--radius) * 0.6);
+  background: var(--bg);
+  color: var(--ink-muted);
+  white-space: nowrap;
+}
+.ui-mock-btn.is-active {
+  color: var(--accent);
+  border-color: var(--accent);   /* outlined active, contrast-safe */
+}
+.ui-mock-toggle-group { display: flex; }
+.ui-mock-toggle-group .ui-mock-btn { border-radius: 0; border-right: none; }
+.ui-mock-toggle-group .ui-mock-btn:first-child {
+  border-top-left-radius: calc(var(--radius) * 0.6);
+  border-bottom-left-radius: calc(var(--radius) * 0.6);
+}
+.ui-mock-toggle-group .ui-mock-btn:last-child {
+  border-right: 1px solid var(--rule);
+  border-top-right-radius: calc(var(--radius) * 0.6);
+  border-bottom-right-radius: calc(var(--radius) * 0.6);
+}
+.ui-mock-toggle-group .ui-mock-btn.is-active { border-right: 1px solid var(--accent); }
+
+.ui-mock-check {
+  width: 15px; height: 15px;
+  border: 1.5px solid var(--ink-muted);
+  border-radius: 3px;
+  background: var(--surface);
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.ui-mock-check.is-checked {
+  border-color: var(--accent);
+}
+.ui-mock-check.is-checked::after {
+  content: "\2713";
+  color: var(--accent);          /* accent check on surface, contrast-safe */
+  font-size: 11px;
+  font-weight: 800;
+}
+
+/* ---- collapsible groups + lists -------------------------------------- */
+.ui-mock-body { background: var(--surface); }   /* explicit bg, never transparent */
+
+.ui-mock-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  background: var(--surface-alt);
+  border-bottom: 1px solid var(--rule);
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 0.82rem;
+  color: var(--accent);
+}
+.ui-mock-group::before {
+  content: "\25BC";              /* expanded caret */
+  font-size: 0.6rem;
+  color: var(--ink-muted);
+}
+.ui-mock-group.is-collapsed::before { content: "\25B6"; }
+.ui-mock-group .ui-mock-count {
+  font-weight: 400;
+  font-size: 0.72rem;
+  color: var(--ink-muted);
+}
+
+.ui-mock-list { background: var(--surface); }
+.ui-mock-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 14px;
+  border-bottom: 1px solid var(--rule);
+  min-width: 0;
+}
+.ui-mock-item.is-indented { padding-left: 30px; }
+.ui-mock-item.is-selected {
+  border-left: 3px solid var(--accent);
+  padding-left: 11px;
+  background: color-mix(in srgb, var(--accent) 14%, var(--surface));
+}
+.ui-mock-item .ui-mock-name {
+  flex: 1;
+  min-width: 0;
+  color: var(--ink);
+  font-weight: 500;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+.ui-mock-item .ui-mock-value {
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: var(--ink-muted);
+}
+.ui-mock-item .ui-mock-value.is-accent { color: var(--accent); font-weight: 600; }
+
+/* ---- data grid / table ----------------------------------------------- */
+.ui-mock-gridwrap { overflow-x: auto; -webkit-overflow-scrolling: touch; background: var(--surface); }
+.ui-mock-grid { min-width: 420px; }   /* scroll inside the frame at narrow widths */
+.ui-mock-grid-head, .ui-mock-grid-row {
+  display: grid;
+  grid-template-columns: var(--mock-cols, 2fr 1fr 1fr);
+}
+.ui-mock-grid-head {
+  background: var(--surface-alt);
+  border-bottom: 1px solid var(--rule);
+  font-family: var(--font-display);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: 0.66rem;
+  font-weight: 700;
+  color: var(--ink-muted);
+}
+.ui-mock-grid-row { border-bottom: 1px solid var(--rule); font-size: 0.84rem; }
+.ui-mock-grid-row.is-selected {
+  background: color-mix(in srgb, var(--accent) 14%, var(--surface));
+}
+.ui-mock-cell {
+  padding: 6px 12px;
+  border-right: 1px solid var(--rule);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--ink);
+}
+.ui-mock-cell:last-child { border-right: none; }
+.ui-mock-cell.is-mono { font-family: var(--font-mono); font-size: 0.78rem; }
+.ui-mock-cell.is-accent { color: var(--accent); font-weight: 600; }
+.ui-mock-cell.is-muted { color: var(--ink-muted); }
+
+/* ---- split panel layout (sidebar + main) ----------------------------- */
+.ui-mock-split { display: flex; align-items: stretch; }
+.ui-mock-split .ui-mock-sidebar {
+  flex: 0 0 38%;
+  min-width: 0;
+  background: var(--surface);
+  border-right: 1px solid var(--rule);
+}
+.ui-mock-split .ui-mock-pane { flex: 1; min-width: 0; background: var(--surface); }
+.ui-mock-divider {
+  height: 6px;
+  background: var(--surface-alt);
+  border-top: 1px solid var(--rule);
+  border-bottom: 1px solid var(--rule);
+  position: relative;
+}
+.ui-mock-divider::after {
+  content: "\2261";
+  position: absolute; left: 50%; top: 50%;
+  transform: translate(-50%, -50%);
+  color: var(--ink-muted);
+  font-size: 0.8rem;
+}
+@media (max-width: 560px) {
+  .ui-mock-split { flex-direction: column; }
+  .ui-mock-split .ui-mock-sidebar { flex-basis: auto; border-right: none; border-bottom: 1px solid var(--rule); }
+}
+
+/* ---- status bar + empty state ---------------------------------------- */
+.ui-mock-statusbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 5px 14px;
+  background: var(--surface-alt);
+  border-top: 1px solid var(--rule);
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--ink-muted);
+}
+.ui-mock-empty {
+  padding: 28px 16px;
+  text-align: center;
+  background: var(--surface);
+  color: var(--ink-muted);
+  font-style: italic;
+  font-size: 0.84rem;
+}
+
+/* ---- inline numbered annotation badge -------------------------------- */
+/* Reflow-proof: sits in normal flow inside the region it marks. Outlined
+   accent (surface bg, accent text+border) so contrast holds on any skin. */
+.ui-mock-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px; height: 18px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  border: 1.5px solid var(--accent);
+  background: var(--surface);
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  font-weight: 800;
+  line-height: 1;
+}
+
+/* ---- annotation legend below the frame ------------------------------- */
+.ui-mock-legend {
+  margin: 18px 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 12px;
+}
+.ui-mock-legend li {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 0.86rem;
+  color: var(--ink-muted);
+  line-height: 1.45;
+  min-width: 0;
+}
+.ui-mock-legend li .ui-mock-badge { margin-top: 1px; }
+.ui-mock-legend li code:not(pre code) { word-break: break-word; overflow-wrap: anywhere; }
+
+/* ---- print ----------------------------------------------------------- */
+@media print {
+  .ui-mock { break-inside: avoid; page-break-inside: avoid; box-shadow: none; }
+  .ui-mock-gridwrap { overflow-x: visible; }
+}

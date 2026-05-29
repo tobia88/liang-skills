@@ -1,8 +1,6 @@
 # Run Report Schema
 
-Shared run report format. The canonical `liang-quest-executor` (planner-native) and the deprecated `liang-quest-general-executor` produce reports of similar shape — both include step-level results, tiered retry history, `.run/` child I/O references, and a deferred Tier 2 UAT section. `liang-quest-tdd-executor` adds TDD-cycle-specific fields. `liang-quest-quick` (cartographer-format quick path) produces the leanest report — no retries, no `.run/`, no Tier 2 deferral.
-
-The YAML schema below is the shared envelope. Per-executor specifics are called out per field.
+Shared run report format produced by the canonical `liang-quest-executor`. Includes step-level results, tiered retry history, `.run/` child I/O references, and a deferred Tier 2 UAT section.
 
 ## File Location
 
@@ -15,7 +13,6 @@ The YAML schema below is the shared envelope. Per-executor specifics are called 
 ```yaml
 run_id: string                 # "run-<iso-8601-timestamp>"
 campaign_id: string
-workflow: "tdd" | "general" | "quick"   # ONLY for deprecated executors; planner-native omits this field
 started_at: string             # ISO 8601
 completed_at: string           # ISO 8601
 duration_seconds: integer
@@ -47,7 +44,6 @@ quests:
     step_results:                             # present for general + planner-native quests
       - step_id: string
         status: "passed" | "failed"
-        verification_tier: 1 | 2              # for deprecated general; planner-native omits (verification is quest-level)
         attempts: integer
 
     # Planner-native specific (quest-level VC verification)
@@ -68,8 +64,7 @@ totals:
   passed: integer
   failed: integer
   skipped: integer
-  verify_only_low_confidence: integer         # count of verify-only cycles scoring low (TDD)
-  tier2_failures: integer                     # count of Tier 2 verification failures (general)
+  tier2_failures: integer                     # count of Tier 2 verification failures
 
 lessons_count: integer
 ```

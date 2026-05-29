@@ -1,0 +1,122 @@
+/* =========================================================================
+   liang-quest-planner — skin-dragon-quest-classic.css  (Layer 3)
+
+   Direction: Dragon-Quest-classic (design-contract §2.6) — DSL / grammar /
+   foundations / message-box clarity / iconic.
+
+   §9.1 audit:  --syn-ty (#a8c5ff heritage-blue-tint) != --code-fg (~#ffffff white) OK
+                --syn-nm (#c4a040 muted slime-gold) != --syn-kw (#f5d442 gold) OK
+   ========================================================================= */
+
+:root {
+  /* surfaces + text — heritage blue, slime gold, clean white, signal red */
+  --bg:          #ffffff;
+  --surface:     #f0f2f8;
+  --surface-alt: #dce0ee;
+  --ink:         #1a3a8a;
+  --ink-muted:   #4a6098;
+  --accent:      #f5d442;   /* slime gold */
+  --accent-2:    #c44545;   /* signal red */
+  --rule:        rgba(26, 58, 138, 0.16);
+
+  /* code block */
+  --code-bg: #1a3a8a;
+  --code-fg: #ffffff;
+
+  /* six syntax tokens — audited values from §9.2 */
+  --syn-cm: #6a7faa;
+  --syn-kw: #f5d442;
+  --syn-ty: #a8c5ff;       /* bump from white to heritage-blue-tint */
+  --syn-mc: #c44545;
+  --syn-st: #f0e6b0;       /* separate from kw */
+  --syn-nm: #c4a040;       /* bump from kw-match to muted slime-gold */
+
+  /* difficulty — cool -> warm -> hot (§9.5) */
+  --diff-easy:   #4a8a4a;
+  --diff-medium: #c49a3c;
+  --diff-hard:   #c44545;
+
+  /* decision pills */
+  --pill-rec: #4a8a4a;
+  --pill-rej: #c44545;
+  --pill-def: #6a7faa;
+
+  /* typography — chunky sans display, clean sans body */
+  --font-display: "Franklin Gothic Bold", "Verdana Bold", "Trebuchet MS", sans-serif;
+  --font-body:    Verdana, "Trebuchet MS", "Lucida Sans", sans-serif;
+  --font-mono:    Consolas, "Cascadia Mono", monospace;
+
+  /* feel */
+  --radius: 10px;
+  --shadow: 0 4px 0 rgba(26, 58, 138, 0.12);
+}
+
+/* ---- motif: rounded-rect message-boxes, iconic sprite-style accents -- */
+
+/* message-box framing for the whole page */
+.page {
+  border: 3px solid var(--ink);
+  border-radius: 12px;
+  background: var(--bg);
+}
+
+/* drop-shadow heavy masthead */
+.masthead {
+  background: linear-gradient(180deg, var(--surface), var(--bg));
+  border: 3px solid var(--ink);
+  border-radius: var(--radius);
+  padding: 24px;
+  box-shadow: 4px 4px 0 var(--rule);
+}
+
+.campaign-title {
+  color: var(--ink);
+  text-shadow: 2px 2px 0 rgba(26, 58, 138, 0.1);
+}
+
+/* message-box per quest */
+.quest {
+  border: 2px solid var(--ink);
+  border-radius: var(--radius);
+  padding: 24px;
+  background: var(--surface);
+  box-shadow: 3px 3px 0 var(--rule);
+}
+
+/* high-contrast block layout */
+.toc {
+  border: 2px solid var(--ink);
+  box-shadow: 3px 3px 0 var(--rule);
+}
+
+.folio-bar {
+  border-bottom: 2px solid var(--ink);
+  background: var(--surface-alt);
+  padding: 8px 12px;
+  border-radius: var(--radius) var(--radius) 0 0;
+}
+
+/* iconic sprite-style geometric clip-paths on step markers */
+.step::before {
+  background: var(--accent);
+  color: var(--ink);
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  font-size: 0.8rem;
+}
+
+.code-path {
+  background: var(--ink);
+  color: var(--bg);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.note-card {
+  border: 2px solid var(--ink);
+  box-shadow: 2px 2px 0 var(--rule);
+}

@@ -9,7 +9,7 @@ Shared protocol for how campaigns operate across the JRPG quest planning family.
 Input layout (produced by `liang-quest-planner`):
 
 ```
-.liang/campaigns/campaign-<slug>/
+.liang/campaigns/campaign-<YYYY-MM-DD>-<HHMM>-<slug>/
   plan.html                       # campaign-level editorial dossier
   quest-001-<name>.md             # executable "do" doc (steps + code blocks)
   quest-002-<name>.md
@@ -19,21 +19,7 @@ Input layout (produced by `liang-quest-planner`):
 Status path: `ready` → `in_progress` → `passed` | `failed` | `skipped`
 Downstream executor: `liang-quest-executor`
 
-No workflow stamp. The planner-native pipeline has a single executor — there is no workflow discriminator. The `workflow` field belongs to the deprecated cartographer/tactician chain only.
-
-### Deprecated: Cartographer → Tactician → Executor
-
-```
-Brainstorm Report
-    ↓
-Campaign Cartographer → Campaign (manifest + quest contracts in per-quest folders)
-    ↓
-Tactician (TDD or General) → plan.html per quest
-    ↓
-Executor (TDD or General) → run report
-```
-
-Retained for in-flight campaigns and reference. **Do not start new campaigns against this pipeline.** Each skill in this chain carries a DEPRECATED banner pointing to the canonical planner → executor pair.
+No workflow stamp. The planner-native pipeline has a single executor — there is no workflow discriminator.
 
 ## Layered Truth
 
@@ -67,14 +53,10 @@ The HTML body is the human-readable view (JRPG dashboard style). The YAML commen
 ```
 .liang/campaigns/
   campaign-<yyyy-mm-dd>-<slug>/
-    manifest.html              # human-readable quest board
+    plan.html                  # campaign-level editorial dossier
     manifest.yaml              # machine-readable quest index
-    quest-001-<slug>/
-      index.html               # quest contract (YAML in comment)
-      plan.html                # plan (YAML in comment) — written by tactician
-    quest-002-<slug>/
-      index.html
-      plan.html
+    quest-001-<name>.md        # executable "do" doc
+    quest-002-<name>.md
     ...
     .run/                      # executor working directory (per-quest subdirs)
     lessons.yaml               # failure lessons (append-only)
@@ -83,20 +65,14 @@ The HTML body is the human-readable view (JRPG dashboard style). The YAML commen
 
 ## Quest Dependency Order
 
-Quests declare dependencies via `depends_on: [quest-id, ...]`. The dependency graph must be acyclic. Skills process quests in dependency order:
-
-- Tacticians plan quests whose dependencies are all `planned` or have no dependencies.
-- Executors execute quests whose dependencies are all `passed` or have no dependencies.
-- Failed quests cascade-skip all transitive dependents.
+Quests declare dependencies via `depends_on: [quest-id, ...]`. The dependency graph must be acyclic. The canonical executor executes quests whose dependencies are all `passed` or have no dependencies. Failed quests cascade-skip all transitive dependents.
 
 ## Quest ID and Slug Conventions
 
 - Quest IDs: `q001`, `q002`, ... (stable within a campaign)
-- Folder prefixes: `quest-001-`, `quest-002-`, ... (communicate order in filesystem)
+- File prefixes: `quest-001-`, `quest-002-`, ... (communicate order in filesystem)
 - Slugs: lowercase, hyphen-separated, ASCII, no spaces
-- Plan IDs: `p001`, `p002`, ...
-- Cycle IDs (TDD): `c01`, `c02`, ...
-- Step IDs (General): `s01`, `s02`, ...
+- Step IDs: `s01`, `s02`, ...
 
 ## Visual Tone
 

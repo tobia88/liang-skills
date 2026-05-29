@@ -16,7 +16,7 @@ Workspace-wide shared configuration for the JRPG quest planning family.
 schema_version: 1            # integer; bump when schema changes
 vcs: string                  # "git" | "perforce" | "none"
 models:
-  planning: string           # model ID for planning (tacticians, re-plan children)
+  planning: string           # model ID for planning (planner)
   verify: string             # model ID for verification (verify children)
   execution_by_difficulty:
     easy: string             # model ID for easy-difficulty execution
@@ -29,9 +29,8 @@ created_at: string           # ISO 8601
 
 ```yaml
 executor:
-  max_step_retries: integer      # default: 3; max retry attempts per step. Read by canonical liang-quest-executor and deprecated liang-quest-general-executor.
+  max_step_retries: integer      # default: 3; max retry attempts per step. Read by liang-quest-executor.
   child_timeout_seconds: integer # default: 300; max time per child invocation
-  max_cycle_retries: integer     # default: 3; deprecated alias for max_step_retries — used by liang-quest-tdd-executor (deprecated) only. Canonical executor reads max_step_retries.
 ```
 
 If the `executor` block is absent, use defaults silently.
@@ -72,7 +71,7 @@ created_at: "2026-05-19T22:31:00+08:00"
 
 ## First-Run Interview
 
-The canonical `liang-quest-executor` bootstraps `project.yaml` via an interactive interview when the file is missing. (Historically the deprecated tacticians bootstrapped — the canonical pipeline has no tactician, so the executor took over the bootstrap role.) `liang-quest-quick` does NOT bootstrap; it operates without `project.yaml` when absent.
+The canonical `liang-quest-executor` bootstraps `project.yaml` via an interactive interview when the file is missing.
 
 Questions are asked one at a time, in order:
 
@@ -110,7 +109,7 @@ The `models.verify` field is required by both executors. If absent when an execu
 
 ## Rules
 
-- The canonical `liang-quest-executor` creates `project.yaml` when absent and reads it on every run. (The deprecated tacticians also created it in the legacy chain; preserved for in-flight campaigns.)
+- The canonical `liang-quest-executor` creates `project.yaml` when absent and reads it on every run.
 - The executor may add the `executor` block if absent (extension, not core change).
 - The executor may add `models.verify` via interactive prompt if absent.
 - No skill may extend the schema beyond defined fields without a version bump.

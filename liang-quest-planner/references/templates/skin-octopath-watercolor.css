@@ -1,0 +1,91 @@
+/* =========================================================================
+   liang-quest-planner — skin-octopath-watercolor.css  (Layer 3)
+
+   Direction: Octopath-watercolor (design-contract §2.3) — creative /
+   painterly / hand-crafted / storybook.
+
+   §9.1 audit:  --syn-ty (#b8d2c4 sage) != --code-fg (~#f1e7d2 linen) OK
+                --syn-nm (#a87a50 terra-bronze) != --syn-kw (#d99a6c terra) OK
+   ========================================================================= */
+
+:root {
+  /* surfaces + text — warm linen, sage wash, terra, slate teal */
+  --bg:          #f1e7d2;
+  --surface:     #eaddc3;
+  --surface-alt: #dccba6;
+  --ink:         #3a3025;
+  --ink-muted:   #6c8a8f;
+  --accent:      #d99a6c;   /* terra */
+  --accent-2:    #6c8a8f;   /* slate teal */
+  --rule:        rgba(58, 48, 37, 0.16);
+
+  /* code block */
+  --code-bg: #2a2820;
+  --code-fg: #f1e7d2;
+
+  /* six syntax tokens — audited values from §9.2 */
+  --syn-cm: #8a9c92;
+  --syn-kw: #d99a6c;
+  --syn-ty: #b8d2c4;
+  --syn-mc: #a86850;
+  --syn-st: #e3c89a;
+  --syn-nm: #a87a50;       /* bump from kw-match to terra-bronze */
+
+  /* difficulty — cool -> warm -> hot (§9.5) */
+  --diff-easy:   #5a8a5c;
+  --diff-medium: #c49a3c;
+  --diff-hard:   #b85a3c;
+
+  /* decision pills */
+  --pill-rec: #5a8a5c;
+  --pill-rej: #8a4a3c;
+  --pill-def: #7a8a8f;
+
+  /* typography — calligraphic serif display, humanist serif body */
+  --font-display: "Sitka Heading", Cambria, "Iowan Old Style", "Hoefler Text", Baskerville, serif;
+  --font-body:    Charter, Constantia, Georgia, serif;
+  --font-mono:    "IBM Plex Mono", "Cascadia Code", Consolas, monospace;
+
+  /* feel */
+  --radius: 8px;
+  --shadow: 0 2px 12px rgba(58, 48, 37, 0.08);
+}
+
+/* ---- motif: watercolor-wash storybook feel -------------------------- */
+
+/* watercolor wash on background */
+body {
+  background:
+    radial-gradient(ellipse at 20% 10%, rgba(184, 210, 196, 0.25), transparent 50%),
+    radial-gradient(ellipse at 80% 40%, rgba(217, 154, 108, 0.15), transparent 50%),
+    var(--bg);
+}
+
+/* hand-lettered-feeling section mark */
+.toc-heading::before, .notes-heading::before {
+  content: "\2767  ";   /* floral heart dingbat */
+  color: var(--accent);
+}
+
+/* storybook column rule between toc items */
+.toc-item {
+  border-bottom: 1px dotted var(--accent-2);
+}
+
+/* painterly border on quest sections */
+.quest {
+  border-left: 3px solid var(--accent);
+  padding-left: 20px;
+}
+
+/* illustrated-feeling section transitions */
+.quest + .quest {
+  margin-top: 48px;
+  padding-top: 24px;
+  border-top: 2px dotted var(--accent-2);
+}
+
+.code-path {
+  background: linear-gradient(90deg, var(--surface-alt), transparent);
+  font-style: italic;
+}

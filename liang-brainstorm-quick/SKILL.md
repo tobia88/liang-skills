@@ -275,7 +275,6 @@ This skill must never:
 - **Downstream A (Apply path):** in-session `general-purpose` subagent with model `sonnet`. Spawned by Option A confirmation; reads the Strategy Report + Handoff Note as its prompt.
 - **Downstream B (Plan path):** `liang-quest-planner` — same-session, reads conversation directly, no file handoff. Planner does its own multi-quest decomposition.
 - **Sibling (offered via Q3 escalation):** `liang-brainstorm-relentless` for deeper-drill sessions.
-- **Deprecated, no longer in downstream graph:** `liang-quest-quick` (retained only for in-flight cartographer-format campaigns), `liang-quest-cartographer`. New work routes through Option A or Option B.
 
 ## Reference Files
 
