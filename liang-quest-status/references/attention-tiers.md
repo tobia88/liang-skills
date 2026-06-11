@@ -19,6 +19,8 @@ The status skill uses these tiers to highlight campaigns needing attention.
 | `failed` | ALERT | Execution failed; requires investigation |
 | `in_progress` | ACTIVE | Currently being executed |
 | `ready` | ACTIVE | Planner-native quest ready to execute (canonical pipeline) |
+| `planned` | ACTIVE | Legacy status (v1–v3): quest planned, awaiting execution |
+| `ready_for_planning` | ACTIVE | Legacy status (v1–v3): campaign awaiting planning |
 | `skipped` | INFO | Skipped due to dependency failure |
 | `passed` | PASSED | Completed successfully |
 

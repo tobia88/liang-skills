@@ -7,8 +7,8 @@ I/O contracts for child processes spawned by the canonical `liang-quest-executor
 All children across all executors:
 
 - Run in the **workspace root** as working directory
-- Receive input via a YAML file path argument (Pi CLI / batch modes) or in-memory context (Claude mode)
-- Write output to a YAML file path argument (Pi CLI / batch modes) or as a structured return value (Claude mode)
+- Receive input via a YAML file path argument or YAML section inside an executor-generated step envelope (Pi CLI / batch modes), or in-memory context (Claude mode)
+- Write output to a YAML file path argument or YAML section inside the same step envelope (Pi CLI / batch modes), or as a structured return value (Claude mode)
 - Have **clean context isolation** — no parent AGENT.md, skill context, or conversation history
 - Must not read secrets, `.env`, `.git/`, or credential files
 - Communicate only via structured YAML / structured return — parent never parses child stdout for structured data
@@ -21,17 +21,52 @@ All children across all executors:
 | Verify-child (Tier 1 complex) | `project.yaml` → `models.verify` | Canonical executor |
 | Re-plan-child | `project.yaml` → `models.planning` | Canonical executor |
 
-In Claude mode (`--claude`), Pi CLI invocation is replaced by Claude Code Agent subagent dispatch with hardcoded tier mapping: easy → Haiku, medium → Sonnet, hard → Opus. Verify-children use Haiku; re-plan-children use Sonnet.
+In Claude mode (`--claude`), Pi CLI invocation is replaced by Claude Code Agent subagent dispatch. Execute-child tiers come from `project.yaml` → `models.claude_mode` (Claude tier aliases only — Claude Code cannot spawn non-Claude children), defaulting to easy → Haiku, medium → Sonnet, hard → Opus when absent. Verify-children use Haiku; re-plan-children use Sonnet.
+
+---
+
+## Step Envelope Transport
+
+For planner-native execution, the quest `.md` is the executable source-of-truth. The executor parses its `## Steps` section and creates one `step-<sid>.md` step envelope per step under `.run/<quest-id>/`.
+
+A Markdown step envelope is a transport/ledger file with stable fenced YAML sections:
+
+## Input
+~~~yaml
+child_type: "execute"
+pipeline: "planner-native"
+quest_id: "q001"
+step_id: "s01"
+~~~
+
+## Output
+~~~yaml
+status: "success"
+files_changed: []
+implementation_summary: ""
+~~~
+
+## Re-plan
+~~~yaml
+revised_instructions: null
+~~~
+
+## Verification
+~~~yaml
+vc_results: []
+~~~
 
 ---
 
 ## Planner-Native Execute-Child (canonical)
 
-**Purpose:** Implement one step from a quest `.md`'s `## Steps` section. The step has a title, a description, and zero or more code blocks (each with a `// file: <path>` or `# file: <path>` first line).
+**Purpose:** Implement one step from a quest `.md`'s `## Steps` section. The step has a title, a description, and zero or more code blocks (each with a `// file: <path>` or `# file: <path>` first line). The child may receive that step through a step envelope, but it must treat the quest `.md` step content embedded in the YAML input as the load-bearing contract.
 
 Used by `liang-quest-executor`.
 
 ### Input YAML
+
+When embedded in a step envelope, this mapping appears directly under the `## Input` fenced YAML block (no `input:` wrapper key — the heading itself provides the section context).
 
 ```yaml
 child_type: "execute"
@@ -53,7 +88,6 @@ step:
 quest_context:
   purpose: string                # from quest .md "## Purpose"
   difficulty: "easy" | "medium" | "hard"
-  campaign_plan_path: string     # absolute path to plan.html for additional context
   dependencies: [string]         # quest IDs this quest depends on
 
 # Retry context (only on re-execution)
@@ -70,7 +104,7 @@ previous_failure:
   stderr_tail: string
 accumulated_lessons: [string]    # lessons from all prior attempts on this step
 
-output_path: string              # Pi CLI / batch only
+output_path: string              # Pi CLI / batch only; path to the YAML output target or step envelope
 ```
 
 ### Output YAML
@@ -110,7 +144,7 @@ files_changed: [string]          # union of files_changed across all steps in th
 step_summaries:                  # one per step
   - step_id: string
     implementation_summary: string
-output_path: string              # Pi CLI / batch only
+output_path: string              # Pi CLI / batch only; path to the YAML output target
 ```
 
 ### Output YAML
@@ -156,8 +190,7 @@ original_step:                   # the unmodified step content from the quest .m
 quest_context:
   purpose: string
   difficulty: "easy" | "medium" | "hard"
-  campaign_plan_path: string
-
+  dependencies: [string]         # quest IDs this quest depends on
 failure_context:
   attempt: integer
   failure_type: string           # error | timeout | malformed_output | unexpected
@@ -167,7 +200,7 @@ failure_context:
 
 previous_lessons: [string]       # all lesson entries for this step
 
-output_path: string              # Pi CLI / batch only
+output_path: string              # Pi CLI / batch only; path to the YAML output target or step envelope
 ```
 
 ### Output YAML
@@ -188,6 +221,6 @@ confidence: "high" | "medium" | "low"
 root_cause_hypothesis: string
 ```
 
-The re-plan-child must NOT modify the source quest `.md` file. Its output lives in `step-<sid>.html`'s re-plan section and is consumed by the next execute-child attempt in-memory.
+The re-plan-child must NOT modify the source quest `.md` file. Its output lives in the `step-<sid>.md` step envelope's re-plan section and is consumed by the next execute-child attempt in-memory.
 
 

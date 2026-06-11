@@ -1,12 +1,13 @@
 # Manifest Schema
 
-Source of truth for `manifest.yaml` and Quest Contract YAML used across the JRPG quest planning family.
+Source of truth for `manifest.yaml` and quest Markdown contracts used across the JRPG quest planning family.
 
 ## Canonical Schema (Planner → Executor)
 
-This is the **canonical** manifest schema for new campaigns. Produced by `liang-quest-planner`, consumed by `liang-quest-executor`.
+This is the **canonical** manifest schema for new campaigns. Produced by `liang-quest-planner`, consumed by `liang-quest-executor`. The campaign manifest `schema_version: 4` is distinct from `.liang/project.yaml`'s `schema_version: 1`.
 
 ```yaml
+schema_version: 4            # campaign manifest schema version (canonical); distinct from project.yaml
 campaign_id: string          # e.g. "campaign-2026-05-27-planner-executor-pivot"
 title: string                # human-readable campaign title
 created_at: string           # ISO 8601

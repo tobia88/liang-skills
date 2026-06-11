@@ -16,18 +16,22 @@ At activation, read these shared reference files from `liang-brainstorm-core/ref
 1. **`liang-brainstorm-core/references/question-cadence.md`** — Ask one question at a time with 4 options (A/B/C/D) plus Recommended, Tradeoff, Confidence, and Manual fields.
 2. **`liang-brainstorm-core/references/terminology.md`** — Use formal terms (Strategy Report, Decision Memo) and JRPG labels (Main Quest, Victory Conditions, Boss Board) sparingly and functionally.
 3. **`liang-brainstorm-core/references/scout-rules.md`** — Scout at startup with bounded depth; inspect only lightweight text context; avoid secrets, dependencies, and build outputs.
+4. **`liang-brainstorm-core/references/dialogue-hub.md`** — Per-item dialogue-hub pattern for Boss Board (Q4) and Fog of War (Q5): Examine/Decide/Done loop, progressive-deepening drills, per-item analysis-generated postures.
 
 `vcs-policy.md` is intentionally not read — this skill writes zero files, so VCS policy does not apply.
 
 ## Core Contract
 
-- Ask exactly **5 base main questions**, one at a time: **Main Quest**, **Victory Condition**, **Scope + Non-goals**, **Top Risk**, **Handoff Note**.
+- Ask exactly **5 base main questions**, one at a time: **Main Quest**, **Victory Condition**, **Scope + Non-goals**, **Boss Board** (risk), **Fog of War** (open questions). Q4 and Q5 are **analysis-led dialogue hubs** — present scouted findings first, then drop into a per-item Examine/Decide/Done menu (see `dialogue-hub.md`). Each item is decided independently.
+- **Lite identity does not rest on turn count.** Per-item drilling is unbounded. What separates `quick` from `relentless` is: `quick` writes **zero files**, produces **one quest's** worth of decisions, and delivers its report **in-chat**. `relentless` emits HTML artifacts and decomposes across quests. Drill depth is not the dividing line.
 - Each question uses the relentless cadence (4-option ABCD with Recommended/Tradeoff/Confidence/Manual). Never use markdown tables for options — use a lettered list.
 - Up to **2 budgeted pushback questions** per session. Vague-answer conversion is FREE. Risky-choice and contradiction-wraith each cost 1 budget unit.
+- Boss Board (Q4) and Fog of War (Q5) run as **dialogue hubs**: `Examine <n>` drills an item (progressive deepening, **unbounded**, free — never spends Pushback Budget), `Decide <n>` sets that item's posture via an analysis-generated micro-question, `Done` finishes.
 - **After Q3**, run the scope-creep check. If 2+ signals trip, offer a soft escalation to `liang-brainstorm-relentless`. Recommended remains "continue lite" — the offer is informational, not a forced halt.
 - **Zero files written.** No Strategy Report HTML, no mini-campaign folder, no `manifest.yaml`. The Strategy Report is delivered inline in chat at finalization.
 - **No decomposition.** This skill produces exactly one quest's worth of decisions. Multi-quest decomposition is `liang-quest-planner`'s job.
 - At finalization, present two **equal** downstream options in the Next Move (apply now via sonnet subagent, or plan first via planner). Both run in the current session.
+- **No handoff-note question.** On the apply-now path, auto-write an **Execution Brief** (the subagent prompt) at the Next Move, show it, and spawn only after confirmation. The plan-first path gets nothing extra — the planner reads this conversation directly.
 - Be firm, respectful, producer-style. Never insult, mock, moralize, or make the user defend themselves personally.
 - Direct invocation only. No router, no startup heuristic detection, no cross-references in adjacent skills.
 
@@ -36,8 +40,11 @@ At activation, read these shared reference files from `liang-brainstorm-core/ref
 Follow `liang-brainstorm-core/references/terminology.md`. Lite-specific terms:
 
 - **Pushback Budget** — the 2-question allowance for risky-choice and contradiction-wraith pushbacks. Vague-answer conversion is free.
+- **Dialogue Hub** — the per-item menu used by Q4 and Q5 (`dialogue-hub.md`). Items carry `[undecided]`/`[decided: <posture>]` status.
+- **Examine** — a progressive-deepening drill on one hub item. Unbounded, free (never spends Pushback Budget).
+- **Decide** — an analysis-generated micro-question setting one item's posture, with Recommended/Tradeoff/Confidence.
 - **Scope-Creep Banner** — soft signal recorded in the in-chat report when 2+ signals trip. Drives the Next Move recommendation and triggers the mid-session escalation offer after Q3.
-- **Handoff Note** — the 1-paragraph downstream-agnostic note from Q5, read by whichever downstream the user picks at Next Move.
+- **Execution Brief** — the auto-written subagent prompt produced at Next Move on the apply-now path only. Replaces the old per-question handoff note; the plan-first path needs none.
 
 ## Activation
 
@@ -100,13 +107,19 @@ Describe how you'd like to proceed.
 
 If 0–1 signals trip, skip the offer and proceed to Q4.
 
-### 7. Q4: Top Risk
+### 7. Q4: Boss Board (analysis-led dialogue hub)
 
-Ask for the single highest-leverage risk. 4 options grounded in scout findings. Lite asks for ONE risk.
+Lead with analysis: present the **top 2–3 risks** from scout, each with what it is and a qualitative likelihood/impact. Then drop into the dialogue hub (see `dialogue-hub.md`): list each risk with `[undecided]` status and offer `Examine <n>` / `Decide <n>` / `Done`.
 
-### 8. Q5: Handoff Note
+- `Examine <n>` drills that risk one rung deeper (progressive ladder), then returns to the menu. Unbounded and free.
+- `Decide <n>` poses an analysis-generated micro-question for that risk — bespoke options + Recommended/Tradeoff/Confidence — and marks it `[decided: <posture>]`.
+- `Done` finishes Q4; any still-`[undecided]` risk is recorded as unresolved.
 
-Ask for the 1-paragraph note the downstream consumer should read. 4 options ranging from minimal (one-sentence intent) to detailed (paragraph with explicit constraints). Recommended option is a concise paragraph with the goal, the must-respect constraints, and the explicit success bar. This note is **downstream-agnostic** — both the sonnet subagent and `liang-quest-planner` read it.
+### 8. Q5: Fog of War (analysis-led dialogue hub)
+
+Surface the **open unknowns** from scout, each with why it's uncertain. Drop into the dialogue hub: list each unknown with `[undecided]` status, offer `Examine <n>` / `Decide <n>` / `Done`. `Examine` deepens (why uncertain → how it bites → cost to resolve → ripple effects); `Decide` poses an analysis-generated micro-question (typically resolve-now vs defer-to-runtime vs a bespoke option) and marks the row. `Done` records any undecided unknown as unresolved in the Fog of War report section.
+
+There is **no handoff-note question** — the downstream brief is produced at Next Move (see [## Next Move Prompt](#next-move-prompt)).
 
 ### 9. Pushback Loop
 
@@ -134,6 +147,14 @@ When budget reaches 0, record any remaining concerns in the in-chat report's Ten
 
 > Pushback budget exhausted (2/2 used). Recording remaining concern to report Tensions section.
 
+## Drilling (Examine)
+
+Boss Board (Q4) and Fog of War (Q5) items are drillable via `Examine <n>` per the dialogue-hub pattern.
+
+- **Unbounded** — no re-enter cap. Lite identity no longer rests on turn count (see Core Contract); it rests on zero-files + single-quest + in-chat report.
+- **Free** — Examine never spends the Pushback Budget; the budget challenges the user's answers, which is orthogonal to drilling.
+- **Progressive** — each drill buys new analysis on the deepening ladder, never a repeat.
+
 ## Scope-Creep Detection
 
 ### Signals
@@ -142,7 +163,7 @@ When budget reaches 0, record any remaining concerns in the in-chat report's Ten
 |--------|------|-------------------|
 | A | Verb Proliferation | 2+ distinct verbs in the Main Quest answer (e.g., "implement AND refactor AND migrate") |
 | B | Subsystem Explosion | 3+ named subsystems or files in the Scope answer |
-| C | Risk Multiplication | 3+ distinct risks proposed during the Top Risk question |
+| C | Risk Multiplication | 3+ distinct risks surfaced on the Boss Board (Q4), or 4+ Examine drills spent across the session |
 | D | Coupling Words | Main Quest answer contains "and," "plus," or "system" as a coupling word |
 
 ### Trigger Threshold
@@ -185,13 +206,13 @@ If any question is unanswered, ask it before finalizing.
 Emit a single Markdown block with these sections in order:
 
 1. **Header** — topic, derived slug, planning lens, readiness (Low / Medium / Medium-high / High).
-2. **Metadata** — pushback budget usage (e.g., `1/2 used (risky-choice on Q3)`), scope-creep banner state.
+2. **Metadata** — pushback budget usage (e.g., `1/2 used (risky-choice on Q3)`), Examine-drill usage (e.g., `3 drills across Q4/Q5`), scope-creep banner state.
 3. **Scope-Creep Banner** (only if 2+ signals tripped) — name triggered signals concretely.
 4. **Main Quest** (from Q1).
 5. **Victory Condition** (from Q2).
 6. **Scope + Non-goals** (from Q3, split into in-scope vs. explicit-out).
-7. **Top Risk** (from Q4).
-8. **Handoff Note** (from Q5 — downstream-agnostic, read by whichever downstream the user picks next).
+7. **Boss Board** (from Q4 — one row per risk: the risk, its chosen posture, and a one-line drill note, e.g. `Race -> Mitigate (drilled 2x)`. Undecided risks listed as `unresolved`).
+8. **Fog of War** (from Q5 — one row per unknown: the unknown, its disposition (resolve-now / defer-to-runtime / bespoke), and a one-line drill note. Undecided unknowns listed as `unresolved`).
 9. **Tensions** — concerns suppressed after pushback budget exhaustion (omit section if empty).
 
 Keep it tight. This is a chat artifact, not a polished HTML document — readability over decoration.
@@ -206,7 +227,7 @@ After the Strategy Report renders, present the two downstream options as **equal
 Next Move — two same-session paths:
 
 Option A — Apply immediately
-I'll spawn a sonnet general-purpose subagent in this session to execute the brainstorm directly. The subagent reads the Handoff Note plus the rest of the report as its prompt.
+I'll auto-write an Execution Brief from the Strategy Report, show it to you, and on your confirmation spawn a sonnet general-purpose subagent in this session to execute it. The brief is the subagent's load-bearing prompt.
 
 Confirm: "apply" / "yes apply" / "go"
 
@@ -236,7 +257,7 @@ skill:liang-brainstorm-relentless <topic>
 
 - Present Option A and Option B as **equal**. Neither is deprecated or preferred — Recommended only nudges.
 - Always use the `skill:` prefix (canonical Skill tool invocation format) for B and C.
-- For Option A, do **not** auto-execute the subagent — wait for explicit confirmation ("apply", "yes apply", "go", or equivalent). On confirm, spawn a `general-purpose` agent with model `sonnet`, passing the full Strategy Report content (plus the Handoff Note as the load-bearing instruction) as the agent prompt.
+- For Option A, do **not** auto-execute the subagent — first auto-write the **Execution Brief** from the Strategy Report and show it, then wait for explicit confirmation ("apply", "yes apply", "go", or equivalent). On confirm, spawn a `general-purpose` agent with model `sonnet`, passing the Execution Brief as the load-bearing prompt (with the rest of the Strategy Report as supporting context).
 - Replace `<topic>` in Option C with the actual topic; never leave as a placeholder.
 - The Next Move is the final interaction of the lite session unless the user chooses Option A and the subagent reports back.
 
@@ -245,7 +266,7 @@ skill:liang-brainstorm-relentless <topic>
 This skill must never:
 
 1. **Write any file during the session.** Strategy Report is in-chat only. No HTML, no YAML, no mini-campaign folder, no template instantiation. Zero file writes.
-2. **Ask more than 5 base questions + 2 budgeted pushback questions per session.** If the project is larger, the mid-session Q3 check offers escalation to `liang-brainstorm-relentless`.
+2. **Ask more than 5 base questions + 2 budgeted pushback questions per session.** Per-item Examine drills on Q4/Q5 are unbounded and do not count against this. If the project is larger, the mid-session Q3 check offers escalation to `liang-brainstorm-relentless`.
 3. **Decompose into multiple quests.** This skill produces exactly one quest's worth of decisions. Multi-quest decomposition is `liang-quest-planner`'s job.
 4. **Modify any source file of adjacent skills** (`liang-brainstorm-relentless`, `liang-quest-planner`, etc.).
 5. **Auto-execute the Option A subagent.** Always wait for explicit user confirmation.
@@ -272,7 +293,7 @@ This skill must never:
 ## Relationship to Other Skills
 
 - **Upstream:** none. Lite is an entry point. The user invokes it directly.
-- **Downstream A (Apply path):** in-session `general-purpose` subagent with model `sonnet`. Spawned by Option A confirmation; reads the Strategy Report + Handoff Note as its prompt.
+- **Downstream A (Apply path):** in-session `general-purpose` subagent with model `sonnet`. Spawned by Option A confirmation; reads the auto-written Execution Brief (plus the Strategy Report as context) as its prompt.
 - **Downstream B (Plan path):** `liang-quest-planner` — same-session, reads conversation directly, no file handoff. Planner does its own multi-quest decomposition.
 - **Sibling (offered via Q3 escalation):** `liang-brainstorm-relentless` for deeper-drill sessions.
 
@@ -283,5 +304,6 @@ This skill must never:
 - `liang-brainstorm-core/references/question-cadence.md` — one-question cadence with 4-option ABCD + Recommended/Tradeoff/Confidence/Manual.
 - `liang-brainstorm-core/references/terminology.md` — formal terms vs. JRPG labels.
 - `liang-brainstorm-core/references/scout-rules.md` — bounded scout policy.
+- `liang-brainstorm-core/references/dialogue-hub.md` — per-item Examine/Decide/Done hub for Q4 and Q5.
 
 No local references are needed — the in-chat Strategy Report uses no template file.

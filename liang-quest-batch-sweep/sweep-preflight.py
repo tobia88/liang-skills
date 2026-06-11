@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -31,6 +32,8 @@ from pathlib import Path
 from typing import Any
 
 import yaml
+
+HERE = Path(__file__).resolve().parent
 
 # ---- result accumulation -------------------------------------------------
 
@@ -196,6 +199,71 @@ def check_pi_spawnable() -> None:
                "shutil.which('pi') is None — subprocess cannot launch the executor")
 
 
+def check_dispatch_contract() -> None:
+    """Guard the executor-dispatch invocation contract.
+
+    The single most expensive failure this pipeline can have is a malformed
+    dispatch: a green preflight that still hangs/crashes every campaign. (Found
+    live 2026-05-29 — sweep.py was passing `--no-confirm` as an argv flag, which
+    pi rejects with "Unknown option", and omitting `--print`, which makes pi
+    launch an interactive TUI and hang on a TTY-less stdin.) These checks make
+    that regression impossible to hide behind a clean report.
+
+    Two layers: (1) static — read the co-located sweep.py and assert its
+    dispatch uses the proven-correct form; (2) capability — confirm the running
+    pi actually understands the flags that form depends on.
+    """
+    sweep = HERE / "sweep.py"
+    if not sweep.is_file():
+        record(FAIL, "dispatch: sweep.py present", str(sweep))
+        return
+    src = sweep.read_text(encoding="utf-8", errors="replace")
+
+    # `--no-confirm` must NOT be passed as a standalone argv token. It is not a
+    # pi flag — it's a convention the executor reads from the prompt MESSAGE.
+    if re.search(r'^\s*"--no-confirm"\s*,', src, re.MULTILINE):
+        record(FAIL, "dispatch: no `--no-confirm` argv flag",
+               "sweep.py passes '--no-confirm' as an argv token — pi rejects it "
+               "(Unknown option). Deliver no-confirm intent as message text instead.")
+    else:
+        record(PASS, "dispatch: no `--no-confirm` argv flag")
+
+    # `--print` (non-interactive) is mandatory, else pi hangs in interactive mode.
+    if re.search(r'"--print"|"-p"', src):
+        record(PASS, "dispatch: non-interactive (--print)")
+    else:
+        record(FAIL, "dispatch: non-interactive (--print)",
+               "sweep.py dispatch lacks --print/-p — pi will hang in an interactive TUI")
+
+    # stdin must be closed, or pi blocks on an inherited open stdin.
+    if "stdin=subprocess.DEVNULL" in src or "stdin=DEVNULL" in src:
+        record(PASS, "dispatch: stdin closed (DEVNULL)")
+    else:
+        record(FAIL, "dispatch: stdin closed (DEVNULL)",
+               "sweep.py dispatch does not set stdin=subprocess.DEVNULL — pi can "
+               "block on an inherited open stdin before it even runs")
+
+    # Capability: confirm THIS pi understands the flags the dispatch relies on.
+    pi_exe = resolve_pi()
+    if not pi_exe:
+        record(WARN, "dispatch: pi supports required flags",
+               "pi not resolvable — cannot verify --print/--exclude-tools support")
+        return
+    try:
+        cp = subprocess.run([pi_exe, "--help"], stdin=subprocess.DEVNULL,
+                            capture_output=True, text=True, timeout=30, check=False)
+    except Exception as e:  # noqa: BLE001 — help must never hard-fail the preflight
+        record(WARN, "dispatch: pi supports required flags", f"`pi --help` failed: {e}")
+        return
+    help_blob = (cp.stdout or "") + (cp.stderr or "")
+    missing = [f for f in ("--print", "--exclude-tools") if f not in help_blob]
+    if missing:
+        record(FAIL, "dispatch: pi supports required flags",
+               f"this pi build is missing {missing} — dispatch form would break")
+    else:
+        record(PASS, "dispatch: pi supports required flags", "--print, --exclude-tools")
+
+
 def check_governance_context(ws: Path) -> None:
     """The execute-children inherit project governance only via pi's
     CLAUDE.md/AGENTS.md discovery. Confirm a context file is present and that
@@ -222,7 +290,11 @@ def check_campaigns(ws: Path) -> None:
     if not camp_root.is_dir():
         record(FAIL, "campaigns dir exists", str(camp_root))
         return
-    runnable = 0
+    # Phase 1: collect all campaign_ids (including terminal) for dep validation.
+    # A runnable campaign may depend on an already-passed campaign; terminal
+    # IDs must be known so the dependency check doesn't false-positive.
+    camp_ids: set[str] = set()
+    manifests: dict[str, tuple[Path, dict]] = {}  # dirname -> (man_path, parsed)
     for entry in sorted(camp_root.iterdir()):
         if not entry.is_dir() or entry.name == "archive":
             continue
@@ -234,10 +306,23 @@ def check_campaigns(ws: Path) -> None:
         except yaml.YAMLError as e:
             record(FAIL, f"manifest parses [{entry.name}]", str(e))
             continue
+        cid = m.get("campaign_id", entry.name)
+        camp_ids.add(cid)
+        manifests[entry.name] = (entry, m)
+    # Phase 2: validate cross-campaign dependencies (uses the full camp_ids).
+    for _dirname, (entry, m) in manifests.items():
+        cid = m.get("campaign_id", entry.name)
+        for dep in m.get("campaign_depends_on") or []:
+            if dep not in camp_ids:
+                record(FAIL, f"campaign_depends_on resolves [{cid}]",
+                       f"references unknown campaign_id '{dep}'")
+    # Phase 3: validate non-terminal campaigns (quest-level gates).
+    runnable = 0
+    for _dirname, (entry, m) in manifests.items():
         quests = m.get("quests") or []
         statuses = [q.get("status") for q in quests]
         if statuses and all(s in {"passed", "skipped"} for s in statuses):
-            continue  # terminal — sweep will skip; no need to validate
+            continue  # terminal — sweep will skip; no detailed quest validation
         runnable += 1
         cid = m.get("campaign_id", entry.name)
         # plan.html (sweep.py + executor expectation)
@@ -258,6 +343,7 @@ def check_campaigns(ws: Path) -> None:
                 record(FAIL, f"quest difficulty set [{cid}/{qid}]",
                        "executor §3 hard-block")
         record(PASS, f"campaign well-formed [{cid}]", f"{len(quests)} quests, status ready")
+
     if runnable == 0:
         record(WARN, "runnable campaigns", "nothing for the sweep to do (all terminal)")
     else:
@@ -277,7 +363,11 @@ def probe_pi(cfg: dict[str, Any]) -> None:
         return
     cmd = [pi_exe, "--model", model, "-p", "Reply with exactly: OK"]
     try:
-        cp = subprocess.run(cmd, capture_output=True, text=True, timeout=120, check=False)
+        # stdin=DEVNULL is mandatory: without it pi blocks on an inherited open
+        # stdin when this preflight runs headless/backgrounded (e.g. under
+        # sweep-afk.py), and the probe falsely times out.
+        cp = subprocess.run(cmd, stdin=subprocess.DEVNULL,
+                            capture_output=True, text=True, timeout=120, check=False)
     except FileNotFoundError:
         record(FAIL, "pi live probe", f"could not spawn {pi_exe}")
         return
@@ -295,6 +385,13 @@ def probe_pi(cfg: dict[str, Any]) -> None:
 # ---- main ----------------------------------------------------------------
 
 def main(argv: list[str] | None = None) -> int:
+    # Windows consoles default to cp1252 and crash on non-cp1252 glyphs (em
+    # dashes, etc.). Force UTF-8 so the report never dies on encoding.
+    for _stream in (sys.stdout, sys.stderr):
+        try:
+            _stream.reconfigure(encoding="utf-8", errors="replace")
+        except (AttributeError, ValueError):
+            pass
     ap = argparse.ArgumentParser(description="Deep preflight for liang-quest-batch-sweep.")
     ap.add_argument("--workspace", type=Path, default=Path.cwd())
     ap.add_argument("--probe", action="store_true",
@@ -308,6 +405,7 @@ def main(argv: list[str] | None = None) -> int:
         check_models_resolvable(cfg, agent_dir)
         check_api_key(cfg, agent_dir)
     check_pi_spawnable()
+    check_dispatch_contract()
     check_governance_context(ws)
     check_campaigns(ws)
     if args.probe and cfg:

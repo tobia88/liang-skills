@@ -9,10 +9,11 @@ around a batch sweep:
   2. SWEEP      — run the batch-sweep orchestrator (sweep.py) in live mode.
                   Each quest's steps execute in fresh per-step pi child
                   contexts; governance (CLAUDE.md) is auto-injected by pi.
-  3. RECONCILE  — `p4 reconcile` ONLY the source files the sweep actually
-                  touched (read from .run/*/step-*.html output sections).
-                  Makes Perforce correctness independent of whether a child
-                  remembered `p4 edit`/`p4 add`. Never submits.
+  3. RECONCILE  — reads `.liang/project.yaml` `vcs` field. When
+                  `vcs: perforce`, runs `p4 reconcile` on ONLY the source
+                  files this sweep touched (read from .run/*/step-*.html,
+                  mtime-scoped). For `git`, `none`, or missing VCS, prints
+                  the touched-file list for manual handling. Never submits.
   4. REPORT     — surface every run report + sweep report, and list any
                   deferred Tier-2 UAT items that need your eyes.
 
@@ -157,6 +158,16 @@ def run_sweep(sweep: Path, ws: Path, dry_run: bool) -> int:
     return subprocess.run(cmd, cwd=str(ws), check=False).returncode
 
 
+def _read_project_vcs(ws: Path) -> str | None:
+    """Read .liang/project.yaml vcs field. Returns None if missing/unreadable."""
+    proj_yaml = ws / ".liang" / "project.yaml"
+    try:
+        cfg = yaml.safe_load(proj_yaml.read_text(encoding="utf-8")) or {}
+        return cfg.get("vcs")
+    except (OSError, yaml.YAMLError):
+        return None
+
+
 def run_reconcile(ws: Path, dry_run: bool, enabled: bool, since: float) -> None:
     print("\n=== [3/4] RECONCILE " + "=" * 44)
     files = collect_touched_files(ws, since=since)
@@ -168,8 +179,16 @@ def run_reconcile(ws: Path, dry_run: bool, enabled: bool, since: float) -> None:
     for f in files:
         print(f"    {f}")
     if not enabled:
-        print("  --no-reconcile set; skipping. Run `p4 reconcile` on the above yourself.")
+        print("  --no-reconcile set; skipping.")
         return
+
+    vcs = _read_project_vcs(ws)
+    if vcs != "perforce":
+        label = vcs or "unspecified"
+        print(f"  VCS is '{label}', not Perforce — no automatic reconcile. Review and")
+        print(f"  stage/commit the files above manually.")
+        return
+
     if dry_run:
         print("  [dry-run] would run: p4 reconcile <the files above>  (open for add/edit/delete; never submits)")
         return
@@ -212,7 +231,19 @@ def report(ws: Path) -> None:
 
 # ---- main ----------------------------------------------------------------
 
+def _force_utf8_stdio() -> None:
+    """Windows consoles default to cp1252, which cannot encode glyphs the
+    report prints (e.g. the ⚠ marker) — that raises UnicodeEncodeError and
+    crashes the harness. Force UTF-8 so output never dies on encoding."""
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except (AttributeError, ValueError):
+            pass
+
+
 def main(argv: list[str] | None = None) -> int:
+    _force_utf8_stdio()
     ap = argparse.ArgumentParser(description="Fire-and-AFK harness for liang-quest-batch-sweep.")
     ap.add_argument("--workspace", type=Path, default=Path.cwd())
     ap.add_argument("--dry-run", action="store_true",

@@ -5,3 +5,13 @@ brainstorm-reports/
 # Execution artifacts (VCS Artifact Policy: execution = ignore)
 campaigns/**/.run/
 campaigns/**/lessons.yaml
+
+# Python bytecode
+__pycache__/
+*.pyc
+
+# Harness-local runtime state
+.pi/
+
+# Windows reserved-name redirect accidents
+nul

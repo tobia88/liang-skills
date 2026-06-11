@@ -55,6 +55,8 @@ completion_pct = count(quests where status == "passed") / count(all quests) * 10
 
 Displayed per campaign. Round to nearest integer. Show as `N%`.
 
+**Empty quest lists:** When a manifest has zero quests (`count(all quests) == 0`), display `0%` with a `[WARN] empty` indicator. Never divide by zero — guard the computation before computing the percentage.
+
 ### Total Elapsed Time
 
 When timing data is available on quests:
@@ -80,6 +82,8 @@ Quests are displayed in topological dependency order:
 1. Sort by `depends_on` graph: quests with no dependencies first
 2. Dependent quests follow their prerequisites
 3. Within the same dependency level, maintain manifest order
+
+**Dependency cycles:** If the `depends_on` graph contains a cycle (e.g., A depends on B, B depends on A), the topological sort is impossible. In this case, emit a `[WARN] cycle` indicator and fall back to manifest order for all quests in that campaign. Do not crash, infinite-loop, or skip the campaign.
 
 ## Self-Compression
 

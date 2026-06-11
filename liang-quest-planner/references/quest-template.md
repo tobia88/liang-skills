@@ -4,8 +4,9 @@
   - Repeat Step blocks for each step in the quest.
   - Code blocks are optional per step (include per code block heuristics).
   - Code blocks must have a file path comment on the first line.
-  - Steps + code blocks only. No tutorial prose, rationale, or "why" explanations.
-  - Victory conditions as checkbox format, not narrative.
+  - Lean executable contract only: Purpose, Steps/code blocks, Dependencies, Victory Conditions.
+  - No tutorial prose, rationale, or "why" explanations.
+  - Victory conditions use checkbox format, not narrative.
   - This is the "do" doc; plan.html is the "why" doc.
 -->
 

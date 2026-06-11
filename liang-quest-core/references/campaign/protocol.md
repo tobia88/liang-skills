@@ -23,16 +23,16 @@ No workflow stamp. The planner-native pipeline has a single executor — there i
 
 ## Layered Truth
 
-- **Manifest** is for orientation: campaign metadata + quest summary index.
-- **Quest HTML** carries the full contract: everything a planner needs.
-- **Plan HTML** carries the full plan: everything an executor needs.
-- **Run Report HTML** carries the full run result.
+- **Plan HTML** (`plan.html`) is a planner-authored human dossier. The executor ignores it.
+- **Quest Markdown** (`quest-NNN-*.md`) carries the executable contract: steps, code blocks, dependencies, and victory conditions.
+- **Step envelopes** (`.run/<quest-id>/step-<sid>.md`) are executor-generated Markdown transport/ledger artifacts.
+- **Run Report Markdown** (`run-report-<timestamp>.md`) carries the full run result.
 
 Never duplicate full contracts into the manifest. Never split campaign metadata into quest files. Each artifact carries exactly one layer of truth.
 
-## YAML-in-HTML-Comment Convention
+## Legacy HTML Comment Convention (tolerated)
 
-All structured data lives inside the opening HTML comment of its HTML file:
+Legacy `.html` step envelopes and run reports carry metadata in an opening HTML comment. This convention predates the Markdown ledger convention.
 
 ```html
 <!--
@@ -46,22 +46,73 @@ key: value
 </html>
 ```
 
-The HTML body is the human-readable view (JRPG dashboard style). The YAML comment is the machine-readable contract.
+The HTML body is the human-readable view (JRPG dashboard style). The YAML comment is the machine-readable contract. New executor runs produce Markdown artifacts instead.
+
+## Markdown Ledger Convention
+
+Executor-generated Markdown artifacts carry structured data in predictable places:
+
+- Run reports use YAML front matter.
+- Step envelopes use fenced YAML blocks under stable headings: `Input`, `Output`, `Re-plan`, and `Verification`.
+
+Legacy `.html` step envelopes and run reports may exist in old campaign folders. New executor runs write Markdown artifacts.
+
+### Step Envelope Fenced YAML
+
+Step envelopes (`step-<sid>.md`) use Markdown fenced YAML sections. Each fenced section (`## Input`, `## Output`, `## Re-plan`, `## Verification`) carries one part of the child contract:
+
+```markdown
+## Input
+~~~yaml
+child_type: "execute"
+quest_id: "q001"
+step_id: "s01"
+~~~
+
+## Output
+~~~yaml
+status: "success"
+files_changed: []
+implementation_summary: ""
+~~~
+```
+
+The Markdown body between fenced sections is the human-readable transport/ledger view. The fenced YAML blocks are the machine-readable contract. For `plan.html`, the quest Markdown remains the executable contract.
 
 ## Campaign Folder Structure
 
 ```
 .liang/campaigns/
-  campaign-<yyyy-mm-dd>-<slug>/
-    plan.html                  # campaign-level editorial dossier
-    manifest.yaml              # machine-readable quest index
-    quest-001-<name>.md        # executable "do" doc
+  campaign-<yyyy-mm-dd>-<HHMM>-<slug>/
+    plan.html                    # planner-authored human dossier (ignored by executor)
+    manifest.yaml                # machine-readable quest index
+    quest-001-<name>.md          # executable "do" doc
     quest-002-<name>.md
     ...
-    .run/                      # executor working directory (per-quest subdirs)
-    lessons.yaml               # failure lessons (append-only)
-    run-report-<timestamp>.html  # run results
+    .run/                        # executor run ledger
+      q001/
+        step-s01.md              # step envelope (Markdown fenced YAML)
+        step-s02.md
+        ...
+        complete.yaml            # quest-completion marker
+      q002/
+        step-s01.md
+        ...
+    lessons.yaml                 # failure lessons (append-only)
+    run-report-<timestamp>.md    # run results (Markdown with YAML front matter)
 ```
+
+Key points:
+- `plan.html` remains the planner-authored human dossier; the executor never reads it.
+- Quest step envelopes live under `.run/<quest-id>/step-<sid>.md`.
+- Run reports are Markdown files with YAML front matter: `run-report-<timestamp>.md`.
+- The `.run/` directory is executor-owned metadata; no campaign semantics depend on it for correctness.
+
+## Shared Helper Ownership
+
+Reusable executor helpers are owned by the quest skill/core layer, not by campaign `.run/` directories. Use `liang-quest-executor` for executor-only helpers and `liang-quest-core` for helpers shared across quest-family skills. A campaign may record helper metadata or a deliberate reproducibility snapshot in `.run/`, but the canonical implementation should not be regenerated per campaign.
+
+Before adding shared helper code, decide the concrete owner path, reference-vs-snapshot policy, whether `plan.html` remains a human-only dossier (the executor never reads it), and whether run-report generation is executor-local or core-shared.
 
 ## Quest Dependency Order
 

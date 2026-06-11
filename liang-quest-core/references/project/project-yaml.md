@@ -25,12 +25,37 @@ models:
 created_at: string           # ISO 8601
 ```
 
+### Model Routing Extensions (optional)
+
+```yaml
+models:
+  body_drafter: string       # model ID for the planner's body-drafting subagent (Phase 2c / Phase 3 full regens)
+  claude_mode:               # --claude mode execute-child tier overrides — Claude tier aliases ONLY
+    easy: string             # "haiku" | "sonnet" | "opus"
+    medium: string
+    hard: string
+```
+
+Both keys are additive-optional: safe defaults when absent, no `schema_version` bump.
+
+**`models.body_drafter`** — consumed read-only by `liang-quest-planner` for the body-drafting subagent. Resolution chain:
+
+1. `models.body_drafter`
+2. `models.execution_by_difficulty.medium` — body drafting is contract-following transcription of structured output, a medium-difficulty profile
+3. Harness default (a sonnet-class subagent in Claude Code)
+4. No subagent support at all → the planner drafts the body inline
+
+If `project.yaml` itself is missing at planning time, the planner skips to step 3 silently — planning may legitimately run in a fresh workspace before the executor's first-run interview has ever run. The planner never writes `project.yaml`, and the first-run interview does not ask for this key.
+
+**`models.claude_mode`** — consumed only by `liang-quest-executor` in `--claude` mode. Values are **Claude Code subagent tier aliases** (`haiku` / `sonnet` / `opus`), not pi model IDs — Claude Code cannot spawn non-Claude children, which is why this is a separate namespace from `execution_by_difficulty`. When the block (or any key in it) is absent, the defaults apply: easy → `haiku`, medium → `sonnet`, hard → `opus`.
+
 ### Executor Extensions (optional)
 
 ```yaml
 executor:
-  max_step_retries: integer      # default: 3; max retry attempts per step. Read by liang-quest-executor.
-  child_timeout_seconds: integer # default: 300; max time per child invocation
+  max_step_retries: integer          # default: 3; max retry attempts per step. Read by liang-quest-executor.
+  child_timeout_seconds: integer     # default: 300; max time per child invocation
+  campaign_timeout_seconds: number   # default: 3600; max time per campaign dispatch in liang-quest-batch-sweep; 0 disables
 ```
 
 If the `executor` block is absent, use defaults silently.
@@ -90,6 +115,8 @@ Questions are asked one at a time, in order:
 
 Each question is independent — no "same as previous" shortcuts. The user may type any model ID.
 
+The interview does not ask for the optional routing keys (`models.body_drafter`, `models.claude_mode`) — their fallback chains make them optional in practice; add them to `project.yaml` manually when explicit control is wanted.
+
 ## Verify Model Configuration
 
 The `models.verify` field is required by both executors. If absent when an executor runs:
@@ -102,7 +129,7 @@ The `models.verify` field is required by both executors. If absent when an execu
 ## Schema Versioning
 
 - Current version: `schema_version: 1`
-- **Additive-optional** fields (new keys with a safe default when absent) do not require a `schema_version` bump. Example: `vcs_artifacts` defaults to `"ask"` when absent, preserving existing behavior.
+- **Additive-optional** fields (new keys with a safe default when absent) do not require a `schema_version` bump. Examples: `vcs_artifacts` defaults to `"ask"` when absent; `models.body_drafter` and `models.claude_mode` fall back to their documented resolution chains.
 - **Breaking changes** (removed fields, changed semantics, new required fields without safe defaults) require a `schema_version` bump.
 - Never retroactively edit existing configs for schema changes
 - Skills must check `schema_version` before parsing
@@ -110,6 +137,7 @@ The `models.verify` field is required by both executors. If absent when an execu
 ## Rules
 
 - The canonical `liang-quest-executor` creates `project.yaml` when absent and reads it on every run.
+- `liang-quest-planner` reads `project.yaml` (for `models.body_drafter` resolution) but never creates or writes it.
 - The executor may add the `executor` block if absent (extension, not core change).
 - The executor may add `models.verify` via interactive prompt if absent.
 - No skill may extend the schema beyond defined fields without a version bump.

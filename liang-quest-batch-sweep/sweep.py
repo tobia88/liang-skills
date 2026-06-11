@@ -12,9 +12,13 @@ orchestrator. It invokes liang-quest-executor (which may use its own --batch
 mode internally) once per eligible campaign.
 
 State lives on disk in manifest.yaml status fields. The script is
-idempotent on relaunch: campaigns with status passed/skipped are skipped;
-planned/failed are run. Manifest mutations use write-to-temp-then-rename
-(os.replace) for atomicity on Windows NTFS (per dc004).
+idempotent on relaunch: fully-passed campaigns are skipped; any campaign with
+non-passed quests has them reset to "ready" and is re-dispatched, so the
+executor (which only queues status: ready) actually re-runs them. Pass/fail is
+read back from the post-run manifest gated by fresh execution evidence — NOT
+from the child process exit code, which `pi --print` always returns as 0.
+Manifest mutations use write-to-temp-then-rename (os.replace) for atomicity on
+Windows NTFS (per dc004).
 
 Exit codes (matching the executor's contract from q001):
   0 — all campaigns passed
@@ -30,9 +34,13 @@ from __future__ import annotations
 import argparse
 import os
 import shutil
+import signal
 import sys
 import subprocess
 import tempfile
+import threading
+import time
+import traceback
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -49,8 +57,18 @@ EXIT_OK = 0
 EXIT_QUEST_FAILED = 1
 EXIT_CONFIG_ERROR = 2
 EXIT_CRASH = 3
+EXIT_TIMEOUT = 124  # internal sentinel: a dispatch exceeded its wall-clock budget
 
-RUNNABLE_STATUSES = {"planned", "failed"}
+# Per-campaign wall-clock budget for a single executor dispatch. Overridable via
+# project.yaml -> executor.campaign_timeout_seconds; set 0 to disable. Guards
+# AFK runs against a hung pi process stalling the whole sweep indefinitely.
+DEFAULT_CAMPAIGN_TIMEOUT = 3600.0
+
+# Filesystem mtime granularity can be coarse; allow a small slack so artifacts
+# written in the same second as dispatch start still count as "this run's".
+EVIDENCE_SLACK_SECONDS = 2.0
+
+RUNNABLE_STATUSES = {"planned", "failed", "ready", "in_progress"}  # "ready" is the v4/canonical planner status
 SKIPPABLE_STATUSES = {"passed", "skipped"}
 
 def discover_campaigns(workspace: Path) -> list[dict[str, Any]]:
@@ -72,10 +90,13 @@ def discover_campaigns(workspace: Path) -> list[dict[str, Any]]:
         manifest_path = entry / "manifest.yaml"
         if not manifest_path.is_file():
             continue
-        with manifest_path.open("r", encoding="utf-8") as f:
-            manifest = yaml.safe_load(f)
+        try:
+            with manifest_path.open("r", encoding="utf-8") as f:
+                manifest = yaml.safe_load(f)
+        except (OSError, yaml.YAMLError) as e:
+            raise ValueError(f"{manifest_path}: manifest read/parse error: {e}") from e
         if not isinstance(manifest, dict):
-            continue
+            raise ValueError(f"{manifest_path}: manifest must be a YAML mapping")
         manifest["campaign_dir"] = entry
         result.append(manifest)
     return result
@@ -86,9 +107,8 @@ def toposort_campaigns(campaigns: list[dict[str, Any]]) -> list[dict[str, Any]]:
     Order campaigns by their campaign_depends_on graph (Kahn's algorithm).
     Per dc001, campaign_depends_on values are campaign_id strings. Missing
     field or empty list = no cross-campaign deps. Raises ValueError on
-    cycle detection. Campaigns whose declared deps don't resolve to known
-    campaign_ids are kept (treated as roots) — the sweep script tolerates
-    missing references rather than blocking the whole sweep.
+    cycle detection. Unresolved deps are validated by validate_campaign_deps
+    before this function is called; the guard below is defensive only.
     """
     by_id: dict[str, dict[str, Any]] = {c["campaign_id"]: c for c in campaigns}
     in_degree: dict[str, int] = {c["campaign_id"]: 0 for c in campaigns}
@@ -99,7 +119,7 @@ def toposort_campaigns(campaigns: list[dict[str, Any]]) -> list[dict[str, Any]]:
         deps = c.get("campaign_depends_on") or []
         for dep in deps:
             if dep not in by_id:
-                # unresolvable dep — log and skip the edge, treat campaign as root
+                # Defensive: validate_campaign_deps catches this before toposort.
                 continue
             in_degree[cid] += 1
             dependents[dep].append(cid)
@@ -236,10 +256,208 @@ def set_quest_status(
     return False
 
 
-def dispatch_campaign(campaign: dict[str, Any], dry_run: bool = False) -> int:
+def reset_for_retry(campaign: dict[str, Any]) -> int:
+    """Reset non-passed quests to "ready" so the executor re-queues them on the
+    next dispatch, clearing executor-owned bookkeeping fields. Returns the count
+    of quests reset. `passed` quests are left untouched (their dependents stay
+    satisfied). In-memory only — the caller persists via write_manifest_atomic.
+
+    Why this is load-bearing: liang-quest-executor builds its run queue solely
+    from status: ready (SKILL.md §5.2). Without this reset, re-dispatching a
+    previously-failed campaign would run zero quests yet still write a fresh run
+    report — which the outcome assessment would otherwise read as a pass.
     """
-    Invoke the general executor for one campaign via Pi CLI with
-    --no-confirm (per q001 of camp-2026-05-24-batch-campaign-sweep).
+    reset = 0
+    for quest in campaign.get("quests", []):
+        if quest.get("status") in ("failed", "skipped", "in_progress"):
+            quest["status"] = "ready"
+            for field in (
+                "skip_reason", "started_at", "completed_at",
+                "current_cycle", "total_cycles",
+            ):
+                quest.pop(field, None)
+            reset += 1
+    return reset
+
+
+def validate_campaign_ids(campaigns: list[dict[str, Any]]) -> list[str]:
+    """Return error strings for manifests with a missing or duplicate
+    campaign_id. Empty list = all good. Runs before toposort, which subscripts
+    campaign_id directly and would otherwise KeyError on a malformed manifest."""
+    errors: list[str] = []
+    seen: dict[str, Any] = {}
+    for c in campaigns:
+        cid = c.get("campaign_id")
+        cdir = c.get("campaign_dir")
+        if not isinstance(cid, str) or not cid.strip():
+            errors.append(f"{cdir}: manifest missing required 'campaign_id'")
+            continue
+        if cid in seen:
+            errors.append(f"duplicate campaign_id '{cid}' in {cdir} and {seen[cid]}")
+        else:
+            seen[cid] = cdir
+    return errors
+
+
+def validate_campaign_deps(campaigns: list[dict[str, Any]]) -> list[str]:
+    """Return error strings for campaign_depends_on values that reference
+    unknown campaign_ids. Empty list = all good. Call before toposort so
+    unresolved deps are configuration errors, not silently treated as roots."""
+    errors: list[str] = []
+    by_id: set[str] = {c["campaign_id"] for c in campaigns
+                        if isinstance(c.get("campaign_id"), str)}
+    for c in campaigns:
+        cid = c.get("campaign_id", "<unknown>")
+        for dep in c.get("campaign_depends_on") or []:
+            if dep not in by_id:
+                errors.append(
+                    f"{cid}: campaign_depends_on references unknown campaign_id '{dep}'"
+                )
+    return errors
+
+
+def _safe_load_yaml(path: Path) -> Any:
+    """Parse a YAML file, returning None on any read/parse failure."""
+    try:
+        with path.open("r", encoding="utf-8") as f:
+            return yaml.safe_load(f)
+    except (OSError, yaml.YAMLError):
+        return None
+
+
+def _any_mtime_at_least(paths: Any, cutoff: float) -> bool:
+    """True if any path's mtime is >= cutoff."""
+    for p in paths:
+        try:
+            if p.stat().st_mtime >= cutoff:
+                return True
+        except OSError:
+            continue
+    return False
+
+
+def assess_campaign_outcome(
+    campaign_dir: Path, workspace: Path, dispatch_start: float, exit_code: int
+) -> tuple[str, str | None]:
+    """Decide a dispatched campaign's outcome from on-disk truth rather than the
+    child's process exit code (`pi --print` returns 0 regardless of quest
+    results). Returns (status, run_report_relpath) where status is one of
+    "passed" | "failed" | "config_error" | "crash".
+
+    Precedence:
+      1. An explicit halt signal in the child exit code (native, or surfaced via
+         the EXEC_EXIT_CODE output marker): 2 -> config_error, 3 -> crash.
+      2. The re-read manifest the executor mutated during the run: any quest
+         failed, or any still ready/in_progress (queue unfinished) -> failed.
+      3. False-green guard: a clean manifest with NO execution evidence (run
+         report or step envelope) written during THIS dispatch -> failed.
+    """
+    if exit_code == EXIT_CONFIG_ERROR:
+        return "config_error", None
+    if exit_code == EXIT_CRASH:
+        return "crash", None
+
+    run_reports = sorted(campaign_dir.glob("run-report-*.html"))
+    run_report_relpath: str | None = None
+    if run_reports:
+        run_report_relpath = (
+            str(run_reports[-1].relative_to(workspace)).replace("\\", "/")
+        )
+
+    cutoff = dispatch_start - EVIDENCE_SLACK_SECONDS
+    has_fresh_evidence = (
+        _any_mtime_at_least(run_reports, cutoff)
+        or _any_mtime_at_least(campaign_dir.glob(".run/*/step-*.html"), cutoff)
+    )
+
+    manifest = _safe_load_yaml(campaign_dir / "manifest.yaml")
+    statuses: list[Any] = []
+    if isinstance(manifest, dict):
+        statuses = [q.get("status") for q in (manifest.get("quests") or [])]
+
+    if not statuses:
+        # Manifest unreadable post-run — fall back to evidence alone.
+        return ("passed" if has_fresh_evidence else "failed"), run_report_relpath
+
+    if any(s == "failed" for s in statuses):
+        return "failed", run_report_relpath
+    if any(s in ("ready", "in_progress") for s in statuses):
+        # Executor did not run the queue to completion.
+        return "failed", run_report_relpath
+    if not has_fresh_evidence:
+        # All quests claim passed/skipped but nothing was written this run.
+        return "failed", run_report_relpath
+    return "passed", run_report_relpath
+
+
+def _extract_exec_exit_code(output: str) -> int | None:
+    """Return the most recent EXEC_EXIT_CODE marker found from the bottom of the output."""
+    for line in reversed(output.splitlines()):
+        line = line.strip()
+        if line.startswith("EXEC_EXIT_CODE:"):
+            try:
+                return int(line.split(":", 1)[1].strip())
+            except ValueError:
+                return None
+    return None
+
+
+def _stream_combined_output(pipe: Any, sink: Any, collected: list[str]) -> None:
+    """Copy a child pipe to a parent stream while retaining text for parsing."""
+    try:
+        for line in iter(pipe.readline, ""):
+            collected.append(line)
+            sink.write(line)
+            sink.flush()
+    finally:
+        try:
+            pipe.close()
+        except OSError:
+            pass
+
+
+def _kill_process_tree(process: subprocess.Popen[Any]) -> None:
+    """Best-effort kill of a timed-out child process tree."""
+    if process.poll() is not None:
+        return
+    if os.name == "nt":
+        try:
+            subprocess.run(
+                ["taskkill", "/PID", str(process.pid), "/T", "/F"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                check=False,
+            )
+        except Exception:
+            process.kill()
+        return
+
+    try:
+        os.killpg(process.pid, signal.SIGTERM)
+    except ProcessLookupError:
+        return
+    except Exception:
+        process.kill()
+        return
+
+    try:
+        process.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        try:
+            os.killpg(process.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        except Exception:
+            process.kill()
+
+
+def dispatch_campaign(
+    campaign: dict[str, Any], workspace: Path, timeout: float | None, dry_run: bool = False
+) -> int:
+    """
+    Invoke the general executor for one campaign via Pi CLI in non-interactive
+    mode (`--print`), delivering the no-confirm intent as message text (NOT as
+    an argv flag — pi has no `--no-confirm` flag and rejects it).
     Returns the subprocess exit code:
       0 — all quests passed
       1 — at least one quest failed (planned failure path)
@@ -252,7 +470,8 @@ def dispatch_campaign(campaign: dict[str, Any], dry_run: bool = False) -> int:
     liang-quest-executor/SKILL.md (Pi CLI mode child invocation
     style). If pi cannot surface a non-zero exit code natively (per the
     q001 Failure Modes 'Exit code emission failure' entry), this function
-    parses the stderr's LAST line for 'EXEC_EXIT_CODE: <n>' as a fallback.
+    parses the combined child output's LAST non-empty line for
+    'EXEC_EXIT_CODE: <n>' as a fallback.
     """
     campaign_dir = campaign["campaign_dir"]
     cid = campaign.get("campaign_id", "<unknown>")
@@ -262,53 +481,102 @@ def dispatch_campaign(campaign: dict[str, Any], dry_run: bool = False) -> int:
     # apply PATHEXT — so bare "pi" raises FileNotFoundError. shutil.which honors
     # PATHEXT and is a no-op (returns the resolved path) on POSIX.
     pi_exe = shutil.which("pi") or "pi"
+
+    # `--no-confirm` is NOT a pi CLI flag. pi rejects unknown options
+    # ("Unknown option: --no-confirm") — it is only a *convention the executor
+    # skill reads from its prompt*; no pi extension registers it. So the
+    # no-confirm intent is delivered as MESSAGE TEXT (the positional below),
+    # never as argv. `--print` is mandatory: without it pi launches an
+    # interactive TUI and hangs on a TTY-less stdin. `--exclude-tools
+    # ask_question` is a headless safety net so a stray prompt can't block.
+    # Validated live 2026-05-29 (canary: all 4 quests passed, exit 0); the old
+    # `[..., "--no-confirm", dir]` form hung/failed every dispatch.
+    no_confirm_msg = (
+        f"Execute the planner campaign at this directory: {campaign_dir}\n\n"
+        "Run in NON-INTERACTIVE --no-confirm mode exactly as the skill "
+        "documents: skip the Step 1 intent confirmation, default Step 4 "
+        "crash-recovery to Resume, skip the Step 5 confirm-once gate, skip the "
+        "Step 8a UAT prompt (leave all Tier-2 victory conditions as "
+        "tier_2_deferred), preserve all files in Step 9, treat Step 10 "
+        "vcs_artifacts as ignore, and skip the Step 11 commit suggestion. "
+        "Process the entire quest queue in dependency order to completion, then "
+        "write the HTML run report. Do not ask any questions; proceed with the "
+        "documented defaults. As the VERY LAST line of your output, print "
+        "exactly 'EXEC_EXIT_CODE: <n>' on its own line, where <n> is 0 "
+        "if every quest passed, 1 if any quest failed, 2 on a configuration "
+        "error, or 3 on an unexpected crash."
+    )
     cmd = [
         pi_exe,
+        "--print",                          # non-interactive: process and exit
         "--skill", EXECUTOR_SKILL_NAME,
-        "--no-confirm",
-        str(campaign_dir),
+        "--exclude-tools", "ask_question",  # never block on an interactive prompt
+        no_confirm_msg,                     # no-confirm intent + campaign dir as the message
     ]
+    cmd_display = (
+        f"{pi_exe} --print --skill {EXECUTOR_SKILL_NAME} "
+        f"--exclude-tools ask_question <no-confirm msg for {cid}>"
+    )
 
     if dry_run:
-        print(f"[dry-run] would invoke: {' '.join(cmd)}")
+        print(f"[sweep] would RUN: {cmd_display}")
         return EXIT_OK
 
-    print(f"[sweep] dispatching {cid} via {' '.join(cmd)}")
+    print(f"[sweep] dispatching {cid} via {cmd_display}")
+    output_chunks: list[str] = []
+    process: subprocess.Popen[Any] | None = None
+    reader: threading.Thread | None = None
     try:
-        completed = subprocess.run(
+        popen_kwargs: dict[str, Any] = {}
+        if os.name != "nt":
+            popen_kwargs["start_new_session"] = True
+        process = subprocess.Popen(
             cmd,
-            cwd=campaign_dir.parent.parent.parent,  # workspace root
-            capture_output=True,
+            cwd=workspace,
+            stdin=subprocess.DEVNULL,  # pi blocks on an inherited open stdin without this
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
             text=True,
-            check=False,
+            bufsize=1,
+            **popen_kwargs,
         )
+        if process.stdout is None:
+            raise RuntimeError("failed to capture child output")
+        reader = threading.Thread(
+            target=_stream_combined_output,
+            args=(process.stdout, sys.stdout, output_chunks),
+            daemon=True,
+        )
+        reader.start()
+        exit_code = process.wait(timeout=timeout)
+        reader.join(timeout=5)
+    except subprocess.TimeoutExpired:
+        if process is not None:
+            _kill_process_tree(process)
+            try:
+                process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                process.kill()
+        if reader is not None:
+            reader.join(timeout=5)
+        timeout_label = f"{timeout:.0f}s" if timeout is not None else "unbounded"
+        print(f"[sweep] {cid} dispatch timed out after {timeout_label}", file=sys.stderr)
+        return EXIT_TIMEOUT
     except FileNotFoundError as e:
         print(f"[sweep] pi CLI not found: {e}", file=sys.stderr)
         return EXIT_CRASH
     except Exception as e:
+        if process is not None and process.poll() is None:
+            _kill_process_tree(process)
         print(f"[sweep] dispatch failed for {cid}: {e}", file=sys.stderr)
         return EXIT_CRASH
 
-    # surface child stdout/stderr to parent
-    if completed.stdout:
-        sys.stdout.write(completed.stdout)
-    if completed.stderr:
-        sys.stderr.write(completed.stderr)
-
-    # honor native exit code first
-    exit_code = completed.returncode
-
-    # fallback: parse EXEC_EXIT_CODE: <n> from last stderr line if exit_code is 0
-    # but stderr contains a non-zero marker (Pi CLI infra fallback per q001)
-    if exit_code == 0 and completed.stderr:
-        for line in reversed(completed.stderr.strip().splitlines()):
-            line = line.strip()
-            if line.startswith("EXEC_EXIT_CODE:"):
-                try:
-                    exit_code = int(line.split(":", 1)[1].strip())
-                except ValueError:
-                    pass
-                break
+    # Honor native exit code first. If Pi returns 0 (normal for pi --print even
+    # when skill logic failed), fall back to EXEC_EXIT_CODE on the final line of
+    # combined stdout/stderr.
+    marker_code = _extract_exec_exit_code("".join(output_chunks))
+    if exit_code == 0 and marker_code is not None:
+        exit_code = marker_code
 
     return exit_code
 
@@ -383,6 +651,11 @@ SWEEP_REPORT_TEMPLATE = """<!doctype html>
     .status.failed {{ background:rgba(184,87,87,0.14); color:#8d3f3f; }}
     .status.skipped {{ background:rgba(184,135,44,0.16); color:#805d1d; }}
     .status.crash {{ background:rgba(123,92,200,0.14); color:#5d45a0; }}
+    .uat-badge {{ display:inline-block; padding:2px 8px; border-radius:999px;
+      font-size:0.7rem; font-weight:800; text-transform:uppercase;
+      letter-spacing:0.05em;
+      background:rgba(184,135,44,0.20); color:#805d1d; }}
+    .uat-none {{ color:var(--muted); font-size:0.8rem; }}
     .footer {{ margin-top:28px; padding-top:18px; color:var(--muted);
       font-size:0.85rem; text-align:center; }}
   </style>
@@ -402,18 +675,31 @@ SWEEP_REPORT_TEMPLATE = """<!doctype html>
 
     <table>
       <thead>
-        <tr><th>Order</th><th>Campaign ID</th><th>Status</th><th>Run Report</th></tr>
+        <tr><th>Order</th><th>Campaign ID</th><th>Status</th><th>UAT</th><th>Run Report</th></tr>
       </thead>
       <tbody>
         {rows}
       </tbody>
     </table>
 
-    <p class="footer">Generated by liang-quest-batch-sweep / sweep.py &middot; This is the SWEEP report (multi-campaign). Per-campaign run reports linked above are generated by the executor.</p>
+    <p class="footer">Generated by liang-quest-batch-sweep / sweep.py &middot; This is the SWEEP report (multi-campaign). Per-campaign run reports linked above are generated by the executor. "Pending" in the UAT column means the campaign passed mechanically but has deferred Tier-2 victory conditions awaiting human review.</p>
   </main>
 </body>
 </html>
 """
+
+
+def _check_uat_pending(run_report_relpath: str | None, workspace: Path) -> bool:
+    """Scan the per-campaign run report for deferred Tier-2 UAT indicators.
+    Returns True if the report contains 'tier_2_deferred' or 'Pending UAT'."""
+    if not run_report_relpath:
+        return False
+    report_path = workspace / run_report_relpath
+    try:
+        text = report_path.read_text(encoding="utf-8")
+        return "tier_2_deferred" in text or "Pending UAT" in text
+    except OSError:
+        return False
 
 
 def _html_escape(s: str) -> str:
@@ -457,11 +743,17 @@ def write_sweep_report(
             )
         else:
             link = "&mdash;"
+        uat_cell = ""
+        if r.get("has_uat_pending"):
+            uat_cell = '<span class="uat-badge">Pending</span>'
+        else:
+            uat_cell = '<span class="uat-none">&mdash;</span>'
         rows.append(
             f'<tr>'
             f'<td>{r["order"]}</td>'
             f'<td><code>{_html_escape(r["campaign_id"])}</code></td>'
             f'<td><span class="status {r["status"]}">{r["status"]}</span></td>'
+            f'<td>{uat_cell}</td>'
             f'<td>{link}</td>'
             f'</tr>'
         )
@@ -509,10 +801,56 @@ def main(argv: list[str] | None = None) -> int:
         return EXIT_CONFIG_ERROR
 
     # Discover and filter
-    all_campaigns = discover_campaigns(workspace)
+    try:
+        all_campaigns = discover_campaigns(workspace)
+    except ValueError as e:
+        print(f"[sweep] manifest error: {e}", file=sys.stderr)
+        return EXIT_CONFIG_ERROR
     if not all_campaigns:
         print(f"[sweep] no campaigns found under {workspace / CAMPAIGNS_DIR_NAME}", file=sys.stderr)
         return EXIT_CONFIG_ERROR
+
+    # Validate campaign identity before building the dependency graph — a missing
+    # or duplicate campaign_id would otherwise KeyError mid-toposort.
+    id_errors = validate_campaign_ids(all_campaigns)
+    if id_errors:
+        for e in id_errors:
+            print(f"[sweep] manifest error: {e}", file=sys.stderr)
+        return EXIT_CONFIG_ERROR
+
+    # Unresolved campaign_depends_on is a configuration error, not a silent root.
+    dep_errors = validate_campaign_deps(all_campaigns)
+    if dep_errors:
+        for e in dep_errors:
+            print(f"[sweep] manifest error: {e}", file=sys.stderr)
+        return EXIT_CONFIG_ERROR
+
+    # Per-campaign wall-clock budget for a single executor dispatch.
+    proj_cfg = _safe_load_yaml(workspace / PROJECT_YAML_PATH) or {}
+    executor_cfg = proj_cfg.get("executor") or {}
+    if not isinstance(executor_cfg, dict):
+        executor_cfg = {}
+    campaign_timeout_raw = executor_cfg.get(
+        "campaign_timeout_seconds", DEFAULT_CAMPAIGN_TIMEOUT
+    )
+    if campaign_timeout_raw is None:
+        campaign_timeout_raw = DEFAULT_CAMPAIGN_TIMEOUT
+    try:
+        campaign_timeout = float(campaign_timeout_raw)
+    except (TypeError, ValueError):
+        print(
+            "[sweep] project config error: executor.campaign_timeout_seconds must be numeric",
+            file=sys.stderr,
+        )
+        return EXIT_CONFIG_ERROR
+    if campaign_timeout < 0:
+        print(
+            "[sweep] project config error: executor.campaign_timeout_seconds cannot be negative",
+            file=sys.stderr,
+        )
+        return EXIT_CONFIG_ERROR
+    if campaign_timeout == 0:
+        campaign_timeout = None
 
     # Toposort (raises ValueError on cycle)
     try:
@@ -524,11 +862,13 @@ def main(argv: list[str] | None = None) -> int:
     # Per-campaign pre-flight — collect blocking errors.
     # Skip campaigns where all quests are already terminal (passed/skipped/failed)
     # — they don't need structural validation.
-    TERMINAL_STATUSES = {"passed", "skipped", "failed"}
     blocked_ids: set[str] = set()
     for c in ordered:
         quest_statuses = [q.get("status") for q in c.get("quests", [])]
-        if quest_statuses and all(s in TERMINAL_STATUSES for s in quest_statuses):
+        # Only a fully-passed campaign is exempt from structural validation.
+        # Anything else (failed/skipped/ready/in_progress) is a dispatch candidate —
+        # its non-passed quests get reset to ready below — so it must be well-formed.
+        if quest_statuses and all(s == "passed" for s in quest_statuses):
             continue
         blocking, warnings = preflight_campaign(c)
         for w in warnings:
@@ -566,44 +906,87 @@ def main(argv: list[str] | None = None) -> int:
                 write_manifest_atomic(manifest_path, campaign)
             results.append({
                 "campaign_id": cid, "order": order_idx, "status": "skipped",
-                "run_report_relpath": None,
+                "run_report_relpath": None, "has_uat_pending": False,
             })
-            print(f"[sweep] {order_idx}. {cid} — cascade-skipped", file=sys.stderr)
+            action = "CASCADE-SKIP"
+            print(f"[sweep] {order_idx}. {cid} — {action} (depends on failed campaign)", file=sys.stderr)
             continue
 
-        # Resume-aware: skip if all quests already terminal
+        # Resume-aware: a fully-passed campaign is done; nothing to retry.
         quest_statuses = [q.get("status") for q in campaign.get("quests", [])]
-        if quest_statuses and all(s in SKIPPABLE_STATUSES for s in quest_statuses):
+        if quest_statuses and all(s == "passed" for s in quest_statuses):
             results.append({
                 "campaign_id": cid, "order": order_idx,
-                "status": "passed" if all(s == "passed" for s in quest_statuses) else "skipped",
-                "run_report_relpath": None,
+                "status": "passed", "run_report_relpath": None,
+                "has_uat_pending": False,
             })
-            print(f"[sweep] {order_idx}. {cid} — already terminal; skipping", file=sys.stderr)
+            action = "SKIP"
+            print(f"[sweep] {order_idx}. {cid} — {action} (all quests passed)", file=sys.stderr)
             continue
 
-        # Dispatch
-        exit_code = dispatch_campaign(campaign, dry_run=args.dry_run)
+        # Retry-aware: reset non-passed quests to ready so the executor (which
+        # only queues status: ready) actually re-runs them on this dispatch.
+        reset_n = reset_for_retry(campaign)
+        if reset_n and not args.dry_run:
+            write_manifest_atomic(manifest_path, campaign)
+            print(f"[sweep] {order_idx}. {cid} — reset {reset_n} non-passed quest(s) "
+                  f"to ready for retry", file=sys.stderr)
 
-        if exit_code == EXIT_OK:
-            status = "passed"
-        elif exit_code == EXIT_QUEST_FAILED:
-            status = "failed"
-        elif exit_code == EXIT_CONFIG_ERROR:
-            status = "failed"
-            print(f"[sweep] {cid} returned EXIT_CONFIG_ERROR — halting sweep", file=sys.stderr)
+        # Dispatch
+        dispatch_start = time.time()
+        exit_code = dispatch_campaign(
+            campaign, workspace=workspace, timeout=campaign_timeout, dry_run=args.dry_run
+        )
+
+        if args.dry_run:
+            results.append({
+                "campaign_id": cid, "order": order_idx, "status": "passed",
+                "run_report_relpath": None, "has_uat_pending": False,
+            })
+            continue
+
+        # Timeout is a soft failure: mark failed, cascade, and keep going so one
+        # hung campaign doesn't abort the whole sweep.
+        if exit_code == EXIT_TIMEOUT:
+            timeout_label = (
+                f"{campaign_timeout:.0f}s" if campaign_timeout is not None else "configured"
+            )
+            print(f"[sweep] {cid} exceeded the {timeout_label} campaign "
+                  f"timeout — marking FAILED and continuing.", file=sys.stderr)
+            for dep_cid in cascade_skip_dependents(cid, all_campaigns):
+                skipped_by_cascade.add(dep_cid)
             results.append({
                 "campaign_id": cid, "order": order_idx, "status": "failed",
-                "run_report_relpath": None,
+                "run_report_relpath": None, "has_uat_pending": False,
+            })
+            continue
+
+        # Pass/fail is read from the post-run manifest gated by fresh execution
+        # evidence — NOT from the child exit code (`pi --print` returns 0 whatever
+        # the quests did). Exit 2/3 (native or via EXEC_EXIT_CODE) is honored only
+        # as an explicit halt signal.
+        status, run_report_relpath = assess_campaign_outcome(
+            campaign_dir, workspace, dispatch_start, exit_code
+        )
+
+        uat_pending = _check_uat_pending(run_report_relpath, workspace)
+
+        if status == "config_error":
+            print(f"[sweep] {cid} reported a configuration error — halting sweep", file=sys.stderr)
+            results.append({
+                "campaign_id": cid, "order": order_idx, "status": "failed",
+                "run_report_relpath": run_report_relpath,
+                "has_uat_pending": False,
             })
             write_sweep_report(workspace, results)
             return EXIT_CONFIG_ERROR
-        else:  # EXIT_CRASH or unexpected
-            status = "crash"
-            print(f"[sweep] {cid} crashed with exit {exit_code} — halting sweep", file=sys.stderr)
+
+        if status == "crash":
+            print(f"[sweep] {cid} crashed (exit {exit_code}) — halting sweep", file=sys.stderr)
             results.append({
                 "campaign_id": cid, "order": order_idx, "status": "crash",
-                "run_report_relpath": None,
+                "run_report_relpath": run_report_relpath,
+                "has_uat_pending": False,
             })
             write_sweep_report(workspace, results)
             return EXIT_CRASH
@@ -613,21 +996,18 @@ def main(argv: list[str] | None = None) -> int:
             for dep_cid in cascade_skip_dependents(cid, all_campaigns):
                 skipped_by_cascade.add(dep_cid)
 
-        # Locate latest executor run report if present
-        run_reports = sorted(campaign_dir.glob("run-report-*.html"))
-        run_report_relpath = None
-        if run_reports:
-            latest = run_reports[-1]
-            run_report_relpath = str(latest.relative_to(workspace)).replace("\\", "/")
-
         results.append({
             "campaign_id": cid, "order": order_idx, "status": status,
             "run_report_relpath": run_report_relpath,
+            "has_uat_pending": uat_pending,
         })
 
-    # Write sweep report
-    report_path = write_sweep_report(workspace, results)
-    print(f"[sweep] sweep report written to {report_path}")
+    # Write sweep report (live mode only; dry-run writes nothing)
+    if not args.dry_run:
+        report_path = write_sweep_report(workspace, results)
+        print(f"[sweep] sweep report written to {report_path}")
+    else:
+        print(f"[sweep] dry-run complete — no reports written, no manifests mutated")
 
     # Aggregate exit code: 1 if any failed; 0 otherwise
     if any(r["status"] in ("failed", "crash") for r in results):
@@ -636,4 +1016,14 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    # Honor the documented "exit 3 on unexpected crash" contract: any uncaught
+    # exception becomes a clean EXIT_CRASH with a traceback on stderr, rather
+    # than a bare Python traceback + exit 1.
+    try:
+        sys.exit(main())
+    except SystemExit:
+        raise
+    except BaseException:  # noqa: BLE001 — last-resort crash boundary
+        print("[sweep] unexpected crash:", file=sys.stderr)
+        traceback.print_exc()
+        sys.exit(EXIT_CRASH)

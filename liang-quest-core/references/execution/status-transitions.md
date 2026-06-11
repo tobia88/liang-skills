@@ -8,7 +8,7 @@ The canonical pipeline (`liang-quest-planner` → `liang-quest-executor`) uses a
 
 | Status | Meaning | Set By |
 |--------|---------|--------|
-| `ready` | Quest is planned and ready to execute | Planner |
+| `ready` | Quest is ready to execute | Planner |
 | `in_progress` | Execution underway | Executor |
 | `passed` | All steps completed and Tier 1 VCs verified (Tier 2 VCs may still be pending UAT) | Executor |
 | `failed` | A step exhausted retries, a Tier 1 VC failed, or a Tier 2 VC failed in post-run UAT | Executor |
@@ -46,7 +46,7 @@ The canonical executor manages these additional fields on quest entries:
 quests[]:
   status: string              # see transitions above
   current_cycle: integer      # 1-based index of cycle/step currently executing (0 = not started)
-  total_cycles: integer       # total cycle/step count from plan
+  total_cycles: integer       # total cycle/step count parsed from quest .md ## Steps
   skip_reason: string         # present when status is "skipped"; references failed dependency
   started_at: string          # ISO 8601; set on in_progress transition
   completed_at: string        # ISO 8601; set on passed/failed/skipped transition
@@ -69,4 +69,4 @@ The canonical executor supports crash recovery:
 1. Detect `status: in_progress` quests in the manifest.
 2. Inspect `.run/<quest-id>/` for checkpoint state.
 3. Offer the user: **Resume** from last checkpoint, or **Restart** (reset to ready, clean .run/).
-4. Never silently resume. Always ask.
+4. Never silently resume when invoked interactively — always ask. Documented exception: under the executor's `--no-confirm` flag, default to **Resume** without prompting (non-interactive behavior per the executor's `--no-confirm` contract).

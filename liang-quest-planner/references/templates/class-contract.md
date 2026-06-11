@@ -9,7 +9,7 @@ The interface between the three generation layers. **Read this before authoring 
 3. **`skin-<name>.css`** — the `:root` variable block (palette, fonts, syntax colors, geometry) **plus** motif rules. Motifs are pure CSS on the fixed structure: pseudo-elements, backgrounds, borders, `clip-path`, CSS counters, `::first-letter`. ~40–80 lines.
 4. **`mockup.css` (conditional, Layer 4).** The generic UI-wireframe kit. Inlined **only** when the campaign is UI-bearing and the planner composes a wireframe (see design-contract §10). Like `base.css` it contains **zero hardcoded colors** — every value is a `var(--x)` from the skin interface below, or a `color-mix()` of those vars. The mockup therefore **matches the plan's skin** rather than mimicking a real screenshot. Backend / data / refactor campaigns omit this layer entirely.
 
-At generation time the planner inlines `base.css` + the chosen `skin-*.css` (+ `mockup.css` when a wireframe is present) into a single `<style>` block in `plan.html`, in that order. **These `.css` files are authoring sources inside the skill — they never ship beside `plan.html`.** The output remains a self-contained single file (`self_contained` clause, §1 of the design contract).
+At generation time `assemble_plan.py` (same directory) inlines `base.css` + the chosen `skin-*.css` (+ `mockup.css` when the body contains a `ui-mock-section`) into a single `<style>` block in `plan.html`, in that order — no model re-types the CSS. **These `.css` files are authoring sources inside the skill — they never ship beside `plan.html`.** The output remains a self-contained single file (`self_contained` clause, §1 of the design contract).
 
 ## CSS variable interface (skins MUST define every one)
 

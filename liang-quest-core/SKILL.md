@@ -19,15 +19,17 @@ This skill contains **no behavioral logic**. It exists solely as a structured li
 
 ## Schema Version
 
-**Current: schema_version: 4**
+**Current campaign manifest schema: schema_version: 4**
 
-The quest planning family uses integer schema versioning. All skills reference the current version from this central declaration.
+This is the canonical `manifest.yaml` schema version for quest campaigns. It is distinct from `.liang/project.yaml`'s `schema_version: 1` — the two files use independent, non-overlapping version namespaces. When a skill reads "schema_version", the context (campaign manifest vs project.yaml) determines which version line applies.
+
+The quest planning family uses integer schema versioning for campaign manifests. All skills reference the current version from this central declaration.
 
 | Version | Changes |
 |---------|---------|
 | 4 | **Canonical planner-native schema.** `workflow` field removed entirely — the canonical pipeline has a single executor and no workflow discriminator. Quest entries use `file` (path to a flat `quest-NNN-name.md`) instead of `path` (path to a per-quest folder's `index.html`). Quest entries carry `difficulty: easy\|medium\|hard` for downstream model routing. Status vocabulary tightens to `ready / in_progress / passed / failed / skipped` (no `ready_for_planning`/`planned`/`needs_clarification`/`blocked`). |
 
-Skills should check `schema_version` when parsing campaign artifacts and handle v1, v2, v3, and v4 gracefully. Canonical pipeline campaigns (v4) can also be detected structurally: no `workflow` field at any level, quest entries have `file` and `difficulty`, status is `ready`.
+Skills should check `schema_version` when parsing campaign artifacts and handle v1, v2, v3, and v4 gracefully. Parsers must tolerate the field as either integer (e.g. `4`) or string (e.g. `"4"`) for backward compatibility. Canonical pipeline campaigns (v4) can also be detected structurally: no `workflow` field at any level, quest entries have `file` and `difficulty`, status is `ready`.
 
 The declaration must be prominent and unambiguous — any skill reading quest-core will see the current version immediately after the reference table.
 
@@ -38,6 +40,7 @@ The declaration must be prominent and unambiguous — any skill reading quest-co
 | **liang-quest-core** | Shared references (this skill) | — |
 | **liang-quest-planner** | Same-context campaign planner — extracts decisions from in-session conversation, writes `plan.html` + flat `quest-NNN-*.md` files + `manifest.yaml` | `campaign/` (manifest schema, protocol) |
 | **liang-quest-executor** | Planner-native executor — spawns child processes per step (Pi CLI / Claude subagents / batch), tiered retry, quest-level VC verification with Tier 1 inline + Tier 2 deferred UAT | `campaign/`, `execution/`, `project/` |
+| **liang-quest-batch-sweep** | Multi-campaign sweep launcher/orchestrator — wraps `sweep.py`, dispatches executor per eligible campaign, writes sweep reports | `campaign/`, `project/` |
 | **liang-quest-status** | Read-only campaign status dashboard. Scans all manifests across all formats and renders an adaptive markdown view. | `campaign/` (protocol) |
 
 ## Composition Mechanism
@@ -46,6 +49,7 @@ Family skills consume core references via **reference inclusion** — they read 
 
 - **Planner** reads `campaign/` (manifest schema, protocol).
 - **Executor** reads `campaign/`, `execution/`, `project/`.
+- **Batch sweep** reads `campaign/`, `project/` (for manifest/project config conventions while orchestrating multiple executor runs).
 - **Status** reads `campaign/` (protocol — for the campaign directory convention).
 
 ## Reference Index

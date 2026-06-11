@@ -27,13 +27,17 @@ The harness chains four phases (`sweep-afk.py`):
    gates + the pi runtime (models resolvable, model API key set, `pi`
    spawnable, governance context present and un-shadowed, every quest
    well-formed). **Aborts before launch on any FAIL.**
-2. **Sweep** (`sweep.py`, live) — dispatches `pi --skill liang-quest-executor
-   --no-confirm` once per eligible campaign, in dependency order. Already-passed
-   campaigns are skipped; `failed` ones are re-run on a later invocation.
-3. **Reconcile** (`p4 reconcile`) — opens for add/edit/delete **only** the source
-   files this run actually wrote (read from `.run/*/step-*.html`, mtime-scoped).
-   Makes Perforce correctness independent of whether a child remembered
-   `p4 edit`/`p4 add`. Never submits. No-ops on non-Perforce projects.
+2. **Sweep** (`sweep.py`, live) — dispatches `pi --print --skill
+   liang-quest-executor` once per eligible campaign, in dependency order,
+   with non-interactive intent delivered as prompt text (no `--no-confirm`
+   flag — pi has none). Already-passed campaigns are skipped; `failed` ones
+   are re-run on a later invocation.
+3. **Reconcile** — reads `.liang/project.yaml` `vcs` field. When
+   `vcs: perforce`, runs `p4 reconcile` on **only** the source files this run
+   actually wrote (read from `.run/*/step-*.html`, mtime-scoped). Makes
+   Perforce correctness independent of whether a child remembered
+   `p4 edit`/`p4 add`. Never submits. For `git`, `none`, or missing VCS,
+   prints the touched-file list for manual handling.
 4. **Report** — lists the sweep report, every run report, and any deferred
    Tier-2 UAT items awaiting your judgment.
 
@@ -77,10 +81,11 @@ deliberate unattended counterpart — running it is the explicit go-ahead.
 ## After it finishes
 
 1. Open the **run reports** (paths printed in phase 4) — check quest pass/fail.
-2. Drain any **deferred Tier-2 UAT** items the report flags. Under `--no-confirm`
-   these pass *provisionally* and are never auto-judged — they're yours to confirm.
-3. Files are open in your default changelist (phase 3). Compile, review, then
-   `p4 submit`.
+2. Drain any **deferred Tier-2 UAT** items the report flags. In non-interactive
+   mode these pass *provisionally* and are never auto-judged — they're yours to
+   confirm.
+3. **Perforce projects:** files are open in your default changelist (phase 3). Compile, review, then `p4 submit`.
+   **Non-Perforce projects:** the touched-file list was printed in phase 3; handle changes manually (e.g. `git add`, manual review).
 
 ## Re-running / resume
 

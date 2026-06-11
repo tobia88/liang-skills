@@ -56,10 +56,12 @@ Collect all found manifest paths. If none found, report "No campaigns found" and
 For each `manifest.yaml`:
 
 a. Attempt YAML parse. On failure: record inline ERROR row, continue.
-b. Detect schema version (reference `references/field-registry.md` Version-Aware Parsing section):
-   - Absent or `"1"`: v1 rules
-   - `"2"`: v2 rules
-   - `"3"`: v3 rules
+b. Detect schema version (reference `references/field-registry.md` Version-Aware Parsing section).
+   The `schema_version` field may be an integer (e.g. `4`) or a string (e.g. `"4"`); normalize before comparing.
+   - Absent or `"1"` / `1`: v1 rules
+   - `"2"` / `2`: v2 rules
+   - `"3"` / `3`: v3 rules
+   - `"4"` / `4` or canonical-format detection: v4 planner-native rules
    - Other: best-effort parse with WARN indicator
 c. Extract campaign-level fields: `campaign_id`, `title`, `created_at`, `schema_version`, `workflow` (campaign-level for v3, ignore per-quest for v1/v2, absent in v4)
 d. Extract quest-level fields for each quest: `id`, `title`, `status`, `depends_on`, `priority` (deprecated chain), `difficulty` (canonical), `file` (canonical) or `path` (deprecated chain), `current_cycle`, `total_cycles`, `started_at`, `completed_at`, `skip_reason`
@@ -72,7 +74,7 @@ a. **Completion percentage:**
    ```
    count(quests where status == "passed") / count(all quests) * 100
    ```
-   Round to nearest integer.
+   Round to nearest integer. When `count(all quests)` is zero, display `0%` with a WARN indicator — never divide by zero.
 
 b. **Total elapsed time:**
    When `started_at` and `completed_at` are available on quests:
@@ -86,7 +88,7 @@ b. **Total elapsed time:**
 
 For each quest, map status to tier per `references/attention-tiers.md`:
 - **ALERT:** `failed`
-- **ACTIVE:** `in_progress`, `ready`
+- **ACTIVE:** `in_progress`, `ready`, `planned`, `ready_for_planning` (legacy actionable statuses that represent work awaiting action)
 - **INFO:** `skipped`
 - **PASSED:** `passed`
 - Unknown status: default to INFO
@@ -105,6 +107,8 @@ Topological dependency order:
 1. Quests with no dependencies first
 2. Dependent quests follow their prerequisites
 3. Same dependency level: maintain manifest order
+
+If the dependency graph contains a cycle, emit a WARN indicator on the campaign row and fall back to manifest order for all quests in that campaign. Do not crash or skip the campaign.
 
 ### 7. Render Dashboard
 

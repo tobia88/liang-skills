@@ -1,6 +1,6 @@
 # HTML Design Contract
 
-This document governs the `plan.html` generation phase of `liang-quest-planner`. It defines the **quality floor every output must clear**, the **aesthetic catalog** the planner picks from, the **selection heuristics** for matching direction to campaign, the **delegation protocol** for soft-handing-off to `frontend-design`, the **CSS pitfall guardrails** to avoid common AI-generated layout bugs, and the **anti-patterns** that mark generic AI-slop output.
+This document governs the `plan.html` generation phase of `liang-quest-planner`. It defines the **quality floor every output must clear**, the **aesthetic catalog** the planner picks from, the **selection heuristics** for matching direction to campaign, the **delegation protocol** for the body-drafting subagent, the **CSS pitfall guardrails** to avoid common AI-generated layout bugs, and the **anti-patterns** that mark generic AI-slop output.
 
 Read this document **before every HTML generation**, whether delegating or generating inline.
 
@@ -136,28 +136,27 @@ The planner picks one direction per campaign automatically. Match in this order:
 
 ## 4. Assembly Protocol
 
-The planner assembles `plan.html` from three fixed layers rather than regenerating CSS every run or hand-delegating to `frontend-design`.
+The planner assembles `plan.html` from three fixed layers rather than regenerating CSS every run. Body drafting is delegated to the body-drafter subagent (model resolved per SKILL.md Phase 2c: `project.yaml` `models.body_drafter` → `execution_by_difficulty.medium` → harness sonnet-class default); CSS inlining and structural validation are owned by a deterministic script — no model re-types CSS in any standard path.
 
-1. **Generate ONLY the fixed-body HTML** per `references/templates/class-contract.md` — the variable per-campaign content (masthead, TOC, quest sections, notes, footer). The HTML structure and class names are identical regardless of which aesthetic direction is chosen. No theme needs bespoke markup.
-2. **Read the two CSS layers from disk** — `references/templates/base.css` (all structure + all 14 pitfall fixes, zero hardcoded colors) and `references/templates/skin-<chosen>.css` (the `:root` variable block + motif rules for the chosen direction).
-3. **Inline the layers into a single `<style>` block** — `base.css` first, then the skin, then `mockup.css` **only if** the campaign is UI-bearing and a wireframe is composed (§10). The CSS cascade is deliberate: skins override nothing structural, only variables and optional motif rules; `mockup.css` consumes the same skin variables and adds only wireframe classes.
-4. **Output remains a single self-contained file** — the contract's `self_contained` and `no_external_deps` clauses (§1) are satisfied by inlining the authoring sources at generation time. The `.css` files live in the skill's `references/templates/` directory; they never ship beside `plan.html`.
+1. **The body-drafter subagent generates ONLY the fixed-body HTML** per `references/templates/class-contract.md` — the variable per-campaign content (masthead, TOC, quest sections, notes, footer), briefed with the Decision Summary, the Phase 2a quest decomposition, the wireframe recipe (UI-bearing campaigns only), and the class contract itself. The HTML structure and class names are identical regardless of which aesthetic direction is chosen. No theme needs bespoke markup.
+2. **`references/templates/assemble_plan.py` validates and assembles** — it structurally validates the body (bidirectional TOC-anchor ↔ section-id integrity, required skeleton classes, difficulty badges, no `<style>`/`<script>`/`<link>`/document-shell tags, no inline styles beyond the `--mock-cols` exception, no external assets), then inlines `base.css`, the chosen `skin-<name>.css`, and `mockup.css` (auto-included only when the body contains a `ui-mock-section`, §10) into a single `<style>` block, in that order. The CSS cascade is deliberate: skins override nothing structural, only variables and optional motif rules; `mockup.css` consumes the same skin variables and adds only wireframe classes.
+3. **On validation failure** the script exits non-zero with `VALIDATION:` lines on stderr and writes nothing; the planner sends the violations back to the subagent and re-runs (max 2 retries, then the planner drafts the body itself).
+4. **Output remains a single self-contained file** — the contract's `self_contained` and `no_external_deps` clauses (§1) are satisfied by the script's inlining. The `.css` files live in the skill's `references/templates/` directory; they never ship beside `plan.html`.
 
 ### 4.1 Body-Only Generation Contract
 
-The planner generates **only the fixed semantic body** — no inline CSS, no `<style>` block, no palette selection in the body markup. The body skeleton is defined in `references/templates/class-contract.md` and is identical across all aesthetic directions.
+The body generator — the body-drafter subagent, or the planner in fallback — emits **only the fixed semantic body** — no inline CSS, no `<style>` block, no palette selection in the body markup. The body skeleton is defined in `references/templates/class-contract.md` and is identical across all aesthetic directions.
 
-### 4.2 Delegation Scope (optional)
+### 4.2 Delegation Scope
 
-If `frontend-design:frontend-design` is available, it may be invoked **only** for body-content generation — generating the fixed-structure HTML skeleton per `class-contract.md`. CSS is never delegated; the planner always reads and inlines `base.css` + the chosen skin itself. If `frontend-design` is unavailable or fails, the planner generates the body inline.
+Body drafting goes to a general-purpose subagent on the resolved body-drafter model (configurable via `project.yaml` — see §4 intro). The delegation is transcription, never decision-making: quest decomposition, difficulty, wireframe recipe, and aesthetic direction are all decided by the planner before the subagent is briefed. CSS is never delegated to any model — `assemble_plan.py` owns it. If subagent spawning is unavailable, or the subagent fails validation twice, the planner drafts the body inline and still assembles via the script. Manual CSS inlining is a last resort reserved for environments without Python.
 
 ### 4.3 Verification
 
 Regardless of path, after assembly:
 
+- `assemble_plan.py` exited 0 — it enforces TOC-anchor integrity, required structure, and the no-`<script>`/no-`<style>` rules; do not re-derive those checks by hand except in the manual fallback
 - Confirm the file exists at the expected path
-- Spot-check that anchor IDs match `href` values for the TOC
-- Confirm no `<script>` tags appear in the output
 - Confirm the output is a single self-contained file
 - Run the Visual Spot-Check (§4.4) before auto-opening in the browser
 
@@ -199,9 +198,10 @@ The three-layer generation model is backed by authoring sources in `references/t
 | File | Role | Notes |
 |------|------|-------|
 | `references/templates/class-contract.md` | Fixed body structure + CSS variable interface | The single source of truth for class names, HTML skeleton, and the skin variable contract. Read by the planner's body generator. |
-| `references/templates/base.css` | Shared structure + all 14 pitfall fixes (§5.1–5.14) | Written and visually audited **once**. Contains zero hardcoded colors — every visual value is a `var(--x)` resolved by the skin. **§5.1–5.14 are baked into this file — the planner must not re-derive them per campaign.** |
+| `references/templates/base.css` | Shared structure + all 14 pitfall fixes (§5.1–5.14) and syntax-token rules | Written and visually audited **once**. Contains zero hardcoded colors — every visual value is a `var(--x)` resolved by the skin. **§5.1–§5.14 are baked into this file — the planner must not re-derive them per campaign.** |
 | `references/templates/skin-<name>.css` | Per-direction palette + motif | Naming convention: `skin-` + lowercase-hyphenated direction slug (e.g., `skin-nier-monochrome.css`, `skin-ff-gold.css`). Each skin defines the full `:root` variable block plus optional motif rules. |
-| `references/templates/mockup.css` | Generic UI-wireframe kit (Layer 4, conditional) | Zero hardcoded colors — consumes the skin's variable interface. Inlined **only** when a UI wireframe is composed (§10). Provides reusable primitives (frame, tabs, toolbar, fields, grouped lists, data grid, split panes, status bar, empty state, inline annotation badges). |
+| `references/templates/mockup.css` | Generic UI-wireframe kit (Layer 4, conditional) | Zero hardcoded colors — consumes the skin's variable interface. Auto-included by `assemble_plan.py` **only** when the body contains a `ui-mock-section` (§10). Provides reusable primitives (frame, tabs, toolbar, fields, grouped lists, data grid, split panes, status bar, empty state, inline annotation badges). |
+| `references/templates/assemble_plan.py` | Deterministic assembler + structural validator | Run by the planner after body drafting: validates the body against the class contract, inlines base + skin (+ mockup when wireframed) into one `<style>` block, writes the self-contained `plan.html`. Exits non-zero with `VALIDATION:` lines on contract violations. |
 
 When the planner picks an aesthetic direction, it resolves the skin filename as `skin-<lowercase-hyphenated-direction>.css` and reads it from `references/templates/`.
 
@@ -502,16 +502,18 @@ Every `plan.html` must contain these structural elements, regardless of aestheti
 4. **Campaign notes** with risks and open questions
 5. **Footer** with generator attribution and timestamp
 
-**Conditional:** a single **UI Layout Wireframe** section (§10) between the TOC and the first quest, included **only** for UI-bearing campaigns. Not required for backend / data / refactor campaigns.
+**Conditional:**
+
+- A single **UI Layout Wireframe** section (§10) between the TOC and the first quest, included only for UI-bearing campaigns. Not required for backend / data / refactor campaigns.
 
 ---
 
 ## 8. Version & Provenance
 
-- Contract version: 1.7
+- Contract version: 2.1
 - Authored: 2026-05-27
 - Owning skill: `liang-quest-planner`
-- Companion skill (soft dependency): `frontend-design:frontend-design`
+- Companion script: `references/templates/assemble_plan.py` (deterministic assembly + structural validation)
 - Revisions:
   - v1.1 — added §9 syntax highlighting; difficulty badge added to §7 required content; code_blocks / accessible / print_safe clauses in §1 extended to cover highlighting tokens.
   - v1.2 — added §5.8 (reading margins and desktop content width); codifies tech-blog default widths (`max-width: 1080–1200px`, `48–64px` side padding) after the planner shipped a cramped 880px / 32px default that the user flagged as too tight to read.
@@ -520,6 +522,10 @@ Every `plan.html` must contain these structural elements, regardless of aestheti
   - v1.5 — added §5.13 (asymmetric content in 2-col grids leaves empty space — restructure-to-footer preferred over sticky sidebar); added §5.14 (inline `<code>` overflows narrow containers, generalizes §5.5 from tables to any narrow card); promoted Playwright screenshot loop from §9.2 syntax-palette-only mention to a mandatory §4.5 Visual Self-Audit with three viewports (1440/720/375), an extreme-sampling rule (longest-content quest + shortest-content quest, never middle), and an audit checklist mapped to §1 + §5. Also added `Run the Visual Self-Audit (§4.5)` as a §4.4 verification step. Driven by the finish-pipeline-cleanup campaign where q002's long step list left a 65% empty void in the right sidebar, q003's Victory Conditions regex strings overflowed the narrow aside card, and three rounds of screenshot inspection caught issues that the post-generation "ok the file exists" verification did not.
   - v1.6 — layered architecture: §4 becomes an Assembly Protocol (body generated per class-contract.md, base.css + skin-<name>.css inlined, CSS never regenerated per run); frontend-design delegation scoped to body-content only (§4.2); §4.5 collapses to a longest+shortest 375px spot-check plus decisions table (§4.4); §4a Templates Reference section added documenting the three-layer model and the skin naming convention; §5.1–5.14 marked baked-into-base.css (planner must not re-derive); §9.3 split between base.css (token rules + pre code reset) and skins (`:root` palette variables).
   - v1.7 — added §10 (UI Wireframe Mockup) + conditional Layer 4 `mockup.css`: optional skin-matched wireframe for UI-bearing campaigns, with inline-badge annotations. Lesson baked in (class-contract hard-rule 6): mockup colors come from skin vars on explicit surface backgrounds, and active/checked/selected states use accent borders + text, never fills behind text — making the dark-on-light fall-through bug that prompted this structurally impossible.
+  - v1.8 — added §11 (Animated Flow Visualization): optional CSS-only `flow-visual-section` for loops, pipelines, retry/evaluation cycles, state machines, branching decisions, and orchestration flows. Flow graph styles live in `base.css`, use skin variables only, include responsive stacking and `prefers-reduced-motion`, and should be included only when they improve understanding rather than decorate.
+  - v1.9 — **removed §11 (Animated Flow Visualization) entirely.** The trigger over-fired: because Phase 2a always orders quests by dependency topology, the "dependency DAG / chain / sequence" inclusion clause matched every multi-quest campaign, so the graph rendered on essentially every plan rather than only genuinely loop/pipeline/state-machine-shaped ones. Dropped the `flow-visual-*` styles from `base.css`, the skeleton + class table + hard-rule from `class-contract.md`, the SKILL.md Phase 2a decision step and 2c/2d references, and the §4.4 flow spot-check. Plans are now TOC → (optional UI wireframe) → quests.
+  - v2.0 — **body drafting re-delegated from `frontend-design` to a `model: sonnet` subagent; CSS assembly moved out of the model into `references/templates/assemble_plan.py`.** Rationale: by Phase 2c all design judgment is already spent (decomposition, difficulty, wireframe recipe, aesthetic land in 2a/2b), so body generation is contract-following transcription a cheaper, faster model handles reliably — while re-typing ~28KB of base + skin + mockup CSS as model output was pure token waste with a typo risk attached. §4 rewritten as the subagent + script protocol; §4.2 rescoped (delegation is transcription, never decisions); §4.3 anchor/structure/script checks marked script-enforced; §4a table gains the assembler row. Phase 3 full regens reuse the same machinery; edit-in-place stays with the planner and reads the affected section back before editing. Wireframe recipes are written by the planner in Phase 2a and handed to the subagent verbatim.
+  - v2.1 — **body-drafter model made configurable via `project.yaml`.** Resolution chain: `models.body_drafter` → `models.execution_by_difficulty.medium` → harness sonnet-class default; missing `project.yaml` falls through silently (planning may precede the executor's first-run interview). §4 / §4.1 / §4.2 rephrased from "sonnet subagent" to "body-drafter subagent" — the skill family runs under pi with non-Claude hosts (GPT, DeepSeek), so vendor-pinned model names in skill prose are a portability bug. Companion change: `models.claude_mode` added for the executor's `--claude` tier overrides (schema docs in `liang-quest-core/references/project/project-yaml.md`).
 
 ---
 
