@@ -36,7 +36,7 @@ Same-context, one-shot campaign planner. Consume decisions from the live convers
 Activate when:
 1. User invokes by name (`skill:liang-quest-planner`)
 2. As a Next Move option immediately after `liang-brainstorm-relentless` finalizes a Strategy Report
-3. After `liang-brainstorm-quick` when the user picks the "Plan first" downstream at lite's Next Move (lite presents this skill and an in-session sonnet subagent as equal alternatives — Recommended biases by scope-creep signals)
+3. After `liang-brainstorm-quick` when the user picks the "Plan first" downstream at lite's Next Move (lite presents this skill and a delegated executor as equal alternatives — Recommended biases by scope-creep signals)
 4. From general conversation when explicitly invoked — runs Adaptive Socratic Gap-Fill first
 
 Do not silently activate from generic intent like "plan this." If unclear, ask.
@@ -98,11 +98,7 @@ Include code blocks when a quest writes or modifies a file, specifies a structur
 
 **Difficulty classification.** Tag each quest `easy`, `medium`, or `hard` based on what an executor will actually face. Downstream executors route to different models per `.liang/project.yaml`'s `execution_by_difficulty` mapping, so the field is load-bearing — get it roughly right rather than perfectly right.
 
-- **`easy`** — single-file edit, mechanical change, no new abstractions, no cross-system reasoning. Examples: rename a symbol, add a UPROPERTY, swap a literal, write a known struct definition, update a config value.
-- **`medium`** — multi-file change, introduces or modifies an abstraction (struct, helper, interface), or requires understanding the call topology of a small subsystem. Examples: refactor a data structure with its call sites, add a new BlueprintNativeEvent and wire it through, restructure a private map's invariants.
-- **`hard`** — cross-system reasoning, new architecture, ambiguous integration boundary, or significant verification work. Examples: introduce a new subsystem, redesign a replication boundary, integrate two previously-isolated systems, end-to-end verification quest covering build + playtest + intel.
-
-When in doubt between two levels, pick the higher one — under-classifying routes a quest to a model that may fumble it; over-classifying just spends slightly more on a model that handles it cleanly.
+Criteria and tie-break rule: `liang-quest-core/references/campaign/difficulty-guide.md` (canonical).
 
 **Decide on a UI wireframe.** Detect whether the campaign is UI-bearing per `references/html-design-contract.md` §10.1 (editor tools, panels, app screens, dashboards, HUDs, forms, CLIs with structured output — *not* backend, data, refactor, or library work). If it is, plan a single skin-matched **UI Layout Wireframe** composed from the `mockup.css` kit, to sit between the TOC and the first quest, and write a one-line **primitive recipe** for it (e.g., "titlebar tabs + toolbar fields + grouped list + two-column data grid") — Phase 2c hands the recipe to the body subagent verbatim. Announce the choice in one sentence. When ambiguous, lean toward including a lightweight mockup.
 
@@ -114,7 +110,7 @@ Read `references/html-design-contract.md` for the catalog. Auto-pick based on th
 
 `plan.html` is assembled from three fixed layers — no per-run CSS regeneration, and no model re-types CSS as output in any standard path.
 
-1. **Brief the body-drafter subagent to draft the body.** Resolve the drafter model from `.liang/project.yaml`: `models.body_drafter` → `models.execution_by_difficulty.medium` → the harness's sonnet-class default (`model: sonnet` in Claude Code). If `project.yaml` is missing, use the harness default silently — never block planning on it, and never write the file. Spawn a general-purpose subagent with the resolved model whose prompt contains: the Decision Summary, the full 2a quest decomposition (titles, purposes, steps, code blocks, dependencies, victory conditions, difficulties), the wireframe recipe from 2a (UI-bearing campaigns only — the subagent renders the recipe, it never designs one), and the full text of `references/templates/class-contract.md`. The subagent writes **body-only HTML** — the content inside `<div class="page">`, masthead through page-footer; no document shell, no `<style>` block, no inline CSS beyond the `--mock-cols` exception — to `_body.html` inside the campaign folder (resolve/create the folder first). Code blocks wrap tokens in §9 span classes; all user-derived content is HTML-escaped.
+1. **Brief the body-drafter subagent to draft the body.** Resolve the drafter model from `.liang/project.yaml`: `models.body_drafter` → `models.execution_by_difficulty.medium` → harness default. If `project.yaml` is missing, use the harness default silently — never block planning on it, and never write the file. Spawn a general-purpose subagent with the resolved model whose prompt contains: the Decision Summary, the full 2a quest decomposition (titles, purposes, steps, code blocks, dependencies, victory conditions, difficulties), the wireframe recipe from 2a (UI-bearing campaigns only — the subagent renders the recipe, it never designs one), and the full text of `references/templates/class-contract.md`. The subagent writes **body-only HTML** — the content inside `<div class="page">`, masthead through page-footer; no document shell, no `<style>` block, no inline CSS beyond the `--mock-cols` exception — to `_body.html` inside the campaign folder (resolve/create the folder first). Code blocks wrap tokens in §9 span classes; all user-derived content is HTML-escaped.
 2. **Assemble + validate via script.** Run:
    `python references/templates/assemble_plan.py <campaign>/_body.html <skin-slug> <campaign>/plan.html --title "<Campaign Title>"`
    Resolve the skin slug from the direction name: lowercase-hyphenated, e.g. *NieR-monochrome* → `nier-monochrome`. The script structurally validates the body (TOC anchors ↔ section IDs bidirectionally, required skeleton classes, difficulty badges in TOC and quest headers, no `<style>`/`<script>`/`<link>`/document-shell tags, no inline styles beyond `--mock-cols`, no external assets), then inlines `base.css` + `skin-<slug>.css` (+ `mockup.css` automatically when the body contains a `ui-mock-section`) into one `<style>` block, in that order, and writes the single self-contained `plan.html`. The `.css` files never ship beside the output.
@@ -184,10 +180,9 @@ Quest markdown rules:
 
 ### VCS policy
 
-Read `vcs_artifacts.planning` from `.liang/project.yaml`:
-- `"ignore"` — apply VCS ignore rules silently
-- `"commit"` — leave trackable, suggest adding to VCS
-- `"ask"` (or absent) — ask the user; write the choice back to `project.yaml`
+Read `vcs_artifacts.planning` from `.liang/project.yaml`, then follow the canonical
+semantics (including ask → write-back) per
+`liang-quest-core/references/project/project-yaml.md § VCS Artifact Policy (optional)`.
 
 ### Next Move
 
@@ -211,10 +206,10 @@ The non-obvious hard stops:
 ## Relationship to Other Skills
 
 - **Upstream**: `liang-brainstorm-relentless` (Strategy Report → Next Move); in-session conversation via explicit invocation
-- **Body-drafting subagent**: Phase 2c (and Phase 3 full regens) delegate body-only HTML drafting to a general-purpose subagent whose model resolves from `.liang/project.yaml` (`models.body_drafter` → `execution_by_difficulty.medium` → harness sonnet-class default); `references/templates/assemble_plan.py` validates the body and assembles the CSS layers. The planner falls back to drafting the body itself if subagent spawning is unavailable
+- **Body-drafting subagent**: Phase 2c (and Phase 3 full regens) delegate body-only HTML drafting to a general-purpose body-drafter child whose model resolves from `.liang/project.yaml` (`models.body_drafter` → `execution_by_difficulty.medium` → harness default); `references/templates/assemble_plan.py` validates the body and assembles the CSS layers. The planner falls back to drafting the body itself if subagent spawning is unavailable
 - **Downstream**: `liang-quest-executor` — the planner-native single-context runner. Sole supported executor for planner output.
 - **Shared foundation**: `liang-quest-core` — shared protocol, manifest schema, status transitions, run report.
-- **Opt-in from**: `liang-brainstorm-quick` — one of the two same-session downstreams lite offers at finalization (the other is an in-session sonnet subagent for direct execution). Lite emits no files; this planner reads decisions directly from the live conversation.
+- **Opt-in from**: `liang-brainstorm-quick` — one of the two same-session downstreams lite offers at finalization (the other is a delegated executor for direct execution). Lite emits no files; this planner reads decisions directly from the live conversation.
 
 ## Reference Files
 

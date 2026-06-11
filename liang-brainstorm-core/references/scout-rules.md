@@ -44,7 +44,6 @@ In the final HTML, include only:
 
 Do not dump file contents by default.
 
-Source: extracted from liang-brainstorm-relentless/SKILL.md Project Scout
-Rules section (lines 162-204) per dc001. Full extraction per dc002 —
+Source: extracted from liang-brainstorm-relentless/SKILL.md § Activation Checklist per dc001. Full extraction per dc002 —
 includes timing, allowed/avoided paths, and report context rule. Variant
 skills may override or skip individual sections as needed.

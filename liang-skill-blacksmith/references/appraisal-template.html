@@ -1,4 +1,21 @@
 <!doctype html>
+<!--
+  liang-skill-blacksmith — JRPG label mapping (HTML views only).
+  Use these labels in visible HTML text (headings, badges, eyebrows).
+  Schema keys, finding records, and data attributes keep formal terms.
+
+    Formal term          → HTML label
+    Discovery pass       → Inspection Pass
+    Fix planning phase   → Reforging Plan
+    HTML report          → Blacksmith's Appraisal
+    Finding              → Imperfection
+    Clean state          → Tempered State
+    Verify mode          → Quality Assay
+    Severity: critical   → Fracture
+    Severity: advisory   → Blemish
+    Built-in rubric      → Master Pattern
+    Override file        → Custom Pattern
+-->
 <html lang="en">
 <head>
   <meta charset="utf-8" />
@@ -116,30 +133,28 @@
       </section>
     </header>
 
-    <!-- Convergence Trend -->
+    <!-- Inspection Summary -->
     <section class="section">
-      <div class="section-title"><h2>Convergence Trend</h2></div>
+      <div class="section-title"><h2>Inspection Summary</h2></div>
       <div class="card">
         <table class="convergence-table">
           <thead>
             <tr>
-              <th>Cycle</th>
+              <th>Pass</th>
               <th>Focus</th>
-              <th>New Findings</th>
-              <th>Cumulative</th>
-              <th class="bar-cell">Progress</th>
+              <th>Findings</th>
+              <th class="bar-cell">Share</th>
             </tr>
           </thead>
           <tbody>
-            <!-- BEGIN convergence-row -->
+            <!-- BEGIN summary-row -->
             <tr>
-              <td>[cycle-number]</td>
-              <td>[cycle-focus]</td>
-              <td>[new-findings]</td>
-              <td>[cumulative]</td>
+              <td>[pass-name]</td>
+              <td>[pass-focus]</td>
+              <td>[pass-findings]</td>
               <td class="bar-cell"><div class="bar-track"><div class="bar" style="width: [bar-width]%"></div></div></td>
             </tr>
-            <!-- END convergence-row -->
+            <!-- END summary-row -->
           </tbody>
         </table>
       </div>

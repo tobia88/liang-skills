@@ -30,6 +30,7 @@ created_at: string           # ISO 8601
 ```yaml
 models:
   body_drafter: string       # model ID for the planner's body-drafting subagent (Phase 2c / Phase 3 full regens)
+  apply_brief: string        # model ID for liang-brainstorm-quick's Option A (apply-immediately) delegation
   claude_mode:               # --claude mode execute-child tier overrides — Claude tier aliases ONLY
     easy: string             # "haiku" | "sonnet" | "opus"
     medium: string
@@ -46,6 +47,8 @@ Both keys are additive-optional: safe defaults when absent, no `schema_version` 
 4. No subagent support at all → the planner drafts the body inline
 
 If `project.yaml` itself is missing at planning time, the planner skips to step 3 silently — planning may legitimately run in a fresh workspace before the executor's first-run interview has ever run. The planner never writes `project.yaml`, and the first-run interview does not ask for this key.
+
+**`models.apply_brief`** — Model used by liang-brainstorm-quick's Option A (apply-immediately) delegation. Resolution chain: `models.apply_brief` → `models.execution_by_difficulty.medium` → harness default. Additive optional key; absence does not bump schema_version.
 
 **`models.claude_mode`** — consumed only by `liang-quest-executor` in `--claude` mode. Values are **Claude Code subagent tier aliases** (`haiku` / `sonnet` / `opus`), not pi model IDs — Claude Code cannot spawn non-Claude children, which is why this is a separate namespace from `execution_by_difficulty`. When the block (or any key in it) is absent, the defaults apply: easy → `haiku`, medium → `sonnet`, hard → `opus`.
 

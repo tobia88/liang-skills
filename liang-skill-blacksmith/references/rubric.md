@@ -1,47 +1,67 @@
 # Built-in Rubric and Finding Schema
 
 Reference document for the Liang Skill Blacksmith. Source of truth for every
-built-in quality check and the data structure for findings. Downstream quests
-(q002, q003, q004) consume this as their foundation.
+built-in quality check and the data structure for findings.
 
-## Severity Tiers
+Checks run on one of two engines:
+
+| Engine | Who runs it | Checks |
+|--------|-------------|--------|
+| `mechanical` | Bundled script `scripts/check_skill.py` — deterministic, never emulated by hand | L1-01, L1-02, L1-03, L1-04, L2-01, L2-03, L2-04 |
+| `judgment` | The inspecting agent, reading the file directly | L2-02, L3-01, L3-02, L3-03 |
+
+For mechanical checks, the script is the source of truth for exact detection
+mechanics (normalization, alias matching, thresholds). The tables below
+describe intent and scope.
+
+## Severity and Fixability
 
 | Tier | Meaning | Default Action |
 |------|---------|---------------|
-| `critical` | Structural or consistency defect; must-fix | Always included in the Appraisal |
-| `advisory` | Improvement suggestion; not a defect | Included but visually de-emphasized |
+| `critical` | Structural or consistency defect; must-fix | Shown prominently in the report |
+| `advisory` | Improvement suggestion; not a defect | Shown but visually de-emphasized |
 
 When in doubt, assign `advisory`.
 
+| Fixable | Meaning |
+|---------|---------|
+| `yes` | The fix is an edit to existing text; the finding enters fix planning with a before/after diff |
+| `no` | A fix would require generating new content (forbidden by the boundaries); the finding is **report-only** and never enters fix planning |
+
 ## Layer 1: Structural Checks
 
-| ID | Check | Severity | Description | Detection Criteria |
-|----|-------|----------|-------------|--------------------|
-| L1-01 | Valid YAML frontmatter | critical | Frontmatter must parse as valid YAML with `name` and `description` fields | Parse the YAML block between the opening `---` markers. Fail if: (a) no YAML frontmatter block found, (b) YAML does not parse, (c) `name` field is missing or empty, (d) `description` field is missing or empty. |
-| L1-02 | Required sections present | critical | The 8 standard sections expected in every SKILL.md | Scan for H2 headings matching (case-insensitive): Core Contract, Activation, Startup Flow, Boundaries, Failure Modes, Visual Tone, Relationship to Other Skills, Reference Files. Report each missing heading as a separate finding. |
-| L1-03 | No orphan sections | advisory | Every H2 heading should map to a recognized section | Collect all H2 headings. Compare against the recognized set: the 8 required sections plus known optional sections (Terminology, Design Principle, Plan YAML Shape, Workflow Detail). Flag any H2 heading not in the recognized set. Suggest marking it as skill-specific or mapping it to a standard section. |
-| L1-04 | Consistent heading hierarchy | advisory | No skipped heading levels | Walk the heading tree top-to-bottom. Flag any jump that skips a level (e.g., H2 directly followed by H4 with no intervening H3). Report the specific heading text and levels involved. |
+| ID | Check | Severity | Fixable | Engine | Intent |
+|----|-------|----------|---------|--------|--------|
+| L1-01 | Valid YAML frontmatter | critical | yes | mechanical | Frontmatter must parse as YAML with non-empty `name` and `description`. Formatting defects are fixable; if a field's content is genuinely absent, mark the finding `deferred` — inventing content is forbidden. |
+| L1-02 | Required sections present | advisory | no | mechanical | The 8 canonical H2 sections expected in workflow-style SKILL.md files: Core Contract, Activation, Startup Flow, Boundaries, Failure Modes, Visual Tone, Relationship to Other Skills, Reference Files. Aliases accepted (e.g. Execution Flow, Error Handling, Reference Index). Hub and tool skills with intentionally different shapes should disable this check via `rubric-override.md`. |
+| L1-03 | No orphan sections | advisory | yes | mechanical | Every H2 heading should match a canonical or known-optional section. Fix is limited to renaming the heading to a canonical form; if the section is genuinely skill-specific, mark it `deferred` and suggest an override entry. |
+| L1-04 | Consistent heading hierarchy | advisory | yes | mechanical | No skipped heading levels (e.g. H2 followed directly by H4). |
 
 ## Layer 2: Language Checks
 
-| ID | Check | Severity | Description | Detection Criteria |
-|----|-------|----------|-------------|--------------------|
-| L2-01 | Long sentences | advisory | Sentences exceeding 40 words in rule/directive sections | Scope: sections titled Boundaries, Core Contract, Activation, Failure Modes, and any section containing numbered rules or bullet-point directives. Count words per sentence (split on sentence-ending punctuation followed by whitespace). Flag sentences exceeding 40 words. Exclude fenced code blocks and YAML blocks. |
-| L2-02 | Passive voice in directives | advisory | Rules and directives should use active imperative voice | Scope: same as L2-01. Flag sentences containing passive constructions: forms of "be" (is, are, was, were, be, been, being) followed by a past participle pattern. Focus on imperative contexts: bullet points starting with articles or passive constructions instead of command verbs. |
-| L2-03 | Vague quantifiers | advisory | Imprecise words that weaken directives | Scope: same as L2-01. Flag occurrences of: "various", "some", "etc.", "and so on", "things", "stuff", "many", "several", "a number of", "a lot of". Report the specific word and its surrounding sentence. Exclude quoted examples and fenced code blocks. |
-| L2-04 | Duplicate phrasing | advisory | Substantially similar sentences within the same file | Compare every non-trivial sentence (more than 10 words) against all other sentences in the same file. Flag pairs with more than 80% word overlap after normalization (lowercase, stop-words removed). Report both locations. Exclude headings, fenced code blocks, and YAML blocks. |
+Scope for L2-01, L2-02, L2-03: directive sections — headings containing
+Boundaries, Core Contract, Activation, Failure Modes, Hard Stops, Non-Goals,
+or Error Handling. Fenced code, YAML blocks, and table rows are excluded.
+
+| ID | Check | Severity | Fixable | Engine | Intent |
+|----|-------|----------|---------|--------|--------|
+| L2-01 | Long sentences | advisory | yes | mechanical | Sentences exceeding 40 words in directive sections. |
+| L2-02 | Passive voice in directives | advisory | yes | judgment | Rules should use active imperative voice. Flag sentences where a passive construction ("is applied", "should be done") replaces a command verb. Judge in context; do not flag passives inside quoted examples or descriptions of state. |
+| L2-03 | Vague quantifiers | advisory | yes | mechanical | Flag: various, some, etc., and so on, things, stuff, many, several, a number of, a lot of. |
+| L2-04 | Duplicate phrasing | advisory | yes | mechanical | Sentence pairs (over 10 words) within one file sharing at least 80% of significant words after stopword removal. |
 
 ## Layer 3: Cross-Skill Consistency Checks
 
-These checks require batch mode with 2+ selected SKILL.md files. In single-file
-mode, Layer 3 checks are skipped and the run notes that cross-skill checks require
-batch mode.
+Layer 3 requires batch mode with 2+ selected files. In single-file mode, skip
+Layer 3 and note that cross-skill checks need batch mode. All Layer 3 checks
+are judgment checks: run them after Pass A, using the file content already
+read.
 
-| ID | Check | Severity | Description | Detection Criteria |
-|----|-------|----------|-------------|--------------------|
-| L3-01 | Terminology drift | critical | Key terms must be consistent across sibling skills | Build a canonical term list from all selected files. For each term appearing in 2+ files, verify consistent spelling and casing. Flag variant forms (e.g., "Quest Contract" vs "Quest Brief", "plan.html" vs "plan file"). Only flag terms with genuinely differing forms, not mere frequency differences. |
-| L3-02 | Boundary consistency | critical | Shared boundary declarations must use aligned wording and scope | Identify boundary sections (headings containing "Boundaries", "Hard Stops", "Non-Goals", "Never") across all selected files. For each conceptual boundary appearing in 2+ files, compare wording and scope. Flag mismatches where the same boundary uses different language or coverage. |
-| L3-03 | Shared convention adherence | advisory | Common patterns should be consistent across the skill family | Check conventions across all selected files: (a) YAML-in-HTML-comment references, (b) Git/privacy prompt phrasing, (c) open prompt pattern (confirmation before acting), (d) reference file section format. Flag deviations from the majority pattern among selected files. |
+| ID | Check | Severity | Fixable | Engine | Intent |
+|----|-------|----------|---------|--------|--------|
+| L3-01 | Terminology drift | critical | yes | judgment | Key terms must be consistent across sibling skills. For each term appearing in 2+ files, verify consistent spelling and casing (e.g. "Quest Contract" vs "Quest Brief"). Flag only genuinely differing forms, not frequency differences. |
+| L3-02 | Boundary consistency | critical | yes | judgment | Shared boundary declarations must use aligned wording and scope. Compare boundary sections (Boundaries, Hard Stops, Non-Goals) across files; flag the same conceptual boundary expressed with conflicting language or coverage. |
+| L3-03 | Shared convention adherence | advisory | yes | judgment | Family conventions should be consistent: (a) YAML-in-HTML-comment references, (b) confirmation-before-acting prompt pattern, (c) reference file section format. Flag deviations from the majority pattern among the selected files. |
 
 ## Finding Record Schema
 
@@ -49,59 +69,57 @@ Each finding is a structured record:
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `finding_id` | string | yes | Unique within the run: `f` + zero-padded sequence (e.g., `f001`) |
-| `check_id` | string | yes | Rubric check that triggered this finding (e.g., `L1-01`) |
-| `layer` | integer | yes | Discovery layer: `1`, `2`, or `3` |
-| `severity` | string | yes | `"critical"` or `"advisory"` (inherited from the check definition) |
-| `file` | string | yes | Absolute path to the SKILL.md file |
-| `location` | string | yes | Section heading + approximate line range (e.g., `## Boundaries, lines 45-48`) |
+| `finding_id` | string | yes | Unique within the run: `f` + zero-padded sequence (e.g. `f001`) |
+| `check_id` | string | yes | Rubric check that triggered this finding (e.g. `L1-01`) |
+| `layer` | integer | yes | `1`, `2`, or `3` |
+| `severity` | string | yes | `"critical"` or `"advisory"`, after any override adjustment |
+| `fixable` | boolean | yes | Inherited from the check definition (see Severity and Fixability) |
+| `file` | string | yes | Path to the SKILL.md file |
+| `location` | string | yes | Section heading + line number (e.g. `## Boundaries, line 47`) |
 | `description` | string | yes | Human-readable description of the specific finding |
-| `evidence` | string | yes | The exact text that triggered the finding (trimmed to relevant excerpt) |
-| `before_text` | string | no | Original text span for diff rendering (populated during fix planning phase) |
-| `after_text` | string | no | Proposed replacement text (populated during fix planning phase) |
-| `cycle_discovered` | integer | yes | Which cycle first discovered this finding (1 through 5) |
-| `status` | string | yes | Lifecycle: `"new"` on creation, then `"fixed"` or `"deferred"` |
-| `dedup_key` | string | yes | Computed dedup key (see Dedup Logic below) |
+| `evidence` | string | yes | The exact text that triggered the finding, trimmed to the relevant excerpt |
+| `before_text` | string | no | Exact current text span for the fix; must match the file uniquely (populated during fix planning, fixable findings only) |
+| `after_text` | string | no | Proposed replacement text (populated during fix planning) |
+| `status` | string | yes | `"new"` on creation; then `"fixed"`, `"deferred"` (report-only or declined), or `"stale"` (before_text no longer matched at apply time) |
 
-### Field Usage Notes
+The mechanical script emits a subset of these fields; the inspecting agent
+adds `finding_id` and `status`, and adjusts `severity`/`fixable` per any
+override.
 
-- **Grouping:** Group findings by `file`, then by `layer` for the Appraisal report.
-- **Diff rendering:** `before_text` and `after_text` are null during discovery and
-  populated during fix planning. The Appraisal report renders these as side-by-side
-  or inline diffs.
-- **Severity filtering:** The report displays critical findings prominently; advisory
-  findings are visually de-emphasized but still shown.
+**Duplicate rule:** never record two findings with the same `check_id`,
+`file`, and `evidence`. Compare the strings directly — no hashing.
 
-## Dedup Logic
+**Grouping:** group findings by `file`, then by `layer`, for the report.
 
-The dedup gate is the mechanical stop condition for the discovery loop.
+## Override File: `rubric-override.md`
 
-### Dedup Key Computation
+A target skill may ship a `rubric-override.md` next to its SKILL.md. The
+inspecting agent reads it after running the script and applies it to the
+findings; the script itself never reads overrides.
 
+Recognized sections (each optional):
+
+```markdown
+# Rubric Override
+
+## Disable
+- L1-02
+- L1-03
+
+## Severity Overrides
+- L2-01: critical
+
+## Additional Checks
+| ID | Check | Severity | Fixable | Intent |
+|----|-------|----------|---------|--------|
+| X-01 | No TODO markers | advisory | yes | Flag TODO/FIXME left in prose. |
 ```
-dedup_key = hash( check_id + ":" + normalize(file) + ":" + normalize(evidence) )
-```
 
-Where:
-- `normalize(file)` = lowercase, forward-slash path separators, trim trailing slashes
-- `normalize(evidence)` = trim leading/trailing whitespace, collapse internal
-  whitespace to single spaces, lowercase
-- `hash` = deterministic string hash (SHA-256 truncated to first 16 hex characters)
+Rules:
 
-### Dedup Rules
-
-1. Before recording a finding, compute its `dedup_key`.
-2. Look up the key in the accumulated findings set for the current run.
-3. If a finding with the same `dedup_key` exists, discard the new finding (duplicate).
-4. A finding is "new" only if no prior finding shares its `dedup_key`.
-5. At the end of each continuation cycle (cycles 4 and 5), count new findings added
-   during that cycle. If zero new findings, terminate the discovery loop.
-
-### Design Rationale
-
-Content-based dedup (using `evidence` text) rather than position-based dedup
-(using line numbers) because:
-- Line numbers shift as the LLM reads files in different context windows across cycles
-- The same finding may appear at slightly different line offsets in different cycles
-- `check_id` scopes the comparison to prevent false dedup across unrelated checks
-  that happen to flag similar text
+- `Disable` drops every finding from the listed check IDs for that skill.
+- `Severity Overrides` reassigns the tier of listed checks for that skill.
+- `Additional Checks` are judgment checks run by the inspecting agent. IDs
+  must use the `X-` prefix so they never collide with built-in IDs.
+- If the file is absent, proceed with the built-in rubric and note the
+  absence in the report header.

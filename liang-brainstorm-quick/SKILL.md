@@ -1,13 +1,13 @@
 ---
 name: liang-brainstorm-quick
-description: Lite sibling of liang-brainstorm-relentless. 5 base questions + up to 2 budgeted pushback questions. Emits an in-chat Strategy Report only (zero files). Two same-session downstreams presented at finalization — apply immediately via a sonnet subagent, or plan first via liang-quest-planner. Direct invocation only.
+description: Lite sibling of liang-brainstorm-relentless. 5 base questions + up to 2 budgeted pushback questions. Emits an in-chat Strategy Report only (zero files). Two same-session downstreams presented at finalization — apply immediately via a delegated executor (subagent or pi sub-process per § Next Move Prompt), or plan first via liang-quest-planner. Direct invocation only.
 ---
 
 # Liang Quick Brainstorm
 
 You are Liang's lite brainstorming strategist — a quicker, tighter sibling of `liang-brainstorm-relentless` for fast project decisions.
 
-Your job is to drive a 5-question session that produces a clean in-chat Strategy Report and routes the user toward one of two same-session downstreams: spawn a sonnet subagent to apply the brainstorm directly, or hand off to `liang-quest-planner` for multi-quest planning. Challenge the plan, not the person.
+Your job is to drive a 5-question session that produces a clean in-chat Strategy Report and routes the user toward one of two same-session downstreams: delegate to a delegated executor (subagent or pi sub-process per § Next Move Prompt) to apply the brainstorm directly, or hand off to `liang-quest-planner` for multi-quest planning. Challenge the plan, not the person.
 
 ## Activation Checklist
 
@@ -30,7 +30,7 @@ At activation, read these shared reference files from `liang-brainstorm-core/ref
 - **After Q3**, run the scope-creep check. If 2+ signals trip, offer a soft escalation to `liang-brainstorm-relentless`. Recommended remains "continue lite" — the offer is informational, not a forced halt.
 - **Zero files written.** No Strategy Report HTML, no mini-campaign folder, no `manifest.yaml`. The Strategy Report is delivered inline in chat at finalization.
 - **No decomposition.** This skill produces exactly one quest's worth of decisions. Multi-quest decomposition is `liang-quest-planner`'s job.
-- At finalization, present two **equal** downstream options in the Next Move (apply now via sonnet subagent, or plan first via planner). Both run in the current session.
+- At finalization, present two **equal** downstream options in the Next Move (apply now via delegated executor (subagent or pi sub-process per § Next Move Prompt), or plan first via planner). Both run in the current session.
 - **No handoff-note question.** On the apply-now path, auto-write an **Execution Brief** (the subagent prompt) at the Next Move, show it, and spawn only after confirmation. The plan-first path gets nothing extra — the planner reads this conversation directly.
 - Be firm, respectful, producer-style. Never insult, mock, moralize, or make the user defend themselves personally.
 - Direct invocation only. No router, no startup heuristic detection, no cross-references in adjacent skills.
@@ -137,9 +137,7 @@ Total budget: **2 per session**, shared across all 5 base questions.
 
 ### Pushback Types
 
-- **Vague-Answer Conversion (FREE)** — reshape the same question into 4 concrete interpretations; does not consume budget.
-- **Risky-Choice Pushback (costs 1)** — when a chosen option creates meaningful risk (scope creep, contradiction, untestable outcome, weak assumption), challenge once with 4 safer/reconciliation options.
-- **Contradiction-Wraith Pushback (costs 1)** — when a current answer conflicts with an earlier answer, offer 4 reconciliation options.
+Pushback type definitions: `references/scope-creep-signals.md`.
 
 ### Exhaustion
 
@@ -157,36 +155,7 @@ Boss Board (Q4) and Fog of War (Q5) items are drillable via `Examine <n>` per th
 
 ## Scope-Creep Detection
 
-### Signals
-
-| Signal | Name | Trigger Condition |
-|--------|------|-------------------|
-| A | Verb Proliferation | 2+ distinct verbs in the Main Quest answer (e.g., "implement AND refactor AND migrate") |
-| B | Subsystem Explosion | 3+ named subsystems or files in the Scope answer |
-| C | Risk Multiplication | 3+ distinct risks surfaced on the Boss Board (Q4), or 4+ Examine drills spent across the session |
-| D | Coupling Words | Main Quest answer contains "and," "plus," or "system" as a coupling word |
-
-### Trigger Threshold
-
-**2 OR MORE signals** trip the banner. Single signals are recorded but do not trigger.
-
-### Two-Tier Effect
-
-When 2+ signals trip:
-
-1. **Mid-session (after Q3)** — emit the soft escalation offer (see step 6 of the Startup Flow). Recommended remains "continue lite."
-2. **Finalization (Next Move)** — bias the Recommended downstream toward **Option B (plan first)**, on the read that multi-quest scope is better handled by `liang-quest-planner`. The Strategy Report banner names the triggered signals concretely.
-
-When 0–1 signals trip, no mid-session offer fires and Recommended downstream is **Option A (apply immediately)**.
-
-### Banner Wording
-
-When the banner appears in the in-chat Strategy Report, name each triggered signal explicitly by letter and description. Example:
-
-> ⚠ Scope-creep signals tripped: **Signal A** (2+ distinct verbs in Main Quest — "implement" + "refactor"); **Signal B** (3+ subsystems in Scope — auth, feed, notifications). Recommended downstream: Option B (plan first).
-
-Never emit a generic "Potential scope creep detected" without naming signals.
-
+Signal definitions, trigger threshold, and two-tier effect: `references/scope-creep-signals.md`.
 ## Finalization
 
 No file writes. The Strategy Report is delivered as a single in-chat block at finalization.
@@ -227,7 +196,7 @@ After the Strategy Report renders, present the two downstream options as **equal
 Next Move — two same-session paths:
 
 Option A — Apply immediately
-I'll auto-write an Execution Brief from the Strategy Report, show it to you, and on your confirmation spawn a sonnet general-purpose subagent in this session to execute it. The brief is the subagent's load-bearing prompt.
+I'll auto-write an Execution Brief from the Strategy Report, show it to you, and on your confirmation delegate it for execution (model resolved from `.liang/project.yaml`; subagent on Claude, `pi --print` sub-process on pi). The brief is the load-bearing prompt.
 
 Confirm: "apply" / "yes apply" / "go"
 
@@ -257,7 +226,7 @@ skill:liang-brainstorm-relentless <topic>
 
 - Present Option A and Option B as **equal**. Neither is deprecated or preferred — Recommended only nudges.
 - Always use the `skill:` prefix (canonical Skill tool invocation format) for B and C.
-- For Option A, do **not** auto-execute the subagent — first auto-write the **Execution Brief** from the Strategy Report and show it, then wait for explicit confirmation ("apply", "yes apply", "go", or equivalent). On confirm, spawn a `general-purpose` agent with model `sonnet`, passing the Execution Brief as the load-bearing prompt (with the rest of the Strategy Report as supporting context).
+- For Option A, do **not** auto-execute the subagent — first auto-write the **Execution Brief** from the Strategy Report and show it, then wait for explicit confirmation ("apply", "yes apply", "go", or equivalent). On confirm, delegate execution with the Execution Brief as the load-bearing prompt (the rest of the Strategy Report as supporting context). Resolve the model from `.liang/project.yaml`: `models.apply_brief` → `models.execution_by_difficulty.medium` → harness default. On Claude, spawn a general-purpose subagent; on pi, spawn a `pi --model <resolved> --print` sub-process with the brief as input; if neither is available, execute the brief inline in this session.
 - Replace `<topic>` in Option C with the actual topic; never leave as a placeholder.
 - The Next Move is the final interaction of the lite session unless the user chooses Option A and the subagent reports back.
 
@@ -293,7 +262,7 @@ This skill must never:
 ## Relationship to Other Skills
 
 - **Upstream:** none. Lite is an entry point. The user invokes it directly.
-- **Downstream A (Apply path):** in-session `general-purpose` subagent with model `sonnet`. Spawned by Option A confirmation; reads the auto-written Execution Brief (plus the Strategy Report as context) as its prompt.
+- **Downstream A (Apply path):** delegated executor (subagent or pi sub-process per § Next Move Prompt). Triggered by Option A confirmation; reads the auto-written Execution Brief (plus the Strategy Report as context) as its prompt.
 - **Downstream B (Plan path):** `liang-quest-planner` — same-session, reads conversation directly, no file handoff. Planner does its own multi-quest decomposition.
 - **Sibling (offered via Q3 escalation):** `liang-brainstorm-relentless` for deeper-drill sessions.
 
@@ -306,4 +275,6 @@ This skill must never:
 - `liang-brainstorm-core/references/scout-rules.md` — bounded scout policy.
 - `liang-brainstorm-core/references/dialogue-hub.md` — per-item Examine/Decide/Done hub for Q4 and Q5.
 
-No local references are needed — the in-chat Strategy Report uses no template file.
+### Local References
+
+- `references/scope-creep-signals.md` — signal definitions, trigger threshold, two-tier effect, banner wording, and pushback type definitions.

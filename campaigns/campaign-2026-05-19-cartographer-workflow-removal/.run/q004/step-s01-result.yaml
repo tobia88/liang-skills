@@ -1,9 +1,0 @@
-step_id: "s01"
-workflow: "general"
-status: "passed"
-verification_tier: 1
-attempts: 1
-final_attempt_at: "2026-05-19T23:20:00+08:00"
-files_changed:
-  - "liang-quest-general-executor/SKILL.md"
-verification_command: "grep -q \"workflow.*general\" liang-quest-general-executor/SKILL.md && grep -q \"Hard-block\" liang-quest-general-executor/SKILL.md && grep -q \"untagged\" liang-quest-general-executor/SKILL.md && grep -q \"Workflow enforcement\" liang-quest-general-executor/SKILL.md"

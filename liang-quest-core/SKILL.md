@@ -57,6 +57,7 @@ Family skills consume core references via **reference inclusion** — they read 
 ### campaign/
 - `protocol.md` — Campaign lifecycle for the canonical planner → executor pipeline. Layered Truth principle.
 - `manifest-schema.md` — Canonical (v4) manifest.yaml schema. Source of truth.
+- `difficulty-guide.md` — Canonical easy/medium/hard difficulty criteria and tie-break rule.
 
 ### execution/
 - `status-transitions.md` — Manifest status vocabulary, allowed transitions, executor-owned fields, tiered retry behavior.

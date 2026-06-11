@@ -1,10 +1,4 @@
-# Planning artifacts (VCS Artifact Policy: planning = ignore)
-brainstorm-reports/
-.liang/campaigns/
-
-# Execution artifacts (VCS Artifact Policy: execution = ignore)
-campaigns/**/.run/
-campaigns/**/lessons.yaml
+# Generated artifacts live in .liang/ — its own .gitignore excludes everything but project.yaml
 
 # Python bytecode
 __pycache__/
@@ -12,6 +6,11 @@ __pycache__/
 
 # Harness-local runtime state
 .pi/
+.claude/settings.local.json
+.claude/worktrees/
 
 # Windows reserved-name redirect accidents
 nul
+
+# /goal run artifacts
+.liang/goal/runs/

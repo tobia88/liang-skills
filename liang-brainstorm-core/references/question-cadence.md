@@ -39,6 +39,4 @@ Manual:
 Describe in your own words.
 ```
 
-Source: extracted from liang-brainstorm-relentless/SKILL.md Core Contract
-(lines 14-20) per dc001. Rendering format explicitly documented per
-liang-brainstorm-quick/SKILL.md (lines 21-40).
+Source: extracted from liang-brainstorm-relentless/SKILL.md § Activation Checklist per dc001. Rendering format explicitly documented per liang-brainstorm-quick/SKILL.md § Activation Checklist

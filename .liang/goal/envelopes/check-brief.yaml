@@ -1,0 +1,16 @@
+# check-brief envelope — input to a /goal judgment child.
+# Works identically as a Claude subagent prompt attachment or a `pi --print` input file.
+goal_run: "<run-id>"
+criterion: "<C1|C3|C5>"
+criterion_text: |
+  <verbatim section from criteria.md — the only rubric the child may apply>
+excerpts:
+  - file: "<path relative to liang-skills root>"
+    location: "<section heading or line range>"
+    text: |
+      <flagged excerpt — never the whole file>
+question: "<the specific judgment to make for these excerpts>"
+response_contract: |
+  Return ONLY findings.yaml-style entries per criteria.md §Findings schema:
+  id, criterion, severity, class, file, location, summary, excerpt, proposed_fix.
+  No prose outside YAML. If an excerpt is fine, return no entry for it.
