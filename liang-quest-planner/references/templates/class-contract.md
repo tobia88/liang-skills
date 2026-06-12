@@ -7,9 +7,9 @@ The interface between the three generation layers. **Read this before authoring 
 1. **Fixed semantic body (theme-agnostic).** Phase 2 generates *only* this — the variable per-campaign content. The HTML structure and class names are identical regardless of which aesthetic direction is chosen. No theme needs bespoke markup.
 2. **`base.css`** — all structure + all 14 pitfall fixes (§5.1–5.14 of the design contract). Written and visually audited *once*. Contains **zero hardcoded colors** — every color, font, and the radius/shadow is a `var(--x)` resolved by the skin.
 3. **`skin-<name>.css`** — the `:root` variable block (palette, fonts, syntax colors, geometry) **plus** motif rules. Motifs are pure CSS on the fixed structure: pseudo-elements, backgrounds, borders, `clip-path`, CSS counters, `::first-letter`. ~40–80 lines.
-4. **`mockup.css` (conditional, Layer 4).** The generic UI-wireframe kit. Inlined **only** when the campaign is UI-bearing and the planner composes a wireframe (see design-contract §10). Like `base.css` it contains **zero hardcoded colors** — every value is a `var(--x)` from the skin interface below, or a `color-mix()` of those vars. The mockup therefore **matches the plan's skin** rather than mimicking a real screenshot. Backend / data / refactor campaigns omit this layer entirely.
+4. **Visual kits (conditional, Layer 4).** Three generic plan-visual kits — `mockup.css` (UI wireframe), `diagram.css` (flow/state diagram), `timeline.css` (sequence timeline). **At most one** is inlined per plan, only when Phase 2a planned a visual and the body contains the matching section class (design-contract §10). Like `base.css` they contain **zero hardcoded colors** — every value is a `var(--x)` from the skin interface below, or a `color-mix()` of those vars, so the visual **matches the plan's skin** rather than mimicking a real screenshot. Campaigns with no visual (the skip-biased default for backend / data / refactor / library work) omit this layer entirely.
 
-At generation time `assemble_plan.py` (same directory) inlines `base.css` + the chosen `skin-*.css` (+ `mockup.css` when the body contains a `ui-mock-section`) into a single `<style>` block in `plan.html`, in that order — no model re-types the CSS. **These `.css` files are authoring sources inside the skill — they never ship beside `plan.html`.** The output remains a self-contained single file (`self_contained` clause, §1 of the design contract).
+At generation time `assemble_plan.py` (same directory) inlines `base.css` + the chosen `skin-*.css` (+ the matching visual kit when the body contains a plan-visual section) into a single `<style>` block in `plan.html`, in that order — no model re-types the CSS. **These `.css` files are authoring sources inside the skill — they never ship beside `plan.html`.** The output remains a self-contained single file (`self_contained` clause, §1 of the design contract).
 
 ## CSS variable interface (skins MUST define every one)
 
@@ -145,9 +145,13 @@ The generator emits exactly this skeleton, filling content. Class names are the 
 </body>
 ```
 
-## Optional UI wireframe block (Layer 4)
+## Optional plan-visual block (Layer 4)
 
-When the campaign is UI-bearing (design-contract §10), the planner inserts **one** `ui-mock-section` between the `</nav>` (TOC) and `<main class="quests">`. It is composed from the generic `mockup.css` kit — the planner picks only the pieces the UI needs (a tool panel uses tabs + list + grid; a web form uses fields + buttons; a CLI uses the terminal chrome). Annotations are **inline numbered badges** in normal flow, mirrored by a legend below the frame.
+When Phase 2a plans a visual (design-contract §10), the planner inserts **at most one** plan-visual section between the `</nav>` (TOC) and `<main class="quests">` — a `ui-mock-section`, a `diagram-section`, or a `timeline-section`. Each is composed from its kit's primitives — the planner picks only the pieces the deliverable needs. Annotations are **inline numbered badges** in normal flow, mirrored by a legend below the frame — never absolutely-positioned overlays.
+
+### UI wireframe (`ui-mock-section`, kit: `mockup.css`)
+
+For screen/panel/form-shaped deliverables. A tool panel uses tabs + list + grid; a web form uses fields + buttons; a CLI uses the terminal chrome.
 
 ```html
 <section class="ui-mock-section">
@@ -211,6 +215,96 @@ When the campaign is UI-bearing (design-contract §10), the planner inserts **on
 
 Use only the pieces the UI calls for. An empty result area uses `<div class="ui-mock-empty">message</div>`. A sidebar+main layout wraps panes in `<div class="ui-mock-split">` with `.ui-mock-sidebar` + `.ui-mock-pane`. The grid column template is set per-instance via the `--mock-cols` inline custom property.
 
+### Flow / state diagram (`diagram-section`, kit: `diagram.css`)
+
+For system-structure / control-flow deliverables: pipelines, subsystems talking to each other, state machines, branching logic. One bounded slice — 5–12 nodes, not an exhaustive map.
+
+```html
+<section class="diagram-section">
+  <h2>System Flow — Parry Resolution</h2>
+
+  <div class="diagram">
+    <div class="diagram-flow">
+      <div class="diagram-row">
+        <div class="diagram-node is-start"><span class="diagram-node-label">Input pressed</span></div>
+      </div>
+      <div class="diagram-arrow"><span class="diagram-arrow-label">OnParryPressed</span></div>
+      <div class="diagram-row">
+        <div class="diagram-node is-decision"><span class="diagram-badge">1</span><span class="diagram-node-label">In parry window?</span><span class="diagram-node-sub">0.18s after guard raise</span></div>
+      </div>
+      <div class="diagram-branch">
+        <div class="diagram-lane">
+          <span class="diagram-lane-label">yes</span>
+          <div class="diagram-node is-active"><span class="diagram-badge">2</span><span class="diagram-node-label">Riposte state</span></div>
+        </div>
+        <div class="diagram-lane">
+          <span class="diagram-lane-label">no</span>
+          <div class="diagram-node"><span class="diagram-node-label">Guard hold</span></div>
+        </div>
+      </div>
+      <div class="diagram-arrow is-return"><span class="diagram-arrow-label">on recover</span></div>
+      <div class="diagram-row">
+        <div class="diagram-node is-end"><span class="diagram-node-label">Neutral</span></div>
+      </div>
+    </div>
+  </div>
+
+  <ol class="diagram-legend">
+    <li><span class="diagram-badge">1</span><span><strong>Parry window</strong> — what it is and where it's checked.</span></li>
+  </ol>
+</section>
+```
+
+Node variants: `.is-start` / `.is-end` (pills), `.is-state` (persistent state), `.is-decision` (chamfered), `.is-active` (accent + pulse), `.is-muted` (external/out-of-scope, dashed). Arrows: vertical by default, `.is-h` horizontal inside a row, `.is-return` loop-back, `.is-flowing` animated dashes on a hot path. `.diagram-branch` lanes stack at 560px. No inline styles needed.
+
+### Sequence timeline (`timeline-section`, kit: `timeline.css`)
+
+For behavior-over-time deliverables: animation sequences, camera moves, travel/tween motion, handshakes, turn phases, cutscene beats. One sequence, not the whole game loop.
+
+```html
+<section class="timeline-section">
+  <h2>Sequence Timeline — Travel Mode</h2>
+
+  <div class="timeline">
+    <div class="timeline-scroll">
+      <div class="timeline-grid" style="--tl-cols: 8;">
+        <div class="timeline-ruler">
+          <span class="timeline-ruler-corner">track</span>
+          <div class="timeline-ruler-ticks">
+            <span class="timeline-tick">0s</span><span class="timeline-tick">1s</span><!-- one per column -->
+          </div>
+        </div>
+        <div class="timeline-track">
+          <span class="timeline-track-label">Camera</span>
+          <div class="timeline-lane">
+            <span class="timeline-seg" style="--tl-start: 1; --tl-span: 3;"><span class="timeline-badge">1</span>zoom to map</span>
+            <span class="timeline-marker" style="--tl-start: 4;"></span>
+          </div>
+        </div>
+        <div class="timeline-track">
+          <span class="timeline-track-label">Token</span>
+          <div class="timeline-lane">
+            <span class="timeline-seg is-muted" style="--tl-start: 3; --tl-span: 5;">node-to-node travel</span>
+            <span class="timeline-token"></span>   <!-- animated; rests mid-lane when motion is off -->
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="timeline-beats">   <!-- optional storyboard strip; numbered via CSS counter -->
+      <div class="timeline-beat"><span class="timeline-beat-title">Confirm route</span><span class="timeline-beat-desc">planner panel collapses</span></div>
+      <div class="timeline-beat is-active"><span class="timeline-beat-title">Travel</span><span class="timeline-beat-desc">token follows spline</span></div>
+    </div>
+  </div>
+
+  <ol class="timeline-legend">
+    <li><span class="timeline-badge">1</span><span><strong>Camera move</strong> — what happens and what drives it.</span></li>
+  </ol>
+</section>
+```
+
+Grid placement uses the whitelisted inline custom props only: `--tl-cols` on `.timeline-grid` (column count, default 8), `--tl-start` / `--tl-span` on segments and markers. The tracks grid scrolls internally at narrow widths. Use the tracks grid, the beat strip, or both — whichever the sequence calls for.
+
 ## Class registry
 
 | Class | Role | Pitfall guardrails baked into base |
@@ -244,6 +338,18 @@ Use only the pieces the UI calls for. An empty result area uses `<div class="ui-
 | `.ui-mock-split` / `.ui-mock-sidebar` / `.ui-mock-pane` / `.ui-mock-divider` | Split layout | collapses to stacked at 560px |
 | `.ui-mock-statusbar` / `.ui-mock-empty` | Status strip / empty state | explicit surface bg |
 | `.ui-mock-badge` / `.ui-mock-legend` | Inline annotation marker + legend | outlined accent badge, reflow-proof (no absolute overlays) |
+| `.diagram-section` / `.diagram` | Diagram section + frame (Layer 4) | explicit `var(--surface)` bg; one bounded slice, 5–12 nodes |
+| `.diagram-flow` / `.diagram-row` / `.diagram-branch` / `.diagram-lane` / `.diagram-lane-label` | Diagram layout | branch lanes stack at 560px |
+| `.diagram-node` (+ `is-start/is-end/is-state/is-decision/is-active/is-muted`) / `.diagram-node-label` / `.diagram-node-sub` | Diagram nodes | `.is-active` = accent border + accent label + pulse; animation off under reduced-motion/print |
+| `.diagram-arrow` (+ `is-h/is-return/is-flowing`) / `.diagram-arrow-label` | Connectors + edge labels | `.is-flowing` dash motion is additive emphasis only |
+| `.diagram-badge` / `.diagram-legend` | Annotation marker + legend | same rules as `.ui-mock-badge` |
+| `.timeline-section` / `.timeline` / `.timeline-scroll` / `.timeline-grid` | Timeline section + frame (Layer 4) | grid scrolls internally at narrow widths; columns via `--tl-cols` |
+| `.timeline-ruler` / `.timeline-ruler-corner` / `.timeline-ruler-ticks` / `.timeline-tick` | Shared ruler | one tick per column |
+| `.timeline-track` / `.timeline-track-label` / `.timeline-lane` | Labeled tracks | lane is the positioning context for the token |
+| `.timeline-seg` (+ `is-muted/is-pulse`) / `.timeline-marker` | Positioned bars + event markers | placed via whitelisted `--tl-start`/`--tl-span` inline props |
+| `.timeline-token` | Traveling dot (animated) | rests mid-lane — the informative frame — when motion is disabled |
+| `.timeline-beats` / `.timeline-beat` / `.timeline-beat-title` / `.timeline-beat-desc` | Storyboard beat strip | numbered via CSS counter; wraps at narrow widths |
+| `.timeline-badge` / `.timeline-legend` | Annotation marker + legend | same rules as `.ui-mock-badge` |
 
 ## Hard rules for skin authors
 
@@ -252,5 +358,6 @@ Use only the pieces the UI calls for. An empty result area uses `<div class="ui-
 3. **Audit the two §9.1 rules per skin**: `--syn-ty` ≠ `--code-fg`, and `--syn-nm` ≠ `--syn-kw`.
 4. **Motifs are pure CSS only** — pseudo-elements, backgrounds, borders, `clip-path`, CSS counters, gradients, `::first-letter`. No new markup, no JS, no external assets.
 5. **Don't reintroduce a 2-column quest body** (sidebar pattern). The footer pattern in `base.css` is the §5.13 fix; overriding it back to `grid-template-columns: 2fr 1fr` on `.quest` reopens the void bug.
-6. **Mockup colors come only from the skin interface.** `mockup.css` (Layer 4) and any per-campaign mockup markup must use `var(--x)` or `color-mix()` of those vars — never raw hex. Every text-bearing mockup container must set an explicit `var(--surface)`/`var(--surface-alt)` background so content can't fall through to a mismatched page color (the dark-on-light contrast bug). Active/checked/selected states use accent **borders + accent text on a surface background**, never an accent fill behind text.
+6. **Visual-kit colors come only from the skin interface.** The Layer-4 kits (`mockup.css`, `diagram.css`, `timeline.css`) and any per-campaign visual markup must use `var(--x)` or `color-mix()` of those vars — never raw hex. Every text-bearing visual container must set an explicit `var(--surface)`/`var(--surface-alt)` background so content can't fall through to a mismatched page color (the dark-on-light contrast bug). Active/checked/selected states use accent **borders + accent text on a surface background**, never an accent fill behind text.
+7. **Kit animation is CSS-only and additive.** Keyframes live in the kit files only — never inline, never per-campaign, no JS. The static resting style must carry the full meaning by itself; animation may emphasize but never encode information that disappears when it stops. `prefers-reduced-motion: reduce` and `@media print` must disable every kit animation, and resting positions are chosen to be the informative frame (e.g., the timeline token rests mid-lane, not at the origin).
 ```

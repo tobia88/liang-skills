@@ -52,6 +52,17 @@ If `project.yaml` itself is missing at planning time, the planner skips to step 
 
 **`models.claude_mode`** — consumed only by `liang-quest-executor` in `--claude` mode. Values are **Claude Code subagent tier aliases** (`haiku` / `sonnet` / `opus`), not pi model IDs — Claude Code cannot spawn non-Claude children, which is why this is a separate namespace from `execution_by_difficulty`. When the block (or any key in it) is absent, the defaults apply: easy → `haiku`, medium → `sonnet`, hard → `opus`.
 
+### Planner Extensions (optional)
+
+```yaml
+planner:
+  visual: string             # "auto" | "always" | "never" — plan-visual policy for liang-quest-planner (default: "auto")
+```
+
+Additive-optional: when the block or key is absent, `auto` applies; no `schema_version` bump.
+
+**`planner.visual`** — consumed read-only by `liang-quest-planner` in Phase 2a (semantics in the planner's `references/html-design-contract.md` §10). `auto` lets the skip-biased classifier decide per campaign (UI wireframe / flow-state diagram / sequence timeline / none); `always` forces a visual on every plan (the planner still picks the type); `never` suppresses visuals entirely. Per-run invocation flags `--visual` / `--no-visual` override this key. The first-run interview does not ask for it; add it manually when explicit control is wanted.
+
 ### Executor Extensions (optional)
 
 ```yaml
@@ -118,7 +129,7 @@ Questions are asked one at a time, in order:
 
 Each question is independent — no "same as previous" shortcuts. The user may type any model ID.
 
-The interview does not ask for the optional routing keys (`models.body_drafter`, `models.claude_mode`) — their fallback chains make them optional in practice; add them to `project.yaml` manually when explicit control is wanted.
+The interview does not ask for the optional routing keys (`models.body_drafter`, `models.claude_mode`) or `planner.visual` — their fallback chains and defaults make them optional in practice; add them to `project.yaml` manually when explicit control is wanted.
 
 ## Verify Model Configuration
 
@@ -132,7 +143,7 @@ The `models.verify` field is required by both executors. If absent when an execu
 ## Schema Versioning
 
 - Current version: `schema_version: 1`
-- **Additive-optional** fields (new keys with a safe default when absent) do not require a `schema_version` bump. Examples: `vcs_artifacts` defaults to `"ask"` when absent; `models.body_drafter` and `models.claude_mode` fall back to their documented resolution chains.
+- **Additive-optional** fields (new keys with a safe default when absent) do not require a `schema_version` bump. Examples: `vcs_artifacts` defaults to `"ask"` when absent; `models.body_drafter` and `models.claude_mode` fall back to their documented resolution chains; `planner.visual` defaults to `"auto"`.
 - **Breaking changes** (removed fields, changed semantics, new required fields without safe defaults) require a `schema_version` bump.
 - Never retroactively edit existing configs for schema changes
 - Skills must check `schema_version` before parsing
@@ -140,7 +151,7 @@ The `models.verify` field is required by both executors. If absent when an execu
 ## Rules
 
 - The canonical `liang-quest-executor` creates `project.yaml` when absent and reads it on every run.
-- `liang-quest-planner` reads `project.yaml` (for `models.body_drafter` resolution) but never creates or writes it.
+- `liang-quest-planner` reads `project.yaml` (for `models.body_drafter` and `planner.visual` resolution) but never creates or writes it.
 - The executor may add the `executor` block if absent (extension, not core change).
 - The executor may add `models.verify` via interactive prompt if absent.
 - No skill may extend the schema beyond defined fields without a version bump.

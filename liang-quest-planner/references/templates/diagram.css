@@ -1,0 +1,262 @@
+/* =========================================================================
+   liang-quest-planner — diagram.css  (Layer 4, CONDITIONAL)
+
+   Generic flow / state diagram kit for the optional Plan Visual section
+   (design-contract §10, visual type `diagram`). Inlined after base.css +
+   skin only when the body contains a `diagram-section` — at most one plan
+   visual per plan (mockup.css | diagram.css | timeline.css).
+
+   Like base.css: ZERO hardcoded colors — every value is a var(--x) from the
+   skin interface (class-contract.md) or a color-mix() of those vars. Every
+   text-bearing container sets an explicit surface background; active states
+   use accent BORDERS + TEXT, never fills behind text. Animation is CSS-only
+   and additive: the static frame carries full meaning, keyframes only add
+   emphasis, and prefers-reduced-motion / print disable them entirely.
+   ========================================================================= */
+
+/* ---- section wrapper + heading --------------------------------------- */
+.diagram-section { margin: 48px 0 8px; }
+.diagram-section > h2 {
+  font-family: var(--font-display);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.9rem;
+  color: var(--ink-muted);
+  margin: 0 0 18px;
+  border-top: 2px solid var(--accent);
+  padding-top: 12px;
+}
+
+/* ---- the frame ------------------------------------------------------- */
+.diagram {
+  max-width: 720px;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--ink);
+  font-family: var(--font-body);
+  padding: 20px 18px;
+  box-shadow: var(--shadow);
+}
+
+/* ---- vertical flow + rows -------------------------------------------- */
+.diagram-flow {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.diagram-row {
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  max-width: 100%;
+}
+
+/* ---- nodes ------------------------------------------------------------ */
+.diagram-node {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  max-width: 100%;
+  padding: 8px 16px;
+  background: var(--surface-alt);     /* explicit bg, never transparent */
+  border: 1px solid var(--rule);
+  border-radius: calc(var(--radius) * 0.6);
+  text-align: center;
+}
+.diagram-node-label {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 0.84rem;
+  color: var(--ink);
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+.diagram-node-sub {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--ink-muted);
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
+/* terminal states: pill-shaped */
+.diagram-node.is-start,
+.diagram-node.is-end {
+  border-radius: 999px;
+  padding: 6px 20px;
+}
+/* persistent state (state machines): heavier rounding + accent-2 edge */
+.diagram-node.is-state {
+  border-radius: calc(var(--radius) * 0.6 + 6px);
+  border-color: var(--accent-2);
+}
+/* decision: chamfered corners */
+.diagram-node.is-decision {
+  clip-path: polygon(12px 0, calc(100% - 12px) 0, 100% 50%,
+                     calc(100% - 12px) 100%, 12px 100%, 0 50%);
+  padding: 10px 26px;
+  border: none;                        /* clip-path eats borders; bg carries the shape */
+  background: color-mix(in srgb, var(--accent-2) 16%, var(--surface-alt));
+}
+/* out-of-scope / external system */
+.diagram-node.is-muted {
+  border-style: dashed;
+  background: var(--surface);
+}
+.diagram-node.is-muted .diagram-node-label { color: var(--ink-muted); font-weight: 500; }
+/* highlighted node: accent border + accent label, pulse for emphasis only */
+.diagram-node.is-active {
+  border-color: var(--accent);
+  animation: diagram-pulse 1.8s ease-in-out infinite;
+}
+.diagram-node.is-active .diagram-node-label { color: var(--accent); }
+@keyframes diagram-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 35%, transparent); }
+  50%      { box-shadow: 0 0 0 6px color-mix(in srgb, var(--accent) 10%, transparent); }
+}
+
+/* ---- connectors -------------------------------------------------------- */
+/* vertical arrow between rows */
+.diagram-arrow {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 2px 0;
+  color: var(--ink-muted);
+}
+.diagram-arrow::before {
+  content: "";
+  width: 2px;
+  height: 16px;
+  background: var(--rule);
+}
+.diagram-arrow::after {
+  content: "\25BC";
+  font-size: 0.55rem;
+  line-height: 1;
+  color: var(--ink-muted);
+}
+/* horizontal variant (inside a .diagram-row) */
+.diagram-arrow.is-h {
+  flex-direction: row;
+  align-self: center;
+  padding: 0 2px;
+}
+.diagram-arrow.is-h::before { width: 16px; height: 2px; }
+.diagram-arrow.is-h::after { content: "\25B6"; }
+/* loop-back edge (state machines, retry cycles) */
+.diagram-arrow.is-return::after { content: "\21BA"; font-size: 0.85rem; }
+/* hot path: animated dashes — additive emphasis; static dashes still read */
+.diagram-arrow.is-flowing::before {
+  background: repeating-linear-gradient(180deg,
+    var(--accent) 0 4px, transparent 4px 8px);
+  animation: diagram-dash-v 0.8s linear infinite;
+}
+.diagram-arrow.is-h.is-flowing::before {
+  background: repeating-linear-gradient(90deg,
+    var(--accent) 0 4px, transparent 4px 8px);
+  animation: diagram-dash-h 0.8s linear infinite;
+}
+.diagram-arrow.is-flowing::after { color: var(--accent); }
+@keyframes diagram-dash-v { to { background-position: 0 8px; } }
+@keyframes diagram-dash-h { to { background-position: 8px 0; } }
+/* edge label (condition / event name) */
+.diagram-arrow-label {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  color: var(--accent);
+  background: var(--surface);          /* explicit bg so it reads over anything */
+  padding: 0 6px;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  text-align: center;
+}
+
+/* ---- branch lanes (parallel / alternative paths) ---------------------- */
+.diagram-branch {
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+  gap: 14px;
+  width: 100%;
+}
+.diagram-lane {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 12px 10px;
+  border: 1px dashed var(--rule);
+  border-radius: calc(var(--radius) * 0.6);
+  background: var(--surface);          /* explicit bg, never transparent */
+}
+.diagram-lane-label {
+  font-family: var(--font-display);
+  font-size: 0.66rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ink-muted);
+  margin-bottom: 8px;
+}
+@media (max-width: 560px) {
+  .diagram-branch { flex-direction: column; }
+}
+
+/* ---- inline numbered annotation badge --------------------------------- */
+/* Reflow-proof: sits in normal flow inside the node it marks. Outlined
+   accent (surface bg, accent text+border) so contrast holds on any skin. */
+.diagram-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px; height: 18px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  border: 1.5px solid var(--accent);
+  background: var(--surface);
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  font-weight: 800;
+  line-height: 1;
+}
+
+/* ---- annotation legend below the frame --------------------------------- */
+.diagram-legend {
+  margin: 18px 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 12px;
+}
+.diagram-legend li {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 0.86rem;
+  color: var(--ink-muted);
+  line-height: 1.45;
+  min-width: 0;
+}
+.diagram-legend li .diagram-badge { margin-top: 1px; }
+.diagram-legend li code:not(pre code) { word-break: break-word; overflow-wrap: anywhere; }
+
+/* ---- motion + print safety -------------------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+  .diagram-node.is-active,
+  .diagram-arrow.is-flowing::before { animation: none; }
+}
+@media print {
+  .diagram { break-inside: avoid; page-break-inside: avoid; box-shadow: none; }
+  .diagram-node.is-active,
+  .diagram-arrow.is-flowing::before { animation: none; }
+}

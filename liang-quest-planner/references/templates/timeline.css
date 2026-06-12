@@ -1,0 +1,284 @@
+/* =========================================================================
+   liang-quest-planner — timeline.css  (Layer 4, CONDITIONAL)
+
+   Generic sequence / storyboard kit for the optional Plan Visual section
+   (design-contract §10, visual type `timeline`). Inlined after base.css +
+   skin only when the body contains a `timeline-section` — at most one plan
+   visual per plan (mockup.css | diagram.css | timeline.css).
+
+   Like base.css: ZERO hardcoded colors — every value is a var(--x) from the
+   skin interface (class-contract.md) or a color-mix() of those vars. Every
+   text-bearing container sets an explicit surface background; active states
+   use accent BORDERS + TEXT, never fills behind text. Animation is CSS-only
+   and additive: the static frame carries full meaning (the travel token
+   rests mid-lane — the informative frame), keyframes only add emphasis, and
+   prefers-reduced-motion / print disable them entirely.
+
+   Per-instance grid placement uses whitelisted inline custom props only:
+   --tl-cols (on .timeline-grid), --tl-start / --tl-span (on segs/markers).
+   ========================================================================= */
+
+/* ---- section wrapper + heading --------------------------------------- */
+.timeline-section { margin: 48px 0 8px; }
+.timeline-section > h2 {
+  font-family: var(--font-display);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.9rem;
+  color: var(--ink-muted);
+  margin: 0 0 18px;
+  border-top: 2px solid var(--accent);
+  padding-top: 12px;
+}
+
+/* ---- the frame ------------------------------------------------------- */
+.timeline {
+  max-width: 720px;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: var(--surface);
+  color: var(--ink);
+  font-family: var(--font-body);
+  box-shadow: var(--shadow);
+}
+
+/* ---- tracks grid (scrolls internally at narrow widths) ---------------- */
+.timeline-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; background: var(--surface); }
+.timeline-grid { min-width: 480px; }   /* --tl-cols set per instance; default 8 */
+
+/* shared ruler row */
+.timeline-ruler {
+  display: grid;
+  grid-template-columns: 110px 1fr;
+  background: var(--surface-alt);
+  border-bottom: 1px solid var(--rule);
+}
+.timeline-ruler-corner {
+  font-family: var(--font-display);
+  font-size: 0.62rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ink-muted);
+  padding: 5px 10px;
+  border-right: 1px solid var(--rule);
+}
+.timeline-ruler-ticks {
+  display: grid;
+  grid-template-columns: repeat(var(--tl-cols, 8), 1fr);
+}
+.timeline-tick {
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  color: var(--ink-muted);
+  padding: 5px 0 5px 6px;
+  border-left: 1px solid var(--rule);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.timeline-tick:first-child { border-left: none; }
+
+/* labeled track rows */
+.timeline-track {
+  display: grid;
+  grid-template-columns: 110px 1fr;
+  border-bottom: 1px solid var(--rule);
+  background: var(--surface);          /* explicit bg, never transparent */
+}
+.timeline-track:last-child { border-bottom: none; }
+.timeline-track-label {
+  font-family: var(--font-display);
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ink-muted);
+  padding: 12px 10px;
+  border-right: 1px solid var(--rule);
+  min-width: 0;
+  word-break: break-word;
+}
+.timeline-lane {
+  position: relative;                  /* positioning context for .timeline-token */
+  display: grid;
+  grid-template-columns: repeat(var(--tl-cols, 8), 1fr);
+  align-items: center;
+  min-height: 38px;
+  padding: 7px 0;
+}
+
+/* positioned segment bar: --tl-start / --tl-span inline props */
+.timeline-seg {
+  grid-row: 1;
+  grid-column: var(--tl-start, 1) / span var(--tl-span, 1);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  height: 20px;
+  margin: 0 3px;
+  padding: 0 8px;
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface));
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.timeline-seg.is-muted {
+  border-color: var(--rule);
+  background: var(--surface-alt);
+  color: var(--ink-muted);
+}
+.timeline-seg.is-pulse { animation: timeline-pulse 1.8s ease-in-out infinite; }
+@keyframes timeline-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 35%, transparent); }
+  50%      { box-shadow: 0 0 0 5px color-mix(in srgb, var(--accent) 10%, transparent); }
+}
+
+/* point event marker: diamond at --tl-start */
+.timeline-marker {
+  grid-row: 1;
+  grid-column: var(--tl-start, 1);
+  justify-self: start;
+  width: 10px; height: 10px;
+  margin-left: 3px;
+  transform: rotate(45deg);
+  border: 1.5px solid var(--accent);
+  background: var(--surface);
+  flex-shrink: 0;
+}
+
+/* traveling dot — animated; RESTS MID-LANE (the informative frame) when
+   motion is disabled, so the static render still shows "in transit" */
+.timeline-token {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 10px; height: 10px;
+  border-radius: 50%;
+  background: var(--accent);
+  transform: translate(-50%, -50%);
+  animation: timeline-travel 3.2s ease-in-out infinite alternate;
+}
+@keyframes timeline-travel {
+  from { left: 3%; }
+  to   { left: 97%; }
+}
+
+/* ---- storyboard beat strip (alternative / supplement to tracks) ------- */
+.timeline-beats {
+  display: flex;
+  align-items: stretch;
+  gap: 10px;
+  flex-wrap: wrap;
+  counter-reset: tl-beat;
+  padding: 14px;
+  background: var(--surface-alt);
+  border-top: 1px solid var(--rule);
+}
+.timeline-beat {
+  flex: 1 1 150px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  counter-increment: tl-beat;
+  padding: 9px 12px 9px 34px;
+  position: relative;
+  border: 1px solid var(--rule);
+  border-radius: calc(var(--radius) * 0.6);
+  background: var(--surface);          /* explicit bg, never transparent */
+}
+.timeline-beat::before {
+  content: counter(tl-beat);
+  position: absolute;
+  left: 9px; top: 9px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 17px; height: 17px;
+  border-radius: 50%;
+  border: 1.5px solid var(--ink-muted);
+  color: var(--ink-muted);
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  font-weight: 800;
+  line-height: 1;
+}
+.timeline-beat-title {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 0.8rem;
+  color: var(--ink);
+  word-break: break-word;
+}
+.timeline-beat-desc {
+  font-size: 0.74rem;
+  color: var(--ink-muted);
+  line-height: 1.4;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+.timeline-beat.is-active { border-color: var(--accent); }
+.timeline-beat.is-active::before { border-color: var(--accent); color: var(--accent); }
+.timeline-beat.is-active .timeline-beat-title { color: var(--accent); }
+
+/* ---- inline numbered annotation badge --------------------------------- */
+/* Reflow-proof: sits in normal flow inside the element it marks. Outlined
+   accent (surface bg, accent text+border) so contrast holds on any skin. */
+.timeline-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px; height: 18px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  border: 1.5px solid var(--accent);
+  background: var(--surface);
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  font-weight: 800;
+  line-height: 1;
+}
+.timeline-seg .timeline-badge { width: 14px; height: 14px; font-size: 0.58rem; }
+
+/* ---- annotation legend below the frame --------------------------------- */
+.timeline-legend {
+  margin: 18px 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 12px;
+}
+.timeline-legend li {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 0.86rem;
+  color: var(--ink-muted);
+  line-height: 1.45;
+  min-width: 0;
+}
+.timeline-legend li .timeline-badge { margin-top: 1px; }
+.timeline-legend li code:not(pre code) { word-break: break-word; overflow-wrap: anywhere; }
+
+/* ---- motion + print safety -------------------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+  .timeline-token,
+  .timeline-seg.is-pulse { animation: none; }
+}
+@media print {
+  .timeline { break-inside: avoid; page-break-inside: avoid; box-shadow: none; }
+  .timeline-scroll { overflow-x: visible; }
+  .timeline-token,
+  .timeline-seg.is-pulse { animation: none; }
+}

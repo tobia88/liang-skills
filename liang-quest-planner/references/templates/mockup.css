@@ -1,8 +1,10 @@
 /* =========================================================================
    liang-quest-planner — mockup.css  (Layer 4, CONDITIONAL)
 
-   Generic UI-wireframe kit for the optional "UI Layout Wireframe" section.
-   Inlined after base.css + skin only when a campaign is UI-bearing.
+   Generic UI-wireframe kit for the optional Plan Visual section
+   (design-contract §10, visual type `ui`). Inlined after base.css + skin
+   only when the body contains a `ui-mock-section` — at most one plan
+   visual per plan (mockup.css | diagram.css | timeline.css).
 
    Like base.css: ZERO hardcoded colors — every value is a var(--x) from the
    skin interface (class-contract.md) or a color-mix() of those vars, so the

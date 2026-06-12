@@ -138,8 +138,8 @@ The planner picks one direction per campaign automatically. Match in this order:
 
 The planner assembles `plan.html` from three fixed layers rather than regenerating CSS every run. Body drafting is delegated to the body-drafter subagent (model resolved per SKILL.md Phase 2c: `project.yaml` `models.body_drafter` → `execution_by_difficulty.medium` → harness default); CSS inlining and structural validation are owned by a deterministic script — no model re-types CSS in any standard path.
 
-1. **The body-drafter subagent generates ONLY the fixed-body HTML** per `references/templates/class-contract.md` — the variable per-campaign content (masthead, TOC, quest sections, notes, footer), briefed with the Decision Summary, the Phase 2a quest decomposition, the wireframe recipe (UI-bearing campaigns only), and the class contract itself. The HTML structure and class names are identical regardless of which aesthetic direction is chosen. No theme needs bespoke markup.
-2. **`references/templates/assemble_plan.py` validates and assembles** — it structurally validates the body (bidirectional TOC-anchor ↔ section-id integrity, required skeleton classes, difficulty badges, no `<style>`/`<script>`/`<link>`/document-shell tags, no inline styles beyond the `--mock-cols` exception, no external assets), then inlines `base.css`, the chosen `skin-<name>.css`, and `mockup.css` (auto-included only when the body contains a `ui-mock-section`, §10) into a single `<style>` block, in that order. The CSS cascade is deliberate: skins override nothing structural, only variables and optional motif rules; `mockup.css` consumes the same skin variables and adds only wireframe classes.
+1. **The body-drafter subagent generates ONLY the fixed-body HTML** per `references/templates/class-contract.md` — the variable per-campaign content (masthead, TOC, quest sections, notes, footer), briefed with the Decision Summary, the Phase 2a quest decomposition, the visual recipe (only when Phase 2a planned a plan visual), and the class contract itself. The HTML structure and class names are identical regardless of which aesthetic direction is chosen. No theme needs bespoke markup.
+2. **`references/templates/assemble_plan.py` validates and assembles** — it structurally validates the body (bidirectional TOC-anchor ↔ section-id integrity, required skeleton classes, difficulty badges, no `<style>`/`<script>`/`<link>`/document-shell tags, no inline styles beyond the whitelisted custom props (`--mock-cols`, `--tl-cols`, `--tl-start`, `--tl-span`), no external assets, at most one plan-visual section), then inlines `base.css`, the chosen `skin-<name>.css`, and the matching visual kit (`mockup.css` / `diagram.css` / `timeline.css`, auto-included only when the body contains the corresponding section class, §10) into a single `<style>` block, in that order. The CSS cascade is deliberate: skins override nothing structural, only variables and optional motif rules; the visual kits consume the same skin variables and add only their own namespaced classes.
 3. **On validation failure** the script exits non-zero with `VALIDATION:` lines on stderr and writes nothing; the planner sends the violations back to the subagent and re-runs (max 2 retries, then the planner drafts the body itself).
 4. **Output remains a single self-contained file** — the contract's `self_contained` and `no_external_deps` clauses (§1) are satisfied by the script's inlining. The `.css` files live in the skill's `references/templates/` directory; they never ship beside `plan.html`.
 
@@ -149,7 +149,7 @@ The body generator — the body-drafter subagent, or the planner in fallback —
 
 ### 4.2 Delegation Scope
 
-Body drafting goes to a general-purpose subagent on the resolved body-drafter model (configurable via `project.yaml` — see §4 intro). The delegation is transcription, never decision-making: quest decomposition, difficulty, wireframe recipe, and aesthetic direction are all decided by the planner before the subagent is briefed. CSS is never delegated to any model — `assemble_plan.py` owns it. If subagent spawning is unavailable, or the subagent fails validation twice, the planner drafts the body inline and still assembles via the script. Manual CSS inlining is a last resort reserved for environments without Python.
+Body drafting goes to a general-purpose subagent on the resolved body-drafter model (configurable via `project.yaml` — see §4 intro). The delegation is transcription, never decision-making: quest decomposition, difficulty, visual recipe, and aesthetic direction are all decided by the planner before the subagent is briefed. CSS is never delegated to any model — `assemble_plan.py` owns it. If subagent spawning is unavailable, or the subagent fails validation twice, the planner drafts the body inline and still assembles via the script. Manual CSS inlining is a last resort reserved for environments without Python.
 
 ### 4.3 Verification
 
@@ -167,6 +167,7 @@ Take Playwright screenshots at **375px viewport width only**, sampling the two c
 1. **Longest-content quest** — the quest with the most steps + longest code block.
 2. **Shortest-content quest** — the quest with the fewest steps + shortest code block.
 3. **Decisions table section** — the `notes-wide` block containing the Locked Decisions table (a known §5.5 / §5.11 risk at narrow widths).
+4. **Plan-visual section** (only when present) — the `ui-mock-section` / `diagram-section` / `timeline-section` block; wide grids, lanes, and branch stacking are the §10 responsive risks.
 
 `base.css` + every skin have been pre-audited at 1440 / 720 / 375 (§5 pitfall fixes, §9 syntax-token contrast, responsive collapse). Only **content-driven layout breaks** remain — overflow in unusually long inline `<code>` that wasn't in the fixture, edge cases in per-campaign objective lists, very long file-path labels in code blocks. Sampling the extremes catches both sides of the failure spectrum.
 
@@ -200,8 +201,10 @@ The three-layer generation model is backed by authoring sources in `references/t
 | `references/templates/class-contract.md` | Fixed body structure + CSS variable interface | The single source of truth for class names, HTML skeleton, and the skin variable contract. Read by the planner's body generator. |
 | `references/templates/base.css` | Shared structure + all 14 pitfall fixes (§5.1–5.14) and syntax-token rules | Written and visually audited **once**. Contains zero hardcoded colors — every visual value is a `var(--x)` resolved by the skin. **§5.1–§5.14 are baked into this file — the planner must not re-derive them per campaign.** |
 | `references/templates/skin-<name>.css` | Per-direction palette + motif | Naming convention: `skin-` + lowercase-hyphenated direction slug (e.g., `skin-nier-monochrome.css`, `skin-ff-gold.css`). Each skin defines the full `:root` variable block plus optional motif rules. |
-| `references/templates/mockup.css` | Generic UI-wireframe kit (Layer 4, conditional) | Zero hardcoded colors — consumes the skin's variable interface. Auto-included by `assemble_plan.py` **only** when the body contains a `ui-mock-section` (§10). Provides reusable primitives (frame, tabs, toolbar, fields, grouped lists, data grid, split panes, status bar, empty state, inline annotation badges). |
-| `references/templates/assemble_plan.py` | Deterministic assembler + structural validator | Run by the planner after body drafting: validates the body against the class contract, inlines base + skin (+ mockup when wireframed) into one `<style>` block, writes the self-contained `plan.html`. Exits non-zero with `VALIDATION:` lines on contract violations. |
+| `references/templates/mockup.css` | UI-wireframe kit (Layer 4, conditional) | Zero hardcoded colors — consumes the skin's variable interface. Auto-included by `assemble_plan.py` **only** when the body contains a `ui-mock-section` (§10). Primitives: frame, tabs, toolbar, fields, grouped lists, data grid, split panes, status bar, empty state, inline annotation badges. |
+| `references/templates/diagram.css` | Flow/state diagram kit (Layer 4, conditional) | Same color rules. Auto-included **only** when the body contains a `diagram-section` (§10). Primitives: nodes (start/end/state/decision/active/muted), arrows with edge labels, branch lanes, badges + legend. CSS-only pulse/dash animation per §10.3. |
+| `references/templates/timeline.css` | Sequence timeline kit (Layer 4, conditional) | Same color rules. Auto-included **only** when the body contains a `timeline-section` (§10). Primitives: ruler + labeled tracks, positioned segments/markers (`--tl-*` props), traveling token, storyboard beat strip, badges + legend. CSS-only travel/pulse animation per §10.3. |
+| `references/templates/assemble_plan.py` | Deterministic assembler + structural validator | Run by the planner after body drafting: validates the body against the class contract (including at most one plan-visual section), inlines base + skin (+ the matching visual kit) into one `<style>` block, writes the self-contained `plan.html`. Exits non-zero with `VALIDATION:` lines on contract violations. |
 
 When the planner picks an aesthetic direction, it resolves the skin filename as `skin-<lowercase-hyphenated-direction>.css` and reads it from `references/templates/`.
 
@@ -504,13 +507,13 @@ Every `plan.html` must contain these structural elements, regardless of aestheti
 
 **Conditional:**
 
-- A single **UI Layout Wireframe** section (§10) between the TOC and the first quest, included only for UI-bearing campaigns. Not required for backend / data / refactor campaigns.
+- At most one **plan-visual section** (§10) between the TOC and the first quest — UI wireframe (`ui-mock-section`), flow/state diagram (`diagram-section`), or sequence timeline (`timeline-section`) — included only when Phase 2a's skip-biased classifier (or a `--visual` flag / `planner.visual: always`) planned one. Backend / data / refactor / library campaigns carry none.
 
 ---
 
 ## 8. Version & Provenance
 
-- Contract version: 2.1
+- Contract version: 2.2
 - Authored: 2026-05-27
 - Owning skill: `liang-quest-planner`
 - Companion script: `references/templates/assemble_plan.py` (deterministic assembly + structural validation)
@@ -526,6 +529,7 @@ Every `plan.html` must contain these structural elements, regardless of aestheti
   - v1.9 — **removed §11 (Animated Flow Visualization) entirely.** The trigger over-fired: because Phase 2a always orders quests by dependency topology, the "dependency DAG / chain / sequence" inclusion clause matched every multi-quest campaign, so the graph rendered on essentially every plan rather than only genuinely loop/pipeline/state-machine-shaped ones. Dropped the `flow-visual-*` styles from `base.css`, the skeleton + class table + hard-rule from `class-contract.md`, the SKILL.md Phase 2a decision step and 2c/2d references, and the §4.4 flow spot-check. Plans are now TOC → (optional UI wireframe) → quests.
   - v2.0 — **body drafting re-delegated from `frontend-design` to a body-drafter subagent; CSS assembly moved out of the model into `references/templates/assemble_plan.py`.** Rationale: by Phase 2c all design judgment is already spent (decomposition, difficulty, wireframe recipe, aesthetic land in 2a/2b), so body generation is contract-following transcription a cheaper, faster model handles reliably — while re-typing ~28KB of base + skin + mockup CSS as model output was pure token waste with a typo risk attached. §4 rewritten as the subagent + script protocol; §4.2 rescoped (delegation is transcription, never decisions); §4.3 anchor/structure/script checks marked script-enforced; §4a table gains the assembler row. Phase 3 full regens reuse the same machinery; edit-in-place stays with the planner and reads the affected section back before editing. Wireframe recipes are written by the planner in Phase 2a and handed to the subagent verbatim.
   - v2.1 — **body-drafter model made configurable via `project.yaml`.** Resolution chain: `models.body_drafter` → `models.execution_by_difficulty.medium` → harness default; missing `project.yaml` falls through silently (planning may precede the executor's first-run interview). §4 / §4.1 / §4.2 rephrased to use "body-drafter subagent" throughout — the skill family runs under pi with non-Claude hosts (GPT, DeepSeek), so vendor-pinned model names in skill prose are a portability bug. Companion change: `models.claude_mode` added for the executor's `--claude` tier overrides (schema docs in `liang-quest-core/references/project/project-yaml.md`).
+  - v2.2 — **§10 generalized from "UI Wireframe Mockup" to "Plan Visual."** Three visual types — UI wireframe / flow-state diagram / sequence timeline — backed by three conditional Layer-4 kits (`mockup.css` / `diagram.css` / `timeline.css`), auto-selected by `assemble_plan.py` from the body's section class, **at most one per plan** (new Rule 8). Detection rebuilt skip-biased ("when ambiguous, skip" — inverting v1.7's "lean toward including", which made the wireframe render on nearly every plan, including a game-world travel feature drawn as desktop-app chrome) and keyed to the campaign's *main deliverable*, with the v1.9 lesson pinned: quest dependency topology is never a trigger. Policy knobs added: `--visual` / `--no-visual` invocation flags and `planner.visual` (`auto` / `always` / `never`) in `project.yaml`. CSS-only animation admitted into the kits under §10.3 (additive emphasis only; static frame self-sufficient; reduced-motion + print disable; class-contract hard-rule 7). Inline-style whitelist extended to the timeline grid props (`--tl-cols` / `--tl-start` / `--tl-span`). §4.4 spot-check samples the visual section when present.
 
 ---
 
@@ -659,17 +663,50 @@ Each quest carries a `difficulty` value (`easy` / `medium` / `hard`) visible in 
 
 ---
 
-## 10. UI Wireframe Mockup
+## 10. Plan Visual
 
-For UI-bearing campaigns, `plan.html` includes one skin-matched **UI Layout Wireframe** between the TOC and the first quest, composed from the `mockup.css` kit (Layer 4) — so the reader can picture the result before the build steps.
+For campaigns whose deliverable has a visual or structural shape, `plan.html` includes **at most one** skin-matched plan-visual section between the TOC and the first quest — so the reader can picture the result before the build steps. Three types, each backed by a conditional Layer-4 kit:
 
-**Trigger (auto-detect in Phase 2).** Include when the campaign produces something a user looks at or interacts with; skip when it has no visual surface.
+| Type | Section class | Kit | Use when the main deliverable is… |
+|---|---|---|---|
+| UI wireframe | `ui-mock-section` | `mockup.css` | a screen, panel, form, editor tool, dashboard — something laid out in 2D that the user reads or operates |
+| Flow / state diagram | `diagram-section` | `diagram.css` | runtime or system structure: pipelines, subsystems talking to each other, state machines, ability lifecycles, branching logic, data flow |
+| Sequence timeline | `timeline-section` | `timeline.css` | behavior over time: animation sequences, camera moves, travel/tween motion, network handshakes, turn phases, cutscene beats |
 
-- **Include** — editor tools / panels (Slate, ImGui), app screens, dashboards, HUDs / in-game UI, forms, settings, CLIs with structured output, dialogs, browser extensions.
-- **Skip** — backend, data pipelines, refactors, build / CI, library / API surfaces, algorithm work, migrations.
+### 10.1 Selection (auto, no question round)
 
-Read the signals already in the Decision Summary (Main Quest, Planning Lens, quest titles mentioning panels / screens / views / lists). Announce the choice in one sentence; the user can drop it in Phase 3. When ambiguous, lean toward including a lightweight one.
+Resolution order:
 
-**Compose** one `ui-mock-section` from only the primitives the UI needs (full kit + skeleton in `class-contract.md`) — one representative state at a realistic size, not multiple screens or a flow. Show an `ui-mock-empty` state when it documents a real UX decision. Annotate with **inline numbered badges** (`ui-mock-badge`) in normal flow plus a `ui-mock-legend` below — never absolutely-positioned overlays (they misalign on reflow at narrow widths).
+1. **Invocation flags** — `--no-visual` forces none; `--visual` forces inclusion (the planner still picks the type).
+2. **`planner.visual` in `.liang/project.yaml`** — `auto` (default when the key or file is absent) | `always` | `never`. Never block planning on a missing file.
+3. **`auto` → classify by the main deliverable** — the thing the Victory Conditions verify, not surfaces the campaign merely touches. A gameplay system that incidentally updates a HUD readout is not a UI campaign; a campaign whose quests revolve around widget layout is.
 
-**Compliance.** The mockup obeys the `class-contract.md` skin hard-rule (colors from skin vars only; explicit surface backgrounds; accent borders + accent text, never fills behind text) — that rule is what makes the dark-on-light fall-through bug impossible. It also clears §1: responsive (grids scroll internally, panes stack at 560px), no JS, print-safe. The §4.4 spot-check at 375px covers it.
+**Skip bias.** Include a visual only when it earns its place — when it shows something the TOC and quest list don't already say. **When ambiguous, skip.** The asymmetry is deliberate: a missing visual is cheap to add in Phase 3 discussion; an unwanted one wastes body-drafter output and adds noise to every read of the plan. (This inverts the pre-v2.2 "lean toward including" rule, which made the wireframe render on nearly every plan.)
+
+**Never trigger on plan structure.** The quest dependency topology is not a diagram trigger — every multi-quest campaign has one, and that exact over-fire killed the v1.8 flow visualization (see v1.9). Classify on the *deliverable's* runtime shape only.
+
+**Multiple matches** (e.g., a map screen with travel animation — both UI and timeline shapes): pick the type the most quests spend steps on. Skip bias applies to the include/skip decision, not to the type choice.
+
+Announce the decision in one sentence either way ("No plan visual — library refactor" / "Planning a sequence timeline for the travel flow"). The user can add, drop, or switch the visual during Phase 3.
+
+### 10.2 Composition
+
+The planner writes a one-line **visual recipe** in Phase 2a naming the type + primitives; the body-drafter renders it verbatim and never designs its own (full kit skeletons in `class-contract.md`):
+
+- **UI wireframe** — compose from `mockup.css` primitives; one representative state at a realistic size, not multiple screens or a flow. Show a `ui-mock-empty` state when it documents a real UX decision.
+- **Diagram** — nodes (`diagram-node` with `is-start` / `is-end` / `is-state` / `is-decision` / `is-active` / `is-muted` variants), vertical or horizontal arrows with optional edge labels, branch lanes for parallel or alternative paths. One bounded slice of the system — 5–12 nodes, not an exhaustive map.
+- **Timeline** — labeled tracks with positioned segments and markers on a shared ruler (`--tl-cols` columns; placement via `--tl-start` / `--tl-span`), and/or a numbered `timeline-beats` strip for storyboard-grade sequences. One sequence, not the whole game loop.
+
+All three annotate with **inline numbered badges** in normal flow plus a legend below the frame — never absolutely-positioned overlays (they misalign on reflow at narrow widths).
+
+### 10.3 Animation (CSS-only, additive)
+
+Kits may animate for emphasis: a pulsing active node (`diagram-node.is-active`), flowing dashes on a hot path (`diagram-arrow.is-flowing`), a token traveling along a timeline lane (`timeline-token`), a pulsing segment (`timeline-seg.is-pulse`). Rules:
+
+- **CSS keyframes live in the kit files only** — never inline, never per-campaign CSS, no JS (§1 `no_javascript` already permits CSS-only motion).
+- **Additive emphasis only.** The static frame must carry the full meaning on its own; animation may emphasize but never encode information that disappears when it stops.
+- **`prefers-reduced-motion: reduce` and `@media print` disable all kit animation.** Resting styles are designed to be the informative frame — e.g., the travel token rests mid-lane, not at the origin.
+
+### 10.4 Compliance
+
+Visual sections obey the `class-contract.md` skin hard rules (colors from skin vars only; explicit surface backgrounds; accent borders + accent text, never fills behind text — the rules that make the dark-on-light fall-through bug impossible) and clear §1: responsive (wide grids scroll internally; lanes and branches stack at 560px), no JS, print-safe. The §4.4 spot-check at 375px samples the visual section when present. `assemble_plan.py` enforces **at most one** visual section per plan (Rule 8) and auto-inlines only the matching kit.

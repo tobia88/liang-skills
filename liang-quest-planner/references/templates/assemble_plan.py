@@ -5,7 +5,9 @@ Assembles a self-contained plan.html from:
   - a body fragment (content of <div class="page">)
   - base.css (structure layer)
   - skin-<name>.css (palette + motif layer)
-  - mockup.css (conditional: only when body uses ui-mock-section)
+  - one visual kit (conditional, design-contract §10): mockup.css when the
+    body uses ui-mock-section, diagram.css for diagram-section, timeline.css
+    for timeline-section — at most one plan-visual section per plan
 
 Usage:
     python assemble_plan.py <body-html-path> <skin-name> <output-html-path> [--title "Campaign Title"]
@@ -23,6 +25,18 @@ import re
 import sys
 
 TPL = pathlib.Path(__file__).parent
+
+# Plan-visual kits (design-contract §10): section class -> kit CSS file.
+# At most one visual section per plan; only the matching kit is inlined.
+VISUAL_KITS = {
+    "ui-mock-section": "mockup.css",
+    "diagram-section": "diagram.css",
+    "timeline-section": "timeline.css",
+}
+
+# Inline style="" attributes may carry ONLY these custom properties
+# (--mock-cols: mockup grid; --tl-*: timeline grid placement).
+ALLOWED_INLINE_PROPS = {"--mock-cols", "--tl-cols", "--tl-start", "--tl-span"}
 
 # ---------------------------------------------------------------------------
 # Helpers — class token matching
@@ -47,6 +61,25 @@ def _find_tags(html: str, tag: str) -> list[str]:
 def _find_tags_with_class(html: str, tag: str, *class_tokens: str) -> list[str]:
     """Return opening-tag attribute strings for <tag> where all class_tokens are present."""
     return [a for a in _find_tags(html, tag) if _has_class(a, *class_tokens)]
+
+
+def _count_class(body: str, class_token: str) -> int:
+    """Count elements (any tag) whose class attribute contains class_token."""
+    n = len(re.findall(rf'class\s*=\s*"[^"]*\b{re.escape(class_token)}\b[^"]*"', body, re.IGNORECASE))
+    n += len(re.findall(rf"class\s*=\s*'[^']*\b{re.escape(class_token)}\b[^']*'", body, re.IGNORECASE))
+    return n
+
+
+def _inline_style_ok(value: str) -> bool:
+    """True if a style attribute consists solely of whitelisted custom-prop declarations."""
+    decls = [d.strip() for d in value.split(";") if d.strip()]
+    if not decls:
+        return False
+    for d in decls:
+        m = re.match(r'(--[\w-]+)\s*:\s*\S.*$', d)
+        if not m or m.group(1) not in ALLOWED_INLINE_PROPS:
+            return False
+    return True
 
 
 # ---------------------------------------------------------------------------
@@ -83,21 +116,20 @@ def validate(body: str) -> list[str]:
         violations.append("Rule 5: @import found in body fragment")
 
     # ------------------------------------------------------------------
-    # Rule 6: Inline style exception — only --mock-cols custom property allowed
+    # Rule 6: Inline style exception — only whitelisted custom properties
+    # (--mock-cols, --tl-cols, --tl-start, --tl-span) allowed
     # ------------------------------------------------------------------
-    # Find all style="..." attributes
+    # e.g. style="--mock-cols: 2fr 1fr 1fr;" or style="--tl-start: 3; --tl-span: 4;"
     for m in re.finditer(r'\bstyle\s*=\s*"([^"]*)"', body, re.IGNORECASE):
         value = m.group(1).strip()
-        # Allow only a single --mock-cols declaration (with optional trailing semicolon/whitespace)
-        # e.g. "--mock-cols: 2fr 1fr 1fr;" or "--mock-cols:2fr 1fr 1fr"
-        if not re.fullmatch(r'\s*--mock-cols\s*:\s*[^;]+;?\s*', value):
+        if not _inline_style_ok(value):
             violations.append(
                 f"Rule 6: forbidden inline style attribute: style=\"{value}\""
             )
     # Also check single-quoted style attributes
     for m in re.finditer(r"\bstyle\s*=\s*'([^']*)'", body, re.IGNORECASE):
         value = m.group(1).strip()
-        if not re.fullmatch(r'\s*--mock-cols\s*:\s*[^;]+;?\s*', value):
+        if not _inline_style_ok(value):
             violations.append(
                 f"Rule 6: forbidden inline style attribute: style='{value}'"
             )
@@ -249,6 +281,17 @@ def validate(body: str) -> list[str]:
                 "Rule 3: a quest-header element has no diff-badge with a diff-easy/medium/hard class"
             )
 
+    # ------------------------------------------------------------------
+    # Rule 8: At most one plan-visual section (design-contract §10)
+    # ------------------------------------------------------------------
+    visual_counts = {cls: _count_class(body, cls) for cls in VISUAL_KITS}
+    total_visuals = sum(visual_counts.values())
+    if total_visuals > 1:
+        found = ", ".join(f"{cls} x{n}" for cls, n in visual_counts.items() if n)
+        violations.append(
+            f"Rule 8: at most one plan-visual section allowed, found {total_visuals} ({found})"
+        )
+
     return violations
 
 
@@ -300,17 +343,19 @@ def assemble(
 
     base_css = (TPL / "base.css").read_text(encoding="utf-8")
 
-    include_mockup = bool(re.search(r'class\s*=\s*"[^"]*\bui-mock-section\b', body))
-    mockup_css = ""
-    if include_mockup:
-        mockup_css = (TPL / "mockup.css").read_text(encoding="utf-8")
-
     # --- Validate ----------------------------------------------------------
     violations = validate(body)
     if violations:
         for v in violations:
             print(f"VALIDATION: {v}", file=sys.stderr)
         return 1
+
+    # --- Resolve the visual kit (validation guarantees at most one) --------
+    kit_css = ""
+    for cls, kit_file in VISUAL_KITS.items():
+        if _count_class(body, cls):
+            kit_css = (TPL / kit_file).read_text(encoding="utf-8")
+            break
 
     # --- Resolve title -----------------------------------------------------
     if title is None:
@@ -323,8 +368,8 @@ def assemble(
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
     combined_css = base_css + "\n" + skin_css
-    if mockup_css:
-        combined_css += "\n" + mockup_css
+    if kit_css:
+        combined_css += "\n" + kit_css
 
     doc = (
         "<!doctype html>\n"
