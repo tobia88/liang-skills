@@ -31,3 +31,7 @@ After batch completion, proceed to §8 Run Report in SKILL.md. The run report re
 ## Model Routing
 
 The batch script spawns Pi CLI children with the same model routing as default mode: `project.yaml.models.execution_by_difficulty[<quest.difficulty>]` for execute-children, `models.verify` for verify-children, `models.planning` for re-plan-children.
+
+## Usage Tracking
+
+The batch script must honor the same usage-tracking contract as default mode: pin every child session under `.run/<quest-id>/sessions/`, harvest token/cost records after each child exits, write step-envelope `usage` sections, and roll quest totals into `complete.yaml`. The post-batch run report (§8) then reads spend identically to all other modes.

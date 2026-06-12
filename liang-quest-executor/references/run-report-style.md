@@ -15,6 +15,7 @@ Run reports use native Markdown structure only — no HTML, CSS, JavaScript, ima
 
 - **Quest Results table:** columns for Quest ID, Title, Difficulty, Steps, Retries, Status.
 - **Step Details table** (per quest): columns for Step ID, Description, Retries, Status.
+- **Spend table** (in `## Spend`, only when usage was tracked): columns for Quest ID, Title, Tokens, Cost (USD); final total row for the campaign. Quests with no harvested usage show `untracked`, never `0`. JRPG flavor is welcome in the prose around it (e.g. "gold spent this campaign"), but column headers and the `## Spend` heading stay neutral.
 - Use plain pipe-delimited Markdown tables with header separator.
 
 ## Checklists

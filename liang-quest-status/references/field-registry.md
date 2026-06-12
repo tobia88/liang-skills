@@ -58,6 +58,7 @@ Cross-version notes: `v4` is the planner-native (canonical) schema produced by `
 | `completed_at` | string (ISO 8601) | opt | opt | opt | opt | Elapsed time computation |
 | `current_step_started_at` | string (ISO 8601) | N | opt | opt | N | Progress polling timestamp (deprecated chain only) |
 | `skip_reason` | string | N | N | def | def | Reason for skipped quests |
+| `usage` | map | N | N | N | opt | Child-process spend rollup written by the executor: `total_tokens` (integer), `cost_usd` (float). Absent when untracked. Display enrichment only — never affects attention tiers. |
 
 ## Status Vocabulary
 

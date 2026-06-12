@@ -38,7 +38,15 @@ quests[]:
   skip_reason: string        # present when status is "skipped"; references failed dependency
   started_at: string         # ISO 8601; set on in_progress transition
   completed_at: string       # ISO 8601; set on passed/failed/skipped transition
+  usage:                     # child-process spend, harvested from pinned child session files;
+    total_tokens: integer    #   sum across ALL children for this quest (execute attempts incl.
+    cost_usd: float          #   retries, re-plan, verify). Absent when untracked (--claude mode
+                             #   or harvest failure) — never written as zeros.
 ```
+
+`usage.cost_usd` is the sum of per-message costs as priced by the Pi harness's model
+registry at run time. Tokens are exact; dollars are as accurate as that registry
+(subscription/OAuth providers may price at 0).
 
 ## Cross-Campaign Dependencies
 

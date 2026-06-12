@@ -6,6 +6,8 @@ Run after the quest queue is exhausted, in **every** execution mode (Pi CLI, `--
 
 Generate a Markdown run report at campaign root: `run-report-<timestamp>.md`, where `<timestamp>` is local time formatted `YYYY-MM-DD-HHMM` (e.g. `run-report-2026-06-11-0930.md`) so reports sort lexically. Include YAML front matter for machine-readable run data and a Markdown body for human review. Schema: `liang-quest-core/references/execution/run-report.md`. Style: `references/run-report-style.md`.
 
+**Spend totals.** When usage was tracked (Pi CLI / batch children with pinned sessions), sum per-quest `usage` rollups into front-matter `totals.total_tokens` / `totals.total_cost_usd`, set `usage_tracked: true`, and render the `## Spend` body section (per-quest table + campaign total). Label the figures as **child-process spend** — the orchestrator's own session is not included. If any quest's usage is missing (harvest failure, `--claude` run, mixed-mode resume), list the gaps in `## Spend` rather than presenting an incomplete sum as complete; if nothing was tracked at all, set `usage_tracked: false` and omit the section.
+
 ## 8a. UAT Batch Prompt
 
 After the run report, present all deferred Tier 2 VCs as a consolidated UAT checklist.

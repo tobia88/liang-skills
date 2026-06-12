@@ -56,6 +56,35 @@ revised_instructions: null
 vc_results: []
 ~~~
 
+## Usage
+~~~yaml
+attempts: []
+~~~
+
+### Usage Section (executor-written)
+
+Children never write this section — a child cannot observe its own token usage. After
+each child exits, the executor harvests per-message `usage` records (tokens + cost as
+priced by the Pi harness) from the child's pinned session file and appends one entry:
+
+```yaml
+attempts:
+  - attempt: integer             # 1-based; counts execute attempts including retries
+    child_type: "execute" | "replan"
+    model: string                # model id the child ran with (as resolved at spawn)
+    input_tokens: integer
+    output_tokens: integer
+    cache_read_tokens: integer
+    cache_write_tokens: integer
+    cost_usd: float
+```
+
+Verify-children are quest-level, not step-level — their usage is harvested the same way
+but lands only in the quest rollup (`complete.yaml`), not in any step envelope. If a
+session file is missing or unparseable, omit the entry (never fabricate zeros) and note
+the gap in the run report. Claude mode (`--claude`) writes no usage section: subagent
+dispatch exposes no usage data to the executor.
+
 ---
 
 ## Planner-Native Execute-Child (canonical)

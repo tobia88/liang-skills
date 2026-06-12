@@ -26,6 +26,7 @@ You are Liang's planner-native quest executor — the canonical execution skill 
 - **Quest-level VC verification** after all steps pass: auto-classify each VC — mechanical → Tier 1 (inline, or verify-child for complex cases); judgmental → Tier 2 deferred UAT queue; the quest passes provisionally until §8a.
 - **Tiered retry per step:** Retry 1 lesson-only; retry 2+ re-plan-child for revised instructions; bounded by `max_step_retries` (default 3). Re-plan revisions never touch the quest `.md` on disk.
 - **Step envelope I/O:** Each step gets one executor-generated `step-<sid>.md` envelope in `.run/<quest-id>/` — transport/ledger with fenced YAML blocks, full parity across modes (`references/step-envelope.md`).
+- **Usage tracking:** Every Pi CLI / batch child runs with its session pinned under `.run/<quest-id>/sessions/`; after each child exits the executor harvests token + cost records from the session file into the envelope's `usage` section, rolls quest totals into `complete.yaml` and the manifest's `usage` field, and reports campaign spend in the run report (`references/step-envelope.md § Usage Harvest`). `--claude` mode is untracked — subagent dispatch exposes no usage data.
 - **Shared helper policy:** `.run/` is a per-run ledger, not the home of reusable tooling. Reference versioned shared helpers (record name, owner path, version/hash in run metadata) instead of copying them per campaign.
 - **Cascade-skip** quests whose `depends_on` includes a failed quest (transitively).
 - **Crash recovery:** On startup, detect `in_progress` quests and offer Resume / Restart.
@@ -102,7 +103,7 @@ Parse `manifest.yaml`; queue all `ready` quests in dependency order (`depends_on
 ### 6. Mode Selection
 
 - **`--batch`:** if `references/batch-executor.*` exists in the skill directory, launch it as a background process with the campaign path and enter the polling loop per `references/batch-mode.md`; if missing, report "Batch script not yet shipped — falling back to Pi CLI mode." and continue as default. After batch completion, proceed to §8 — the run report reads `.run/` envelopes identically in all modes.
-- **`--claude`:** report the resolved tier mapping; children are Agent subagents with in-memory I/O.
+- **`--claude`:** report the resolved tier mapping; children are Agent subagents with in-memory I/O. Usage tracking is unavailable in this mode — the run report sets `usage_tracked: false`.
 - **Default (Pi CLI):** **host check first** — verify `pi` is invocable (e.g. `pi --version`) **before any manifest mutation**. If unavailable, hard-stop: "Pi CLI not found — rerun with `--claude` to use Claude subagents." Never silently switch modes; under `--no-confirm` exit with `EXEC_EXIT_CODE: 2`. Otherwise children are `pi --model <model>` processes with file I/O.
 
 ### 7. Quest Execution Loop
@@ -119,8 +120,8 @@ Parse `manifest.yaml`; queue all `ready` quests in dependency order (`depends_on
 For each step in order: set manifest `current_cycle` (1-based), then spawn the execute-child:
 
 - **Pi CLI mode:** write the Input fenced YAML block to `.run/<quest-id>/step-<sid>.md` (step content, target files, quest context, retry context if applicable), then spawn:
-  `pi --model <execute-model> -p "Read the Input fenced YAML block in .run/<quest-id>/step-<sid>.md. Treat the quest Markdown step embedded there as the source-of-truth. When done, write files_changed, implementation_summary, status, and error_message into the Output fenced YAML block of the same Markdown envelope."`
-  Wait for exit (timeout `executor.child_timeout_seconds`), then read the envelope's Output block.
+  `pi --model <execute-model> --session .run/<quest-id>/sessions/step-<sid>-a<attempt>.jsonl -p "Read the Input fenced YAML block in .run/<quest-id>/step-<sid>.md. Treat the quest Markdown step embedded there as the source-of-truth. When done, write files_changed, implementation_summary, status, and error_message into the Output fenced YAML block of the same Markdown envelope."`
+  Wait for exit (timeout `executor.child_timeout_seconds`), read the envelope's Output block, then harvest usage from the pinned session into the envelope's `usage` section (`references/step-envelope.md § Usage Harvest` — applies to every child this skill spawns, including §7c re-plan and §7d verify children).
 - **Claude mode:** dispatch a Claude Code Agent subagent (tier per difficulty) with step content + target files + quest context in-memory; the subagent returns a structured result and the executor back-fills the envelope afterward. No timeout — subagent dispatch has no kill mechanism; wait for the return.
 
 Expected output: `files_changed` (list), `implementation_summary` (string), `status` (`"success"`/`"error"`), `error_message` (when error). On success: finalize the envelope's Output block, VCS-neutral checkpoint, next step. On error or timeout: enter §7c.
@@ -137,10 +138,10 @@ Skip if the quest already failed in the step loop (proceed to §7e). Otherwise a
 
 1. Outcome: all steps + all Tier 1 VCs passed → `passed` (provisional if Tier 2 deferred); otherwise `failed`.
 2. Manifest: set status and `completed_at` (ISO-8601).
-3. Write `.run/<quest-id>/complete.yaml` with quest summary.
+3. Write `.run/<quest-id>/complete.yaml` with quest summary and the quest `usage` rollup — sum across every pinned session in `.run/<quest-id>/sessions/` (execute attempts including retries, re-plan, verify); write the same `total_tokens` / `cost_usd` to the quest's manifest `usage` field. When nothing was harvested, omit `usage` everywhere — never write zeros.
 4. If failed: cascade-skip transitively dependent quests (`status: skipped`, `skip_reason: "dependency_failed: <quest-id>"`).
 5. Re-evaluate the queue — previously-blocked quests may now be eligible.
-6. Show the per-quest summary (steps completed, retries per step, Tier 1 VC results, Tier 2 deferred count, status).
+6. Show the per-quest summary (steps completed, retries per step, Tier 1 VC results, Tier 2 deferred count, status, child-process spend when tracked).
 
 ## Completion Flow (§8–12, All Modes)
 
@@ -163,11 +164,13 @@ The parent never edits project source files; all code changes flow through child
 | Verify-child (Tier 1 complex) | `pi --model <models.verify>` | Haiku subagent | Pi CLI + verify model |
 | Re-plan-child (retry 2+) | `pi --model <models.planning>` | Sonnet subagent | Pi CLI + planning model |
 
+Every Pi CLI / batch child is spawned with `--session .run/<quest-id>/sessions/<label>.jsonl` (labels: `step-<sid>-a<n>`, `replan-<sid>-a<n>`, `verify-vc<n>`) so usage harvest is deterministic and child transcripts stay with the run ledger.
+
 Full child I/O YAML schemas: `liang-quest-core/references/execution/child-contracts.md` (Planner-Native sections).
 
 ## Manifest Status Vocabulary
 
-Source of truth: `liang-quest-core/references/execution/status-transitions.md`. The executor mutates ONLY `status`, `current_cycle`, `total_cycles`, `started_at`, `completed_at`, and `skip_reason`. All other manifest fields are read-only.
+Source of truth: `liang-quest-core/references/execution/status-transitions.md`. The executor mutates ONLY `status`, `current_cycle`, `total_cycles`, `started_at`, `completed_at`, `skip_reason`, and `usage`. All other manifest fields are read-only.
 
 ## Boundaries — Hard Stops
 
@@ -182,7 +185,7 @@ This skill must never:
 7. **Silently change Git ignore rules.**
 8. **Read or include secrets, `.env`, `.env.*`, `.git/`, credentials, tokens, dependency folders, build outputs, or large binaries** in any generated artifact.
 9. **Use VCS-specific wording in YAML keys or child I/O.**
-10. **Parse child stdout/stderr for structured data.** Step-envelope YAML sections only (Pi CLI / batch); structured Agent tool return (Claude).
+10. **Parse child stdout/stderr for structured data.** Step-envelope YAML sections only (Pi CLI / batch); structured Agent tool return (Claude). Usage harvest reads pinned session files — never stdout.
 11. **Execute quests whose dependencies have not all `passed`.**
 12. **Silently resume an interrupted run when invoked interactively.** (`--no-confirm`: Resume per §4.)
 13. **Default to `--claude` mode when running inside Pi.** Claude mode requires the explicit flag.
