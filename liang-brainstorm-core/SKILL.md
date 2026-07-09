@@ -17,10 +17,12 @@ This skill contains **no behavioral logic**. It exists solely as a structured li
 | `references/terminology.md` | Neutral formal terms and JRPG label mappings | All brainstorm variants |
 | `references/vcs-policy.md` | VCS artifact policy lookup and prompt logic | All brainstorm variants |
 | `references/scout-rules.md` | Project scout rules: allowed/avoided paths, timing, report context | All brainstorm variants |
+| `references/alignment-protocol.md` | Two-stage Alignment→Crystallization contract; slots are synthesized, not elicited | All brainstorm variants |
+| `references/grounding-protocol.md` | Grounding gate: read named artifact + neighbors before options, falsifiable read-receipt, source-of-truth hierarchy, waiver | All brainstorm variants (full: relentless, collapsed: quick) |
 
 ## Composition Mechanism
 
-Brainstorm variant skills consume core references via **reference inclusion** — they read the relevant files at activation time. Each variant reads all 4 reference files and may override or extend with variant-specific behavior.
+Brainstorm variant skills consume core references via **reference inclusion** — they read the relevant files at activation time. Each variant reads the reference files named in its own activation checklist and may override or extend with variant-specific behavior.
 
 ## Boundaries
 

@@ -7,6 +7,25 @@ Multi-campaign orchestrator script. Discovers all eligible campaigns under
 cycles), runs pre-flight validation, and dispatches one executor invocation
 per campaign via Pi CLI with --no-confirm.
 
+Scoping: `--saga <id|path>` restricts the sweep to the campaigns listed in one
+saga's saga.yaml (produced by liang-quest-saga-planner); `--only <id,id,...>`
+restricts to an explicit campaign_id list. Without a scope flag the sweep is
+workspace-global — on a workspace with historical campaigns that will re-run
+every non-passed quest ever left behind, so scoped invocation is the norm.
+A scoped campaign may depend on a campaign outside the scope only if that
+campaign is already fully passed on disk.
+
+Manual quests: a quest with `manual: true` in the manifest is human-in-editor
+work that must never be dispatched to a headless child. Before dispatch, the
+sweep holds such quests (and, transitively, their un-passed in-campaign
+dependents) at status "skipped" with skip_reason "manual_deferred" /
+"manual_dependency". The executor builds its queue solely from status: ready,
+so held quests are invisible to it. A campaign whose remaining quests are all
+manual holds counts as PASSED with a manual backlog (surfaced in the sweep
+report); cross-campaign dependents still run. Complete the manual work, set
+those quests to "passed", and re-sweep — stale holds are released
+automatically.
+
 NAMING: this file is the "sweep script" — the OUTER multi-campaign
 orchestrator. It invokes liang-quest-executor (which may use its own --batch
 mode internally) once per eligible campaign.
@@ -27,6 +46,7 @@ Exit codes (matching the executor's contract from q001):
   3 — unexpected crash
 
 Usage: python sweep.py [--dry-run] [--workspace <path>]
+                       [--saga <id|path>] [--only <campaign_id,...>]
 """
 
 from __future__ import annotations
@@ -49,9 +69,14 @@ import yaml  # pyyaml; see requirements.txt
 
 # Constants
 CAMPAIGNS_DIR_NAME = ".liang/campaigns"
+SAGAS_DIR_NAME = ".liang/sagas"
 PROJECT_YAML_PATH = ".liang/project.yaml"
 SWEEP_REPORTS_DIR_NAME = ".liang/sweep-reports"
 EXECUTOR_SKILL_NAME = "liang-quest-executor"
+
+# skip_reason values the sweep itself writes to hold manual quests out of the
+# dispatch queue. Holds are released and recomputed on every sweep.
+MANUAL_SKIP_REASONS = ("manual_deferred", "manual_dependency")
 
 EXIT_OK = 0
 EXIT_QUEST_FAILED = 1
@@ -71,17 +96,21 @@ EVIDENCE_SLACK_SECONDS = 2.0
 RUNNABLE_STATUSES = {"planned", "failed", "ready", "in_progress"}  # "ready" is the v4/canonical planner status
 SKIPPABLE_STATUSES = {"passed", "skipped"}
 
-def discover_campaigns(workspace: Path) -> list[dict[str, Any]]:
+def discover_campaigns(workspace: Path) -> tuple[list[dict[str, Any]], list[tuple[str, str]]]:
     """
-    Walk .liang/campaigns/ and load each manifest.yaml. Return a list of
-    dicts, each containing the parsed manifest plus a 'campaign_dir' Path
-    key for later file operations. Skip directories without a manifest.yaml.
-    Skip 'archive/' subdirectory if present.
+    Walk .liang/campaigns/ and load each manifest.yaml. Return
+    (campaigns, errors) where campaigns is a list of dicts, each containing
+    the parsed manifest plus a 'campaign_dir' Path key for later file
+    operations, and errors is a list of (dir_name, message) for manifests
+    that failed to read/parse. The caller decides which errors are fatal —
+    a scoped sweep tolerates broken manifests outside its scope. Skips
+    directories without a manifest.yaml and the 'archive/' subdirectory.
     """
     campaigns_dir = workspace / CAMPAIGNS_DIR_NAME
     if not campaigns_dir.is_dir():
-        return []
-    result = []
+        return [], []
+    result: list[dict[str, Any]] = []
+    errors: list[tuple[str, str]] = []
     for entry in sorted(campaigns_dir.iterdir()):
         if not entry.is_dir():
             continue
@@ -94,12 +123,14 @@ def discover_campaigns(workspace: Path) -> list[dict[str, Any]]:
             with manifest_path.open("r", encoding="utf-8") as f:
                 manifest = yaml.safe_load(f)
         except (OSError, yaml.YAMLError) as e:
-            raise ValueError(f"{manifest_path}: manifest read/parse error: {e}") from e
+            errors.append((entry.name, f"{manifest_path}: manifest read/parse error: {e}"))
+            continue
         if not isinstance(manifest, dict):
-            raise ValueError(f"{manifest_path}: manifest must be a YAML mapping")
+            errors.append((entry.name, f"{manifest_path}: manifest must be a YAML mapping"))
+            continue
         manifest["campaign_dir"] = entry
         result.append(manifest)
-    return result
+    return result, errors
 
 
 def toposort_campaigns(campaigns: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -269,6 +300,9 @@ def reset_for_retry(campaign: dict[str, Any]) -> int:
     """
     reset = 0
     for quest in campaign.get("quests", []):
+        if _is_manual_hold(quest):
+            # Sweep-owned hold: awaiting a human, never re-queued headlessly.
+            continue
         if quest.get("status") in ("failed", "skipped", "in_progress"):
             quest["status"] = "ready"
             for field in (
@@ -316,6 +350,169 @@ def validate_campaign_deps(campaigns: list[dict[str, Any]]) -> list[str]:
     return errors
 
 
+def _is_manual_hold(quest: dict[str, Any]) -> bool:
+    """True if the quest is currently held out of dispatch for manual reasons."""
+    return (
+        quest.get("status") == "skipped"
+        and quest.get("skip_reason") in MANUAL_SKIP_REASONS
+    )
+
+
+def _quest_done(quest: dict[str, Any]) -> bool:
+    """True if the quest needs no further dispatch this sweep: passed, or held
+    as manual work awaiting a human (which never resolves headlessly)."""
+    return quest.get("status") == "passed" or _is_manual_hold(quest)
+
+
+def resolve_saga_selection(
+    workspace: Path, token: str
+) -> tuple[str, list[str], list[str]]:
+    """
+    Resolve a --saga token to (saga_title, campaign_ids, warnings).
+
+    Token forms accepted, in order:
+      1. A path (absolute or workspace-relative) to a saga.yaml file.
+      2. A path to a saga directory containing saga.yaml.
+      3. A directory name under .liang/sagas/ (exact).
+      4. A unique substring of a directory name under .liang/sagas/.
+
+    Campaign entries without a campaign_id (not yet planned) are excluded
+    with a warning. Raises ValueError on no match, ambiguous match, or a
+    saga.yaml with no planned campaigns.
+    """
+    saga_yaml: Path | None = None
+    cand = Path(token) if Path(token).is_absolute() else workspace / token
+    if cand.is_file():
+        saga_yaml = cand
+    elif cand.is_dir() and (cand / "saga.yaml").is_file():
+        saga_yaml = cand / "saga.yaml"
+    else:
+        sagas_root = workspace / SAGAS_DIR_NAME
+        exact = sagas_root / token / "saga.yaml"
+        if exact.is_file():
+            saga_yaml = exact
+        elif sagas_root.is_dir():
+            hits = [
+                d for d in sorted(sagas_root.iterdir())
+                if d.is_dir() and token in d.name and (d / "saga.yaml").is_file()
+            ]
+            if len(hits) == 1:
+                saga_yaml = hits[0] / "saga.yaml"
+            elif len(hits) > 1:
+                names = ", ".join(d.name for d in hits)
+                raise ValueError(f"--saga '{token}' is ambiguous; matches: {names}")
+    if saga_yaml is None:
+        raise ValueError(
+            f"--saga '{token}': no saga.yaml found (tried it as a path, as "
+            f"{SAGAS_DIR_NAME}/{token}/, and as a directory-name substring)"
+        )
+
+    data = _safe_load_yaml(saga_yaml)
+    if not isinstance(data, dict):
+        raise ValueError(f"{saga_yaml}: unreadable or not a YAML mapping")
+    title = str(data.get("title") or saga_yaml.parent.name)
+
+    ids: list[str] = []
+    warnings: list[str] = []
+    for entry in data.get("campaigns") or []:
+        if not isinstance(entry, dict):
+            continue
+        cid = entry.get("campaign_id")
+        if isinstance(cid, str) and cid.strip():
+            ids.append(cid.strip())
+        else:
+            label = entry.get("id") or entry.get("title") or "<unknown>"
+            warnings.append(
+                f"saga entry '{label}' has no campaign_id (not planned yet) — excluded from scope"
+            )
+    if not ids:
+        raise ValueError(f"{saga_yaml}: no campaign entries carry a campaign_id")
+    return title, ids, warnings
+
+
+def validate_scoped_deps(
+    selected: list[dict[str, Any]], all_campaigns: list[dict[str, Any]]
+) -> list[str]:
+    """
+    Scoped-sweep replacement for validate_campaign_deps. A campaign_depends_on
+    target inside the scope is handled by the toposort as usual. A target
+    OUTSIDE the scope is satisfied only if that campaign exists on disk with
+    every quest done (passed, or a manual hold awaiting a human) — otherwise
+    it is a configuration error: widen the scope or run the dependency first.
+    """
+    errors: list[str] = []
+    selected_ids = {c["campaign_id"] for c in selected}
+    by_id = {c.get("campaign_id"): c for c in all_campaigns}
+    for c in selected:
+        cid = c["campaign_id"]
+        for dep in c.get("campaign_depends_on") or []:
+            if dep in selected_ids:
+                continue
+            dep_campaign = by_id.get(dep)
+            if dep_campaign is None:
+                errors.append(
+                    f"{cid}: campaign_depends_on references '{dep}', which is not on disk"
+                )
+                continue
+            quests = dep_campaign.get("quests") or []
+            if not quests or not all(_quest_done(q) for q in quests):
+                errors.append(
+                    f"{cid}: depends on '{dep}', which is outside the sweep scope and "
+                    f"not fully passed — include it in the scope or run it first"
+                )
+    return errors
+
+
+def apply_manual_holds(campaign: dict[str, Any]) -> tuple[int, bool]:
+    """
+    Hold `manual: true` quests — and, transitively, their un-passed in-campaign
+    dependents — out of the dispatch queue by marking them skipped with a
+    manual skip_reason. The executor builds its queue solely from status:
+    ready, so a held quest is never handed to a headless child (which could
+    not do human-in-editor work and would fail the campaign, cascade-skipping
+    every dependent).
+
+    Stale holds are released first and recomputed from scratch, so a manual
+    quest the user has since completed (status: passed) frees its dependents
+    on the next sweep. Dependents are held rather than run because their
+    ordering after the manual quest is usually load-bearing (e.g. "delete the
+    legacy widgets" ordered after "manually assemble the replacements").
+
+    Returns (held_count, changed). In-memory only — the caller persists via
+    write_manifest_atomic.
+    """
+    quests = campaign.get("quests") or []
+    changed = False
+
+    for q in quests:
+        if _is_manual_hold(q):
+            q["status"] = "ready"
+            q.pop("skip_reason", None)
+            changed = True
+
+    held: set[str] = set()
+    for q in quests:
+        if q.get("manual") and q.get("status") != "passed":
+            q["status"] = "skipped"
+            q["skip_reason"] = "manual_deferred"
+            held.add(q.get("id"))
+            changed = True
+
+    grew = True
+    while grew:
+        grew = False
+        for q in quests:
+            if q.get("id") in held or q.get("status") == "passed":
+                continue
+            if any(dep in held for dep in q.get("depends_on") or []):
+                q["status"] = "skipped"
+                q["skip_reason"] = "manual_dependency"
+                held.add(q.get("id"))
+                changed = True
+                grew = True
+    return len(held), changed
+
+
 def _safe_load_yaml(path: Path) -> Any:
     """Parse a YAML file, returning None on any read/parse failure."""
     try:
@@ -357,7 +554,12 @@ def assess_campaign_outcome(
     if exit_code == EXIT_CRASH:
         return "crash", None
 
-    run_reports = sorted(campaign_dir.glob("run-report-*.html"))
+    # The executor's run report is Markdown (SKILL.md §8: run-report-*.md);
+    # older runs wrote .html. Accept both — globbing only .html made every
+    # clean dispatch look evidence-free and thus "failed".
+    run_reports = sorted(
+        [*campaign_dir.glob("run-report-*.md"), *campaign_dir.glob("run-report-*.html")]
+    )
     run_report_relpath: str | None = None
     if run_reports:
         run_report_relpath = (
@@ -367,6 +569,9 @@ def assess_campaign_outcome(
     cutoff = dispatch_start - EVIDENCE_SLACK_SECONDS
     has_fresh_evidence = (
         _any_mtime_at_least(run_reports, cutoff)
+        # Step envelopes are Markdown per the executor contract; keep the old
+        # .html pattern for backward compatibility.
+        or _any_mtime_at_least(campaign_dir.glob(".run/*/step-*.md"), cutoff)
         or _any_mtime_at_least(campaign_dir.glob(".run/*/step-*.html"), cutoff)
     )
 
@@ -407,8 +612,15 @@ def _stream_combined_output(pipe: Any, sink: Any, collected: list[str]) -> None:
     try:
         for line in iter(pipe.readline, ""):
             collected.append(line)
-            sink.write(line)
-            sink.flush()
+            # The live echo must never kill this thread: an encode error on a
+            # cp1252 sink would close the pipe (finally below) and break the
+            # child's stdout mid-run. Collection above is what feeds the
+            # EXEC_EXIT_CODE parsing; the echo is best-effort.
+            try:
+                sink.write(line)
+                sink.flush()
+            except (UnicodeEncodeError, OSError, ValueError):
+                pass
     finally:
         try:
             pipe.close()
@@ -491,8 +703,13 @@ def dispatch_campaign(
     # ask_question` is a headless safety net so a stray prompt can't block.
     # Validated live 2026-05-29 (canary: all 4 quests passed, exit 0); the old
     # `[..., "--no-confirm", dir]` form hung/failed every dispatch.
+    # MUST be a single line: pi resolves to the npm `pi.CMD` batch shim on
+    # Windows, and cmd.exe terminates the command at a newline — everything
+    # after the first `\n` in an argv element is silently dropped (verified
+    # live 2026-07-09: the child received only the first line, ran the
+    # interactive flow, and dead-ended on the §1/§5 confirm prompt).
     no_confirm_msg = (
-        f"Execute the planner campaign at this directory: {campaign_dir}\n\n"
+        f"Execute the planner campaign at this directory: {campaign_dir} -- "
         "Run in NON-INTERACTIVE --no-confirm mode exactly as the skill "
         "documents: skip the Step 1 intent confirmation, default Step 4 "
         "crash-recovery to Resume, skip the Step 5 confirm-once gate, skip the "
@@ -500,12 +717,15 @@ def dispatch_campaign(
         "tier_2_deferred), preserve all files in Step 9, treat Step 10 "
         "vcs_artifacts as ignore, and skip the Step 11 commit suggestion. "
         "Process the entire quest queue in dependency order to completion, then "
-        "write the HTML run report. Do not ask any questions; proceed with the "
+        "write the Markdown run report. Do not ask any questions; proceed with the "
         "documented defaults. As the VERY LAST line of your output, print "
         "exactly 'EXEC_EXIT_CODE: <n>' on its own line, where <n> is 0 "
         "if every quest passed, 1 if any quest failed, 2 on a configuration "
         "error, or 3 on an unexpected crash."
     )
+    # Batch-shim newline guard (see comment above) — collapse any whitespace
+    # run to a single space so an edit to the prose can never reintroduce one.
+    no_confirm_msg = " ".join(no_confirm_msg.split())
     cmd = [
         pi_exe,
         "--print",                          # non-interactive: process and exit
@@ -537,6 +757,11 @@ def dispatch_campaign(
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
+            # pi emits UTF-8; without an explicit encoding, text mode decodes
+            # with the locale codec (cp1252 on Windows), and undefined bytes
+            # like 0x9d kill the reader thread mid-run.
+            encoding="utf-8",
+            errors="replace",
             bufsize=1,
             **popen_kwargs,
         )
@@ -548,7 +773,43 @@ def dispatch_campaign(
             daemon=True,
         )
         reader.start()
-        exit_code = process.wait(timeout=timeout)
+        # pi (node) can finish its agent loop yet never exit: observed
+        # 2026-07-09 on c01 of the battle-simulator saga — the child printed
+        # its final EXEC_EXIT_CODE line at 01:30, then the process sat idle
+        # until the 3600s campaign timeout killed it at 01:59 and the sweep
+        # read a fully-passed campaign as failed (cascade-skipping 6
+        # dependents). So: poll in short slices; once the completion marker
+        # appears in the collected output, give the process a short grace to
+        # exit on its own, then reap the hung tree and trust the marker.
+        deadline = None if timeout is None else time.monotonic() + timeout
+        marker_grace_deadline: float | None = None
+        while True:
+            try:
+                exit_code = process.wait(timeout=15)
+                break
+            except subprocess.TimeoutExpired:
+                now = time.monotonic()
+                if (
+                    marker_grace_deadline is None
+                    and _extract_exec_exit_code("".join(output_chunks)) is not None
+                ):
+                    marker_grace_deadline = now + 60
+                if marker_grace_deadline is not None and now >= marker_grace_deadline:
+                    print(
+                        f"[sweep] {cid} printed EXEC_EXIT_CODE but the pi process "
+                        f"did not exit — reaping the hung process tree and "
+                        f"continuing with the marker code",
+                        file=sys.stderr,
+                    )
+                    _kill_process_tree(process)
+                    try:
+                        process.wait(timeout=5)
+                    except subprocess.TimeoutExpired:
+                        process.kill()
+                    exit_code = 0  # kill code is meaningless; marker wins below
+                    break
+                if deadline is not None and now >= deadline:
+                    raise
         reader.join(timeout=5)
     except subprocess.TimeoutExpired:
         if process is not None:
@@ -675,14 +936,14 @@ SWEEP_REPORT_TEMPLATE = """<!doctype html>
 
     <table>
       <thead>
-        <tr><th>Order</th><th>Campaign ID</th><th>Status</th><th>UAT</th><th>Run Report</th></tr>
+        <tr><th>Order</th><th>Campaign ID</th><th>Status</th><th>UAT</th><th>Manual</th><th>Run Report</th></tr>
       </thead>
       <tbody>
         {rows}
       </tbody>
     </table>
 
-    <p class="footer">Generated by liang-quest-batch-sweep / sweep.py &middot; This is the SWEEP report (multi-campaign). Per-campaign run reports linked above are generated by the executor. "Pending" in the UAT column means the campaign passed mechanically but has deferred Tier-2 victory conditions awaiting human review.</p>
+    <p class="footer">Generated by liang-quest-batch-sweep / sweep.py &middot; This is the SWEEP report (multi-campaign). Per-campaign run reports linked above are generated by the executor. "Pending" in the UAT column means the campaign passed mechanically but has deferred Tier-2 victory conditions awaiting human review. A count in the Manual column means that many quests are human-in-editor work the sweep held out of the queue (skip_reason manual_deferred / manual_dependency) &mdash; do them, mark them passed, and re-sweep.</p>
   </main>
 </body>
 </html>
@@ -724,6 +985,8 @@ def write_sweep_report(
       - order: int (1-based index in dispatch order)
       - status: 'passed' | 'failed' | 'skipped' | 'crash'
       - run_report_relpath: str | None (path to executor's run report, if any)
+      - has_uat_pending: bool
+      - manual_pending: int (quests held as manual work awaiting a human)
     """
     reports_dir = workspace / SWEEP_REPORTS_DIR_NAME
     reports_dir.mkdir(parents=True, exist_ok=True)
@@ -748,12 +1011,18 @@ def write_sweep_report(
             uat_cell = '<span class="uat-badge">Pending</span>'
         else:
             uat_cell = '<span class="uat-none">&mdash;</span>'
+        manual_n = r.get("manual_pending") or 0
+        if manual_n:
+            manual_cell = f'<span class="uat-badge">{manual_n} deferred</span>'
+        else:
+            manual_cell = '<span class="uat-none">&mdash;</span>'
         rows.append(
             f'<tr>'
             f'<td>{r["order"]}</td>'
             f'<td><code>{_html_escape(r["campaign_id"])}</code></td>'
             f'<td><span class="status {r["status"]}">{r["status"]}</span></td>'
             f'<td>{uat_cell}</td>'
+            f'<td>{manual_cell}</td>'
             f'<td>{link}</td>'
             f'</tr>'
         )
@@ -786,10 +1055,38 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         action="store_true",
         help="Show what would be dispatched without invoking the executor",
     )
+    parser.add_argument(
+        "--saga",
+        type=str,
+        default=None,
+        help=(
+            "Scope the sweep to one saga's campaigns: a saga id / directory "
+            f"name (substring ok) under {SAGAS_DIR_NAME}/, or a path to a "
+            "saga directory or saga.yaml"
+        ),
+    )
+    parser.add_argument(
+        "--only",
+        type=str,
+        default=None,
+        help="Scope the sweep to a comma-separated list of campaign_ids (unioned with --saga)",
+    )
     return parser.parse_args(argv)
 
 
+def _force_utf8_stdio() -> None:
+    """Windows consoles/pipes default to cp1252, which cannot encode glyphs
+    the child output and reports contain — that raises UnicodeEncodeError and
+    crashes the harness. Force UTF-8 so output never dies on encoding."""
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except (AttributeError, ValueError):
+            pass
+
+
 def main(argv: list[str] | None = None) -> int:
+    _force_utf8_stdio()
     args = parse_args(argv)
     workspace: Path = args.workspace.resolve()
 
@@ -800,30 +1097,98 @@ def main(argv: list[str] | None = None) -> int:
             print(f"[sweep] workspace error: {e}", file=sys.stderr)
         return EXIT_CONFIG_ERROR
 
-    # Discover and filter
-    try:
-        all_campaigns = discover_campaigns(workspace)
-    except ValueError as e:
-        print(f"[sweep] manifest error: {e}", file=sys.stderr)
-        return EXIT_CONFIG_ERROR
+    # Resolve the sweep scope (if any) before discovery error handling — a
+    # scoped sweep tolerates broken manifests outside its scope.
+    scope_ids: set[str] | None = None
+    scope_label: str | None = None
+    if args.saga or args.only:
+        scope_ids = set()
+        if args.saga:
+            try:
+                saga_title, saga_ids, saga_warnings = resolve_saga_selection(
+                    workspace, args.saga
+                )
+            except ValueError as e:
+                print(f"[sweep] scope error: {e}", file=sys.stderr)
+                return EXIT_CONFIG_ERROR
+            for w in saga_warnings:
+                print(f"[sweep] warning: {w}", file=sys.stderr)
+            scope_ids |= set(saga_ids)
+            scope_label = f"saga '{saga_title}'"
+        if args.only:
+            only_ids = {t.strip() for t in args.only.split(",") if t.strip()}
+            if not only_ids:
+                print("[sweep] scope error: --only given but no campaign_ids parsed", file=sys.stderr)
+                return EXIT_CONFIG_ERROR
+            scope_ids |= only_ids
+            scope_label = f"{scope_label} + --only" if scope_label else "--only list"
+
+    # Discover
+    all_campaigns, discover_errors = discover_campaigns(workspace)
+    if discover_errors:
+        # Unscoped: every broken manifest is fatal (historical behavior).
+        # Scoped: fatal only if the broken folder is (by the dir==campaign_id
+        # naming convention) inside the scope; others downgrade to warnings.
+        fatal = [
+            msg for dir_name, msg in discover_errors
+            if scope_ids is None or dir_name in scope_ids
+        ]
+        for dir_name, msg in discover_errors:
+            level = "manifest error" if (scope_ids is None or dir_name in scope_ids) else "warning (out of scope)"
+            print(f"[sweep] {level}: {msg}", file=sys.stderr)
+        if fatal:
+            return EXIT_CONFIG_ERROR
     if not all_campaigns:
         print(f"[sweep] no campaigns found under {workspace / CAMPAIGNS_DIR_NAME}", file=sys.stderr)
         return EXIT_CONFIG_ERROR
 
     # Validate campaign identity before building the dependency graph — a missing
-    # or duplicate campaign_id would otherwise KeyError mid-toposort.
+    # or duplicate campaign_id would otherwise KeyError mid-toposort. In scoped
+    # mode, identity problems on out-of-scope campaigns are warnings only.
     id_errors = validate_campaign_ids(all_campaigns)
     if id_errors:
+        if scope_ids is not None:
+            fatal_ids = [e for e in id_errors if any(cid in e for cid in scope_ids)]
+        else:
+            fatal_ids = id_errors
         for e in id_errors:
-            print(f"[sweep] manifest error: {e}", file=sys.stderr)
-        return EXIT_CONFIG_ERROR
+            level = "manifest error" if e in fatal_ids else "warning (out of scope)"
+            print(f"[sweep] {level}: {e}", file=sys.stderr)
+        if fatal_ids:
+            return EXIT_CONFIG_ERROR
 
-    # Unresolved campaign_depends_on is a configuration error, not a silent root.
-    dep_errors = validate_campaign_deps(all_campaigns)
-    if dep_errors:
-        for e in dep_errors:
-            print(f"[sweep] manifest error: {e}", file=sys.stderr)
-        return EXIT_CONFIG_ERROR
+    # Apply the scope filter and validate dependencies.
+    if scope_ids is not None:
+        by_id = {c.get("campaign_id"): c for c in all_campaigns}
+        missing = sorted(cid for cid in scope_ids if cid not in by_id)
+        if missing:
+            for cid in missing:
+                print(
+                    f"[sweep] scope error: campaign '{cid}' not found under "
+                    f"{CAMPAIGNS_DIR_NAME}",
+                    file=sys.stderr,
+                )
+            return EXIT_CONFIG_ERROR
+        campaigns = [c for c in all_campaigns if c.get("campaign_id") in scope_ids]
+        dep_errors = validate_scoped_deps(campaigns, all_campaigns)
+        if dep_errors:
+            for e in dep_errors:
+                print(f"[sweep] scope error: {e}", file=sys.stderr)
+            return EXIT_CONFIG_ERROR
+        print(
+            f"[sweep] scope: {scope_label} — {len(campaigns)} of "
+            f"{len(all_campaigns)} campaign(s) in scope; "
+            f"{len(all_campaigns) - len(campaigns)} excluded",
+            file=sys.stderr,
+        )
+    else:
+        campaigns = all_campaigns
+        # Unresolved campaign_depends_on is a configuration error, not a silent root.
+        dep_errors = validate_campaign_deps(campaigns)
+        if dep_errors:
+            for e in dep_errors:
+                print(f"[sweep] manifest error: {e}", file=sys.stderr)
+            return EXIT_CONFIG_ERROR
 
     # Per-campaign wall-clock budget for a single executor dispatch.
     proj_cfg = _safe_load_yaml(workspace / PROJECT_YAML_PATH) or {}
@@ -852,9 +1217,10 @@ def main(argv: list[str] | None = None) -> int:
     if campaign_timeout == 0:
         campaign_timeout = None
 
-    # Toposort (raises ValueError on cycle)
+    # Toposort (raises ValueError on cycle). In scoped mode, deps outside the
+    # scope were validated as fully-done above and are ignored by the sort.
     try:
-        ordered = toposort_campaigns(all_campaigns)
+        ordered = toposort_campaigns(campaigns)
     except ValueError as e:
         print(f"[sweep] {e}", file=sys.stderr)
         return EXIT_CONFIG_ERROR
@@ -864,11 +1230,11 @@ def main(argv: list[str] | None = None) -> int:
     # — they don't need structural validation.
     blocked_ids: set[str] = set()
     for c in ordered:
-        quest_statuses = [q.get("status") for q in c.get("quests", [])]
-        # Only a fully-passed campaign is exempt from structural validation.
-        # Anything else (failed/skipped/ready/in_progress) is a dispatch candidate —
-        # its non-passed quests get reset to ready below — so it must be well-formed.
-        if quest_statuses and all(s == "passed" for s in quest_statuses):
+        quests = c.get("quests", [])
+        # Only a fully-done campaign (passed, or held manual work) is exempt from
+        # structural validation. Anything else is a dispatch candidate — its
+        # non-passed quests get reset to ready below — so it must be well-formed.
+        if quests and all(_quest_done(q) for q in quests):
             continue
         blocking, warnings = preflight_campaign(c)
         for w in warnings:
@@ -907,30 +1273,47 @@ def main(argv: list[str] | None = None) -> int:
             results.append({
                 "campaign_id": cid, "order": order_idx, "status": "skipped",
                 "run_report_relpath": None, "has_uat_pending": False,
+                "manual_pending": 0,
             })
             action = "CASCADE-SKIP"
             print(f"[sweep] {order_idx}. {cid} — {action} (depends on failed campaign)", file=sys.stderr)
             continue
 
-        # Resume-aware: a fully-passed campaign is done; nothing to retry.
-        quest_statuses = [q.get("status") for q in campaign.get("quests", [])]
-        if quest_statuses and all(s == "passed" for s in quest_statuses):
+        # Hold manual quests (and their un-passed dependents) out of the
+        # dispatch queue before anything else looks at statuses.
+        manual_pending, holds_changed = apply_manual_holds(campaign)
+
+        # Resume-aware: a fully-done campaign (passed everywhere, modulo manual
+        # holds awaiting a human) is done; nothing to dispatch.
+        quests = campaign.get("quests", [])
+        if quests and all(_quest_done(q) for q in quests):
+            if holds_changed and not args.dry_run:
+                write_manifest_atomic(manifest_path, campaign)
             results.append({
                 "campaign_id": cid, "order": order_idx,
                 "status": "passed", "run_report_relpath": None,
-                "has_uat_pending": False,
+                "has_uat_pending": False, "manual_pending": manual_pending,
             })
-            action = "SKIP"
-            print(f"[sweep] {order_idx}. {cid} — {action} (all quests passed)", file=sys.stderr)
+            suffix = (
+                f"all quests passed" if manual_pending == 0
+                else f"all automated quests passed; {manual_pending} manual quest(s) still deferred"
+            )
+            print(f"[sweep] {order_idx}. {cid} — SKIP ({suffix})", file=sys.stderr)
             continue
 
         # Retry-aware: reset non-passed quests to ready so the executor (which
         # only queues status: ready) actually re-runs them on this dispatch.
+        # Manual holds are excluded from the reset.
         reset_n = reset_for_retry(campaign)
-        if reset_n and not args.dry_run:
+        if (reset_n or holds_changed) and not args.dry_run:
             write_manifest_atomic(manifest_path, campaign)
+        if reset_n:
             print(f"[sweep] {order_idx}. {cid} — reset {reset_n} non-passed quest(s) "
                   f"to ready for retry", file=sys.stderr)
+        if manual_pending:
+            print(f"[sweep] {order_idx}. {cid} — holding {manual_pending} manual "
+                  f"quest(s) out of the queue (manual_deferred/manual_dependency)",
+                  file=sys.stderr)
 
         # Dispatch
         dispatch_start = time.time()
@@ -942,6 +1325,7 @@ def main(argv: list[str] | None = None) -> int:
             results.append({
                 "campaign_id": cid, "order": order_idx, "status": "passed",
                 "run_report_relpath": None, "has_uat_pending": False,
+                "manual_pending": manual_pending,
             })
             continue
 
@@ -953,11 +1337,12 @@ def main(argv: list[str] | None = None) -> int:
             )
             print(f"[sweep] {cid} exceeded the {timeout_label} campaign "
                   f"timeout — marking FAILED and continuing.", file=sys.stderr)
-            for dep_cid in cascade_skip_dependents(cid, all_campaigns):
+            for dep_cid in cascade_skip_dependents(cid, campaigns):
                 skipped_by_cascade.add(dep_cid)
             results.append({
                 "campaign_id": cid, "order": order_idx, "status": "failed",
                 "run_report_relpath": None, "has_uat_pending": False,
+                "manual_pending": manual_pending,
             })
             continue
 
@@ -976,7 +1361,7 @@ def main(argv: list[str] | None = None) -> int:
             results.append({
                 "campaign_id": cid, "order": order_idx, "status": "failed",
                 "run_report_relpath": run_report_relpath,
-                "has_uat_pending": False,
+                "has_uat_pending": False, "manual_pending": manual_pending,
             })
             write_sweep_report(workspace, results)
             return EXIT_CONFIG_ERROR
@@ -986,20 +1371,20 @@ def main(argv: list[str] | None = None) -> int:
             results.append({
                 "campaign_id": cid, "order": order_idx, "status": "crash",
                 "run_report_relpath": run_report_relpath,
-                "has_uat_pending": False,
+                "has_uat_pending": False, "manual_pending": manual_pending,
             })
             write_sweep_report(workspace, results)
             return EXIT_CRASH
 
         # Cascade-skip dependents on failure
         if status == "failed":
-            for dep_cid in cascade_skip_dependents(cid, all_campaigns):
+            for dep_cid in cascade_skip_dependents(cid, campaigns):
                 skipped_by_cascade.add(dep_cid)
 
         results.append({
             "campaign_id": cid, "order": order_idx, "status": status,
             "run_report_relpath": run_report_relpath,
-            "has_uat_pending": uat_pending,
+            "has_uat_pending": uat_pending, "manual_pending": manual_pending,
         })
 
     # Write sweep report (live mode only; dry-run writes nothing)

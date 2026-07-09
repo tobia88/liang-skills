@@ -17,6 +17,7 @@ At activation, read these shared reference files from `liang-brainstorm-core/ref
 2. **`liang-brainstorm-core/references/terminology.md`** — Use formal terms (Strategy Report, Decision Memo) and JRPG labels (Main Quest, Victory Conditions, Boss Board) sparingly and functionally.
 3. **`liang-brainstorm-core/references/scout-rules.md`** — Scout at startup with bounded depth; inspect only lightweight text context; avoid secrets, dependencies, and build outputs.
 4. **`liang-brainstorm-core/references/dialogue-hub.md`** — Per-item dialogue-hub pattern for Boss Board (Q4) and Fog of War (Q5): Examine/Decide/Done loop, progressive-deepening drills, per-item analysis-generated postures.
+5. **`liang-brainstorm-core/references/grounding-protocol.md`** — the grounding gate, **collapsed form**: when the seed names a concrete artifact, read it + direct neighbors once at open and show a falsifiable read-receipt; keep the gate, waiver, source hierarchy, and on-demand just-in-time reads, but **no per-set footer**. Grounding reads stay read-only (consistent with zero-files) and do not build an execution manifest.
 
 `vcs-policy.md` is intentionally not read — this skill writes zero files, so VCS policy does not apply.
 
@@ -65,9 +66,11 @@ Run these steps in order.
 
 State that this skill will run a 5-question lite brainstorm, deliver the Strategy Report inline in chat, and offer two same-session downstreams at the end. Confirm the user wants to proceed.
 
-### 2. Minimal Scout
+### 2. Minimal Scout + Collapsed Grounding
 
 Read the workspace at minimum depth — top-level file/folder names, obvious project indicators, `README.md` if present. Do not scout for `target_files` or `reference_files`; that scouting belongs to whichever downstream the user picks.
+
+**Grounding gate (collapsed form, per `grounding-protocol.md`):** if the seed names a concrete artifact (class, file, asset, skill, doc), read it + its direct neighbors (one hop) once here and show a falsifiable read-receipt (`Named / Read / Found / GROUNDED|WAIVED`) before Q1. Plans/intel/campaign docs are leads only — live source and factual status records are the only valid grounding. Grounding impossible (no file tools) or inapplicable (no artifact named) → declare and waive out loud, cap options at `Low` until context arrives; never fake a scout. This is a one-time read-only grounding of the brainstorm's *subject*, distinct from the deferred execution-manifest scouting above. No per-set footer in collapsed form; re-read on demand only if a new artifact becomes load-bearing during a `Decide`.
 
 ### 3. Q1: Main Quest
 

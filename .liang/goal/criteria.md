@@ -28,6 +28,7 @@ restatement-vs-orchestration for each flagged pair. Known canonical homes:
 | Shared terminology | `liang-brainstorm-core/references/terminology.md` |
 | Scout rules | `liang-brainstorm-core/references/scout-rules.md` |
 | VCS artifact policy | `liang-brainstorm-core/references/vcs-policy.md` |
+| Alignment-first protocol | `liang-brainstorm-core/references/alignment-protocol.md` |
 
 ## C2 — Reference integrity (script, critical)
 

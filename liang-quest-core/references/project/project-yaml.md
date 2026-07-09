@@ -31,10 +31,11 @@ created_at: string           # ISO 8601
 models:
   body_drafter: string       # model ID for the planner's body-drafting subagent (Phase 2c / Phase 3 full regens)
   apply_brief: string        # model ID for liang-brainstorm-quick's Option A (apply-immediately) delegation
-  claude_mode:               # --claude mode execute-child tier overrides — Claude tier aliases ONLY
+  claude_mode:               # Claude-harness tier overrides — Claude tier aliases ONLY
     easy: string             # "haiku" | "sonnet" | "opus"
     medium: string
     hard: string
+    body_drafter: string     # tier alias for the planner's body-drafter when running under Claude Code
 ```
 
 Both keys are additive-optional: safe defaults when absent, no `schema_version` bump.
@@ -43,14 +44,16 @@ Both keys are additive-optional: safe defaults when absent, no `schema_version` 
 
 1. `models.body_drafter`
 2. `models.execution_by_difficulty.medium` — body drafting is contract-following transcription of structured output, a medium-difficulty profile
-3. Harness default (a sonnet-class subagent in Claude Code)
+3. Harness default (no model override — the subagent inherits whatever the harness assigns, typically the session model)
 4. No subagent support at all → the planner drafts the body inline
+
+A step that resolves to a model the current harness cannot spawn is treated as **unresolved** — continue down the chain. Harnesses that spawn subagents by tier alias rather than raw model ID (Claude Code can only spawn Claude tiers) resolve through the `claude_mode` namespace instead: `models.claude_mode.body_drafter` → `models.claude_mode.medium` → `sonnet` (the namespace's medium default). This keeps a mixed-vendor `execution_by_difficulty` block (e.g. pi model IDs) from silently routing the drafter to the session model under Claude Code. The planner announces the resolved drafter model — and any step skipped as unspawnable — in one line before spawning.
 
 If `project.yaml` itself is missing at planning time, the planner skips to step 3 silently — planning may legitimately run in a fresh workspace before the executor's first-run interview has ever run. The planner never writes `project.yaml`, and the first-run interview does not ask for this key.
 
 **`models.apply_brief`** — Model used by liang-brainstorm-quick's Option A (apply-immediately) delegation. Resolution chain: `models.apply_brief` → `models.execution_by_difficulty.medium` → harness default. Additive optional key; absence does not bump schema_version.
 
-**`models.claude_mode`** — consumed only by `liang-quest-executor` in `--claude` mode. Values are **Claude Code subagent tier aliases** (`haiku` / `sonnet` / `opus`), not pi model IDs — Claude Code cannot spawn non-Claude children, which is why this is a separate namespace from `execution_by_difficulty`. When the block (or any key in it) is absent, the defaults apply: easy → `haiku`, medium → `sonnet`, hard → `opus`.
+**`models.claude_mode`** — the Claude-harness tier namespace. Consumed by `liang-quest-executor` in `--claude` mode (`easy` / `medium` / `hard`) and by `liang-quest-planner` for the body-drafter when running under Claude Code (`body_drafter`, falling back to `medium`). Values are **Claude Code subagent tier aliases** (`haiku` / `sonnet` / `opus`), not pi model IDs — Claude Code cannot spawn non-Claude children, which is why this is a separate namespace from `execution_by_difficulty`. When the block (or any key in it) is absent, the defaults apply: easy → `haiku`, medium → `sonnet`, hard → `opus`; `body_drafter` defaults to the `medium` tier.
 
 ### Planner Extensions (optional)
 

@@ -2,6 +2,17 @@
 
 Shared project scouting rules for all liang-brainstorm-* skills.
 
+## Relationship to the Grounding Gate
+
+This file governs what is **safe** to inspect (allowed/avoided paths, timing, report
+context). It does **not** govern what you are **required** to read before emitting
+options — that is `grounding-protocol.md`, the enforced grounding gate. Scout = the
+lightweight read that orients you; grounding = the gated, evidence-bearing read of the
+named artifact and its neighbors that must happen before any concrete option ships.
+The safe-path rules below still bound *both*: a grounding read never opens secrets,
+dependency folders, or build outputs. When the seed names a concrete code artifact,
+the startup scout escalates into a grounding read per `grounding-protocol.md`.
+
 ## Timing
 
 - Minimal scout at startup.

@@ -20,8 +20,11 @@ quests:
     file: string             # relative path to quest-NNN-<name>.md
     depends_on: [string]     # quest IDs; may be empty
     difficulty: "easy" | "medium" | "hard"
+    manual: true             # OPTIONAL; human-in-editor quest, absent (false) for automated quests
     status: "ready"          # see Status Vocabulary; planner writes "ready"
 ```
+
+`manual: true` marks a quest as human-in-editor work (UMG assembly, asset authoring, playtest UAT) that must never be dispatched to a headless child. The planner writes it for every quest whose title/purpose is labeled MANUAL. Consumed by the batch sweep orchestrator (sweep.py), which holds such quests — and, transitively, their un-passed in-campaign dependents — at `status: skipped` with `skip_reason: manual_deferred` / `manual_dependency` instead of dispatching them; the campaign then counts as passed-with-manual-backlog. The interactive executor ignores the field today.
 
 No `workflow` field. The planner-native pipeline has a single executor, so no workflow discriminator is needed.
 
@@ -35,7 +38,9 @@ Difficulty drives downstream model selection per `.liang/project.yaml`'s `execut
 quests[]:
   current_cycle: integer     # 1-based index of step currently executing (0 = not started)
   total_cycles: integer      # total step count parsed from the quest .md's ## Steps section
-  skip_reason: string        # present when status is "skipped"; references failed dependency
+  skip_reason: string        # present when status is "skipped"; references failed dependency.
+                             #   sweep.py also writes "manual_deferred" / "manual_dependency"
+                             #   here to hold manual quests out of headless dispatch
   started_at: string         # ISO 8601; set on in_progress transition
   completed_at: string       # ISO 8601; set on passed/failed/skipped transition
   usage:                     # child-process spend, harvested from pinned child session files;

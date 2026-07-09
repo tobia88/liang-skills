@@ -1,6 +1,6 @@
 ---
 name: liang-quest-batch-sweep
-description: Launches a multi-campaign sweep across all eligible Campaigns under .liang/campaigns/. Wraps the deterministic sweep.py script with human-facing UX — pre-flight report, explicit user confirmation, live launch, post-sweep summary. Trigger only when the user explicitly asks for a batch sweep of multiple campaigns ("sweep all campaigns", "run all eligible campaigns", "batch sweep"). Do NOT activate from generic "run this campaign" or "execute this quest" — those go to liang-quest-executor. Co-located with sweep.py (the multi-campaign orchestrator) inside this skill folder; both are required to operate.
+description: Launches a multi-campaign sweep across eligible Campaigns under .liang/campaigns/ — workspace-wide, or scoped to one saga's campaigns via sweep.py --saga (or an explicit --only campaign_id list). Wraps the deterministic sweep.py script with human-facing UX — pre-flight report, explicit user confirmation, live launch, post-sweep summary. Trigger only when the user explicitly asks for a batch sweep of multiple campaigns ("sweep all campaigns", "run all eligible campaigns", "batch sweep", "sweep the saga", "sweep saga <name>"). Do NOT activate from generic "run this campaign" or "execute this quest" — those go to liang-quest-executor. Co-located with sweep.py (the multi-campaign orchestrator) inside this skill folder; both are required to operate.
 ---
 
 # Liang Quest Batch Sweep
@@ -32,14 +32,35 @@ Per the crosscut decision in `camp-2026-05-24-batch-campaign-sweep` (constraint 
 - Always present a pre-flight report and require explicit user confirmation before launching the script. Do not skip the confirmation gate.
 - Sweep orchestration is entirely owned by `sweep.py`. This skill never modifies manifests, planner artifacts, run reports, or any other on-disk artifact; planner-authored `plan.html` and `quest-NNN-*.md` files remain read-only.
 - This skill never re-implements campaign discovery, toposort, dispatch, or report generation. All those live in sweep.py.
-- The sweep is workspace-scoped: it operates on `.liang/campaigns/` of the current workspace.
+- The sweep operates on `.liang/campaigns/` of the current workspace — either workspace-wide, or scoped via `--saga` / `--only` (see Scoped Sweeps). On a workspace with historical campaigns, **default to a scoped sweep**: an unscoped sweep re-dispatches every non-passed quest ever left behind (sweep.py resets `failed`/`skipped` quests to `ready` before dispatch). If the user asks for an unscoped sweep on a workspace where the pre-flight shows more campaigns than they plausibly intend, say so before the Confirmation Gate.
+
+## Scoped Sweeps (`--saga` / `--only`)
+
+`sweep.py --saga <token>` restricts the sweep to the campaigns listed in one saga's `saga.yaml` (produced by `liang-quest-saga-planner`). The token may be the saga's directory name under `.liang/sagas/` (a unique substring works, e.g. `battle-simulator-port`), or a path to the saga directory or its saga.yaml. `--only <campaign_id,...>` restricts to an explicit list; both flags union.
+
+Resolution and validation live in sweep.py, not here:
+
+- Saga entries without a `campaign_id` (not yet planned) are excluded with a warning.
+- Every scoped campaign_id must exist on disk with a parseable manifest — otherwise config error.
+- A `campaign_depends_on` target **outside** the scope is satisfied only if that campaign is already fully done on disk; otherwise config error ("include it in the scope or run it first").
+- Broken manifests **outside** the scope are downgraded to warnings, so historical clutter cannot block a scoped sweep.
+
+### Manual quests (`manual: true`)
+
+A quest flagged `manual: true` in the manifest is human-in-editor work that can never run headlessly. Before dispatching a campaign, sweep.py **holds** such quests — and, transitively, their un-passed in-campaign dependents — at `status: skipped` with `skip_reason: manual_deferred` / `manual_dependency`. The executor queues only `status: ready`, so held quests are invisible to it, and the retry-reset never releases a hold.
+
+Consequences you must surface to the user:
+
+- A campaign whose only remaining quests are manual holds counts as **passed with a manual backlog** (shown in the sweep report's Manual column); its cross-campaign dependents still run. Automated quests in later campaigns are expected to verify independently (e.g. compile gates) — a dependent that genuinely needed the manual output will fail its own verification, not silently succeed.
+- After the sweep, the user completes the manual quests in the editor, sets them to `passed` in the manifest, and re-sweeps; stale holds (and their held dependents) are released automatically on the next run.
+- In the post-sweep summary, always list the deferred manual quests per campaign as the user's to-do list.
 
 ## Activation
 
 Activate **only** when:
 
 1. The user explicitly invokes this skill by name, or
-2. The user explicitly asks to sweep / batch-run multiple campaigns ("sweep all campaigns", "run all eligible campaigns", "batch sweep"), or
+2. The user explicitly asks to sweep / batch-run multiple campaigns ("sweep all campaigns", "run all eligible campaigns", "batch sweep", "sweep the saga", "sweep saga <name>" — the saga forms map to `--saga`), or
 3. As a suggested follow-up immediately after multiple campaigns reach `ready` status across the workspace and the user signals readiness to run the queue — the suggestion must be a question, not silent action.
 
 Do **not** activate from:
@@ -59,11 +80,11 @@ Run these four phases in order. Do not skip ahead.
 1. Verify `sweep.py` exists alongside this SKILL.md. If not, abort with: "sweep.py is missing in this skill folder. Has it been built? See q003 of camp-2026-05-24-batch-campaign-sweep."
 2. Verify the workspace contains `.liang/project.yaml`. If absent, abort with: "No `.liang/project.yaml` found. Run `liang-quest-planner` first to bootstrap the project."
 3. Invoke `python sweep-preflight.py --workspace <root>` (co-located deep preflight). This catches the config/environment errors `sweep.py --dry-run` cannot — executor §2/§3 hard-block gates, model resolvability, the model API key, pi being spawnable from subprocess (the Windows `pi.cmd` trap), and that a governance context file (`CLAUDE.md`/`AGENTS.md`) is present and un-shadowed. If it exits non-zero (any FAIL), surface the failures and STOP — do not proceed.
-4. Invoke `python sweep.py --dry-run` from the workspace root.
+4. Invoke `python sweep.py --dry-run` from the workspace root, carrying the user's scope: append `--saga <token>` / `--only <ids>` when they asked for a saga or a subset. Reuse the exact same scope flags in the live Launch later.
 5. Parse the scripts' stdout/stderr and surface a human-readable preview:
    - The deep-preflight PASS/WARN/FAIL summary.
-   - Total campaigns discovered.
-   - For each campaign in toposorted order: campaign_id, current status counts (ready / in_progress / passed / failed / skipped), the action the sweep would take (RUN / SKIP-already-terminal / BLOCK-on-preflight / CASCADE-SKIP).
+   - Total campaigns discovered, and — if scoped — the scope line (`N of M campaign(s) in scope`).
+   - For each campaign in toposorted order: campaign_id, current status counts (ready / in_progress / passed / failed / skipped), the action the sweep would take (RUN / SKIP-already-terminal / BLOCK-on-preflight / CASCADE-SKIP), and any manual-hold counts (`holding N manual quest(s)`).
    - Any blocking pre-flight errors with the specific campaign_id and the reason.
 6. If either script returned a non-zero exit code, surface the error verbatim and STOP — do not proceed to Confirm.
 
@@ -78,7 +99,7 @@ Present the pre-flight summary and ask: "Run the sweep? It will dispatch the exe
 
 ### 3. Launch
 
-1. Invoke `python sweep.py` from the workspace root (no flags — live mode).
+1. Invoke `python sweep.py` from the workspace root in live mode (no `--dry-run`), with the same `--saga` / `--only` scope flags the dry-run used, if any.
 2. Stream the script's stdout/stderr to the user as it runs. `sweep.py` streams each executor child as combined stdout/stderr, so child progress should appear inline. Do not suppress or filter.
 3. Note clearly that the script is running in the foreground. If the user closes the session, the subprocess detaches with the parent and behavior is undefined — recommend keeping the session open for the duration of the sweep.
 4. Wait for the script to exit. Capture the exit code:
@@ -96,6 +117,7 @@ Do NOT attempt to retry, re-plan, or interpret failures yourself. The script's e
    - Overall exit code and what it means.
    - Counts: total / passed / failed / skipped.
    - For each non-passed campaign, the campaign_id and status.
+   - The deferred manual backlog: every quest held as `manual_deferred` / `manual_dependency`, grouped by campaign — this is the user's in-editor to-do list, followed by "mark them passed and re-sweep".
    - The path to the sweep report HTML.
    - Paths to per-campaign run reports if surfaced in the sweep report's links.
 3. If no sweep report was generated (script crashed before s06 of q003's plan), say so explicitly and point at the script's stderr.
@@ -117,9 +139,10 @@ Invocation (from any workspace root):
 ```
 python <this-skill-dir>/sweep-afk.py --workspace <root> --dry-run   # validate; runs/opens nothing
 python <this-skill-dir>/sweep-afk.py --workspace <root>             # fire and walk away
+python <this-skill-dir>/sweep-afk.py --workspace <root> --saga <id> # scoped: one saga only
 ```
 
-Flags: `--dry-run` (preflight + `sweep.py --dry-run`, no execution), `--no-reconcile` (print the touched-file list instead of opening), `--probe` (one live model call in preflight to confirm the key round-trips). Always run `--dry-run --probe` once before the first unattended run on a new machine.
+Flags: `--dry-run` (preflight + `sweep.py --dry-run`, no execution), `--no-reconcile` (print the touched-file list instead of opening), `--probe` (one live model call in preflight to confirm the key round-trips), `--saga` / `--only` (forwarded verbatim to sweep.py — see Scoped Sweeps). Always run `--dry-run --probe` once before the first unattended run on a new machine. On a workspace with historical campaigns, prefer the scoped form for AFK runs.
 
 **Cross-platform note:** both `sweep.py` and `sweep-preflight.py` resolve the `pi` launcher via `shutil.which("pi")` before spawning — on Windows the npm shim is `pi.cmd` and bare `["pi", ...]` under `subprocess(shell=False)` raises `FileNotFoundError`. Keep that resolution if editing the spawn sites.
 

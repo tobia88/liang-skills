@@ -37,6 +37,11 @@ Exit codes:
 Usage:
   python sweep-afk.py --workspace <project-root> [--dry-run]
                       [--no-reconcile] [--probe]
+                      [--saga <id|path>] [--only <campaign_id,...>]
+
+--saga / --only are forwarded verbatim to sweep.py to scope the sweep (e.g. to
+one saga's campaigns instead of every campaign in the workspace). See
+sweep.py's docstring for resolution rules and manual-quest hold semantics.
 """
 
 from __future__ import annotations
@@ -149,12 +154,19 @@ def run_preflight(preflight: Path, ws: Path, probe: bool) -> int:
     return subprocess.run(cmd, check=False).returncode
 
 
-def run_sweep(sweep: Path, ws: Path, dry_run: bool) -> int:
+def run_sweep(
+    sweep: Path, ws: Path, dry_run: bool,
+    saga: str | None = None, only: str | None = None,
+) -> int:
     label = "DRY-RUN" if dry_run else "LIVE"
     print(f"\n=== [2/4] SWEEP ({label}) " + "=" * (40 - len(label)))
     cmd = [sys.executable, str(sweep), "--workspace", str(ws)]
     if dry_run:
         cmd.append("--dry-run")
+    if saga:
+        cmd.extend(["--saga", saga])
+    if only:
+        cmd.extend(["--only", only])
     return subprocess.run(cmd, cwd=str(ws), check=False).returncode
 
 
@@ -252,6 +264,10 @@ def main(argv: list[str] | None = None) -> int:
                     help="skip p4 reconcile; just print the touched-file list")
     ap.add_argument("--probe", action="store_true",
                     help="have the preflight make one live pi model call")
+    ap.add_argument("--saga", type=str, default=None,
+                    help="scope the sweep to one saga's campaigns (forwarded to sweep.py)")
+    ap.add_argument("--only", type=str, default=None,
+                    help="scope the sweep to a comma-separated campaign_id list (forwarded to sweep.py)")
     args = ap.parse_args(argv)
     ws = args.workspace.resolve()
 
@@ -272,7 +288,7 @@ def main(argv: list[str] | None = None) -> int:
     # Scope reconcile to step files written from now on (this run's writes).
     # In dry-run nothing is written, so include all (illustrative) with since=0.
     sweep_start = 0.0 if args.dry_run else time.time()
-    sweep_rc = run_sweep(sweep, ws, args.dry_run)
+    sweep_rc = run_sweep(sweep, ws, args.dry_run, saga=args.saga, only=args.only)
     run_reconcile(ws, args.dry_run, enabled=not args.no_reconcile, since=sweep_start)
     report(ws)
 

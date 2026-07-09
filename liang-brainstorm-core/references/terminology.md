@@ -24,6 +24,15 @@ Use JRPG labels sparingly and functionally:
 - `Quest Log` = Q&A reasoning trail
 - `Save Point` = chat-only recap, not file saving
 
+## Alignment-First Terms
+
+Process terms for the two-stage flow in `alignment-protocol.md`:
+
+- `Alignment` = the open stage that builds a shared understanding before any slot is named
+- `Alignment Gate` ("lock it in") = the user-driven transition from Alignment to Crystallization
+- `Crystallization` = the stage where slots are named as proposed drafts to confirm/adjust
+- `Soft Nudge` = the model's optional "ready to lock it in?" offer; never auto-advances
+
 ## Codex Warning
 
 Avoid making `Codex` the official artifact name because it can be confused

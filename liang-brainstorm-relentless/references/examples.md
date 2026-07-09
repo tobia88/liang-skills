@@ -2,7 +2,9 @@
 
 Load before producing each of these interactions for the first time in a session. These are the canonical formats; adapt content, keep structure.
 
-## Opening Question
+## Opening (default — stated lens, straight to Alignment)
+
+This is the **Frame** step. State the inferred lens as a one-line draft inside the scout summary — do **not** ask the user to pick it — then go directly into the first Alignment question (next block). Do not ask for a cold Main Quest. The lens stays overridable all session.
 
 ```text
 Opening Scout:
@@ -10,9 +12,17 @@ Opening Scout:
 - Relevant top-level paths noticed: README.md, docs/, .pi/
 - Avoided secrets, dependency folders, build outputs, and old reports.
 
-Detected Lens:
-Skill Creation + Software Project Planning
+Lens:
+Reading this as Skill Creation (with some Software Project overlap). Say so if that's off — you can switch lenses anytime.
 
+[then proceed straight to the Alignment Opening question below]
+```
+
+## Opening — Lens Pick (ambiguous-only fallback)
+
+Use this **only** when the lens inference is genuinely low-confidence — a true hybrid or an unclear domain. Otherwise use the default opening above. Even here, ask it once and move straight into Alignment after; never make it a reflexive Q1 when the lens is already obvious.
+
+```text
 Question:
 Which planning lens should drive this session?
 
@@ -32,6 +42,57 @@ Medium-high.
 
 Manual:
 Describe a different lens or combination.
+```
+
+## Alignment Opening (first Alignment question)
+
+After the lens is set, open Stage 1 (`alignment-protocol.md` § Stage 1). ABCD is a thinking scaffold here — it probes understanding and locks no slot.
+
+```text
+Before we name anything, let me check our reads match.
+
+Here's how I'm reading the core problem — which is closest, or rewrite it:
+
+A. ...
+B. ...
+C. ...
+D. ...
+
+Recommended:
+A — why this reading fits what you said.
+
+Tradeoff:
+What this framing might under-weight.
+
+Confidence:
+Medium.
+
+Manual:
+Put the real problem in your own words.
+```
+
+## Alignment Gate — Soft Nudge and Lock-In
+
+Offered only once the read has converged. A push, never an auto-advance (`alignment-protocol.md` § The Alignment Gate).
+
+```text
+I think we're aligned on this: <one-line shared read>.
+
+Lock it in and I'll start proposing the structured pieces — Main Quest, Victory
+Conditions, Scope — as drafts for you to adjust. Or keep drilling if something
+still feels off.
+```
+
+## Slot Synthesis Proposal (Crystallization)
+
+In Stage 2, propose each slot as a draft drawn from the alignment discussion — never a cold ABCD pick (`alignment-protocol.md` § Stage 2).
+
+```text
+From our discussion, here's the Main Quest:
+
+"<synthesized one-sentence goal>"
+
+Right? Adjust the wording if it's off, or tell me what's missing.
 ```
 
 ## Normalized Manual Answer
