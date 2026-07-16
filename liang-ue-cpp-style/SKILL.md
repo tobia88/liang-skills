@@ -15,7 +15,7 @@ When answering UE5 C++ style questions:
 1. Apply all rules from this SKILL.md directly — these are authoritative style instructions
 2. If a personal wiki exists at `F:/AI/liang-wiki/`, scan `wiki/index.md` for C++ style-related entries for project-specific patterns and decisions
 3. This skill is nearly 100% instructions (not knowledge), so wiki supplements rather than replaces
-4. A distilled code-block contract for the quest-family planners/executors is mirrored at `~/.pi/agent/skills/liang-skills/liang-quest-core/references/code-style/ue-cpp.md` — when editing §4, §5, §9, §10, or §11 here, update the mirror in the same pass.
+4. A distilled code-block contract for the quest-family planners/executors is mirrored at `../liang-quest-core/references/code-style/ue-cpp.md` (sibling skill in the same liang-skills repo) — when editing §4, §5, §9, §10, or §11 here, update the mirror in the same pass. Keep the mirror distilled: the executor embeds its full text in every child brief, so it must never grow into the full guide.
 
 ---
 

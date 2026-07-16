@@ -1,6 +1,8 @@
 # UE C++ Code-Block Style Contract
 
-> Distilled from the `liang-ue-cpp-style` skill (`~/.claude/skills/liang-ue-cpp-style/SKILL.md`).
+> Distilled from the `liang-ue-cpp-style` skill, a sibling in this repo
+> (`liang-skills/liang-ue-cpp-style/SKILL.md`; also reachable via the
+> `~/.claude/skills/liang-ue-cpp-style` junction).
 > That skill is the source of truth and wins on any conflict — update both files together.
 >
 > Applies to EVERY code block that is Unreal Engine C++ — detected by UCLASS / USTRUCT /
