@@ -1,4 +1,7 @@
-# Generated artifacts live in .liang/ — its own .gitignore excludes everything but project.yaml
+# Machine-local runtime state, config, and agent preferences — not shared via git
+.liang/
+.vscode/
+Agent.md
 
 # Python bytecode
 __pycache__/
@@ -11,6 +14,3 @@ __pycache__/
 
 # Windows reserved-name redirect accidents
 nul
-
-# /goal run artifacts
-.liang/goal/runs/

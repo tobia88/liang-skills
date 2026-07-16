@@ -1,7 +1,0 @@
-*
-!.gitignore
-!project.yaml
-# /goal maintenance core is tooling, not a generated artifact — track it (runs/ stays ignored)
-!goal/
-!goal/**
-goal/runs/
