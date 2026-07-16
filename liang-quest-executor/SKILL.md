@@ -48,7 +48,7 @@ Do **not** activate from generic intent like "run this," "execute this," "do thi
 
 Bypasses all interactive gates with documented defaults, for parent-process invocation (e.g. a multi-campaign sweep). Independent of `--batch` and `--claude`; combine in any subset.
 
-**Bypasses:** §1 confirm (proceed), §4 crash recovery (Resume), §5 intake confirm (proceed), §8a UAT (skip; Tier 2 VCs stay `tier_2_deferred`), §9 cleanup (preserve all), §10 VCS policy (`"ask"`/absent → treat as `"ignore"` silently, no write-back), §11 commit suggestion (skip).
+**Bypasses:** §1 confirm (proceed), §4 crash recovery (Resume), §5 intake confirm (proceed), §8a UAT (skip; Tier 2 VCs stay `tier_2_deferred` — §8b still writes `uat-checklist.md`), §9 cleanup (preserve all), §10 VCS policy (`"ask"`/absent → treat as `"ignore"` silently, no write-back), §11 commit suggestion (skip).
 
 **Does NOT bypass:** §2 config check (missing `project.yaml` or `models.verify` → exit 2, no prompts), §3 pre-flight gate (malformed campaign → exit 2, no partial execution), §6 host check (no `pi` CLI in default mode → exit 2, no silent mode fallback), or any Boundaries hard stop.
 
@@ -149,6 +149,8 @@ After the queue is exhausted, run §8–12 in order per `references/completion-f
 
 - **§8 Run Report** — Markdown at campaign root: `run-report-<YYYY-MM-DD-HHMM>.md` (local time, lexical sort), YAML front matter + Markdown body.
 - **§8a UAT Batch Prompt** — present deferred Tier 2 VCs as a consolidated yes/no checklist; any "no" downgrades the quest to `failed` with lesson `uat_rejected`. **`--no-confirm`:** skip; items stay `tier_2_deferred`.
+- **§8b UAT Checklist Artifact** — regenerate `uat-checklist.md` at campaign root: unpassed `manual: true` quests `[MANUAL]`, dependency-blocked skips `[AGENT]` with their blocker named, remaining Tier-2 deferrals — VCs verbatim, quest-dependency order; delete the file when nothing qualifies. Runs in **all** modes including `--no-confirm` (there it is the only persistent UAT surface). `liang-quest-saga-planner --uat` collects these files saga-wide.
+- **§8c Feature Walkthrough Artifact** — `walkthrough.md` at campaign root: a guided tour of **every** quest including passed ones (what was built / where it lives / see-it-run steps). **On demand only** — never part of the completion flow; runs standalone when invoked directly or as a `liang-quest-saga-planner --tour` (Phase 6) worker.
 - **§9 Cleanup** — preserve `lessons.yaml`, run reports, `.run/` envelopes and markers; ask before deleting old scratch. **`--no-confirm`:** preserve all.
 - **§10 VCS Artifact Policy** — apply `vcs_artifacts.execution` (`ignore` / `commit` / `ask`).
 - **§11 Commit Suggestion** — gated on `vcs_artifacts.planning` and a VCS health check; suggest a `git add`/`git commit` snippet, never auto-execute.
@@ -165,6 +167,8 @@ The parent never edits project source files; all code changes flow through child
 | Re-plan-child (retry 2+) | `pi --model <models.planning>` | Sonnet subagent | Pi CLI + planning model |
 
 Every Pi CLI / batch child is spawned with `--session .run/<quest-id>/sessions/<label>.jsonl` (labels: `step-<sid>-a<n>`, `replan-<sid>-a<n>`, `verify-vc<n>`) so usage harvest is deterministic and child transcripts stay with the run ledger.
+
+**UE C++ code style.** When a quest's code blocks are Unreal Engine C++ (UCLASS-family macros, `*.generated.h` includes, or paths under `Source/`), include the full text of `liang-quest-core/references/code-style/ue-cpp.md` in the child brief; generated code must follow it.
 
 Full child I/O YAML schemas: `liang-quest-core/references/execution/child-contracts.md` (Planner-Native sections).
 
@@ -222,6 +226,7 @@ Native Markdown only — no HTML, CSS, JavaScript, images, or external dependenc
 - `liang-quest-core/references/execution/child-contracts.md` — child I/O contracts (Planner-Native sections).
 - `liang-quest-core/references/execution/run-report.md` — run report and lesson schemas.
 - `liang-quest-core/references/project/project-yaml.md` — project.yaml contract (incl. `models.claude_mode`).
+- `liang-quest-core/references/code-style/ue-cpp.md` — UE C++ code-block style contract for child-generated code (any UE project, no opt-in)
 
 ### Local References (load at the point indicated)
 

@@ -32,6 +32,7 @@ Per the crosscut decision in `camp-2026-05-24-batch-campaign-sweep` (constraint 
 - Always present a pre-flight report and require explicit user confirmation before launching the script. Do not skip the confirmation gate.
 - Sweep orchestration is entirely owned by `sweep.py`. This skill never modifies manifests, planner artifacts, run reports, or any other on-disk artifact; planner-authored `plan.html` and `quest-NNN-*.md` files remain read-only.
 - This skill never re-implements campaign discovery, toposort, dispatch, or report generation. All those live in sweep.py.
+- Campaigns archived by `liang-quest-archiver` (`.liang/campaigns/archive/<name>/`) are out of sweep scope by construction — sweep.py's one-level discovery glob never sees them (liang-quest-core protocol § Archived Campaigns). Archiving completed campaigns is the standing mitigation for the historical-campaign hazard below.
 - The sweep operates on `.liang/campaigns/` of the current workspace — either workspace-wide, or scoped via `--saga` / `--only` (see Scoped Sweeps). On a workspace with historical campaigns, **default to a scoped sweep**: an unscoped sweep re-dispatches every non-passed quest ever left behind (sweep.py resets `failed`/`skipped` quests to `ready` before dispatch). If the user asks for an unscoped sweep on a workspace where the pre-flight shows more campaigns than they plausibly intend, say so before the Confirmation Gate.
 
 ## Scoped Sweeps (`--saga` / `--only`)

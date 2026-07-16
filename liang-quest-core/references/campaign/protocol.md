@@ -108,6 +108,15 @@ Key points:
 - Run reports are Markdown files with YAML front matter: `run-report-<timestamp>.md`.
 - The `.run/` directory is executor-owned metadata; no campaign semantics depend on it for correctness.
 
+## Archived Campaigns
+
+Completed campaigns may be moved to `.liang/campaigns/archive/<campaign-name>/` by `liang-quest-archiver`.
+
+- `archive/` is **out of scope for every family skill**. Status, executor, batch-sweep, and planner discover campaigns via the one-level glob `.liang/campaigns/*/manifest.yaml`; archived campaigns sit one level deeper and are therefore invisible to the pipeline by construction. Never deepen that glob.
+- Archived campaigns keep their manifest, quest markdowns, run reports, `lessons.yaml`, and `plan.html`. `.run/` ledgers are deleted at archive time (they are executor-owned metadata with no campaign semantics).
+- Eligibility rules live in `liang-quest-archiver` (its `archive_sweep.py` is the source of truth), not here — this section defines only the directory convention.
+- Archival is one-way by convention; restoring a campaign is a manual move back out of `archive/`.
+
 ## Shared Helper Ownership
 
 Reusable executor helpers are owned by the quest skill/core layer, not by campaign `.run/` directories. Use `liang-quest-executor` for executor-only helpers and `liang-quest-core` for helpers shared across quest-family skills. A campaign may record helper metadata or a deliberate reproducibility snapshot in `.run/`, but the canonical implementation should not be regenerated per campaign.

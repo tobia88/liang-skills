@@ -49,6 +49,8 @@ Read the campaign directory convention from liang-quest-core:
 
 Glob for `manifest.yaml` files: `.liang/campaigns/*/manifest.yaml`
 
+The one-level glob is deliberate: campaigns archived by `liang-quest-archiver` live under `.liang/campaigns/archive/<name>/` and must stay out of the dashboard (liang-quest-core protocol § Archived Campaigns). Never deepen the glob.
+
 Collect all found manifest paths. If none found, report "No campaigns found" and stop.
 
 ### 3. Parse Each Manifest
