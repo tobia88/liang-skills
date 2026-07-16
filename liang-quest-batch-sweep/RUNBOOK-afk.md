@@ -34,7 +34,7 @@ The harness chains four phases (`sweep-afk.py`):
    are re-run on a later invocation.
 3. **Reconcile** — reads `.liang/project.yaml` `vcs` field. When
    `vcs: perforce`, runs `p4 reconcile` on **only** the source files this run
-   actually wrote (read from `.run/*/step-*.html`, mtime-scoped). Makes
+   actually wrote (read from `.run/*/step-*.md`, mtime-scoped). Makes
    Perforce correctness independent of whether a child remembered
    `p4 edit`/`p4 add`. Never submits. For `git`, `none`, or missing VCS,
    prints the touched-file list for manual handling.

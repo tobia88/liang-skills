@@ -34,16 +34,18 @@ models:
   saga_intake: string        # model ID for liang-quest-saga-planner's Phase 1 intake subagent
   saga_planner: string       # model ID for the saga planner's batch-mode per-campaign planner subagent
   saga_align: string         # model ID for the saga planner's Phase 4.5 alignment-verify subagent
-  saga_uat: string           # model ID for the saga planner's Phase 5 UAT-backfill workers (executor §8b standalone)
+  saga_uat: string           # model ID for the saga planner's Phase 5/6 executor-artifact workers (§8b UAT backfill, §8c walkthrough)
   claude_mode:               # Claude-harness tier overrides — Claude tier aliases ONLY
     easy: string             # "haiku" | "sonnet" | "opus"
     medium: string
     hard: string
+    verify: string            # tier alias for Tier-1 verify-children in --claude mode (default: haiku)
+    planning: string          # tier alias for re-plan-children in --claude mode (default: sonnet)
     body_drafter: string     # tier alias for the planner's body-drafter when running under Claude Code
     saga_intake: string      # tier alias for the saga planner's intake subagent (default: medium)
     saga_planner: string     # tier alias for the saga planner's batch campaign-planner subagent (default: hard)
     saga_align: string       # tier alias for the saga planner's alignment verifier (default: medium)
-    saga_uat: string         # tier alias for the saga planner's Phase 5 UAT-backfill workers (default: medium)
+    saga_uat: string         # tier alias for the saga planner's Phase 5/6 executor-artifact workers (default: medium)
 ```
 
 Both keys are additive-optional: safe defaults when absent, no `schema_version` bump.
@@ -63,7 +65,7 @@ If `project.yaml` itself is missing at planning time, the planner skips to step 
 
 **`models.saga_intake` / `models.saga_planner` / `models.saga_align` / `models.saga_uat`** — consumed read-only by `liang-quest-saga-planner`. Resolution chains: `saga_intake` → `models.planning` → harness default; `saga_planner` → `models.planning` → harness default; `saga_align` → `models.verify` → harness default; `saga_uat` → `models.verify` → harness default (backfill is extraction/formatting against a fixed §8b contract — a medium-grade profile, same character as verify work). The same unresolved-step rule applies as for `body_drafter` (a model the harness cannot spawn continues the chain), and tier-alias harnesses (or an explicit `--claude` invocation) resolve through `claude_mode.saga_intake` (default `medium` tier), `claude_mode.saga_planner` (default `hard`), `claude_mode.saga_align` (default `medium`), and `claude_mode.saga_uat` (default `medium`) instead. All additive-optional; no schema_version bump.
 
-**`models.claude_mode`** — the Claude-harness tier namespace. Consumed by `liang-quest-executor` in `--claude` mode (`easy` / `medium` / `hard`), by `liang-quest-planner` for the body-drafter when running under Claude Code (`body_drafter`, falling back to `medium`), and by `liang-quest-saga-planner` for its intake / batch campaign-planner / alignment-verify / UAT-backfill subagents (`saga_intake` / `saga_planner` / `saga_align` / `saga_uat`, defaults `medium` / `hard` / `medium` / `medium`). Values are **Claude Code subagent tier aliases** (`haiku` / `sonnet` / `opus`), not pi model IDs — Claude Code cannot spawn non-Claude children, which is why this is a separate namespace from `execution_by_difficulty`. When the block (or any key in it) is absent, the defaults apply: easy → `haiku`, medium → `sonnet`, hard → `opus`; `body_drafter` defaults to the `medium` tier.
+**`models.claude_mode`** — the Claude-harness tier namespace. Consumed by `liang-quest-executor` in `--claude` mode (`easy` / `medium` / `hard` for execute-children, `verify` for Tier-1 verify-children, `planning` for re-plan-children), by `liang-quest-planner` for the body-drafter when running under Claude Code (`body_drafter`, falling back to `medium`), and by `liang-quest-saga-planner` for its intake / batch campaign-planner / alignment-verify / UAT-backfill subagents (`saga_intake` / `saga_planner` / `saga_align` / `saga_uat`, defaults `medium` / `hard` / `medium` / `medium`). Values are **Claude Code subagent tier aliases** (`haiku` / `sonnet` / `opus`), not pi model IDs — Claude Code cannot spawn non-Claude children, which is why this is a separate namespace from `execution_by_difficulty`. When the block (or any key in it) is absent, the defaults apply: easy → `haiku`, medium → `sonnet`, hard → `opus`, verify → `haiku`, planning → `sonnet`; `body_drafter` defaults to the `medium` tier.
 
 ### Planner Extensions (optional)
 

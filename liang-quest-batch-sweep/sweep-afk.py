@@ -11,8 +11,9 @@ around a batch sweep:
                   contexts; governance (CLAUDE.md) is auto-injected by pi.
   3. RECONCILE  — reads `.liang/project.yaml` `vcs` field. When
                   `vcs: perforce`, runs `p4 reconcile` on ONLY the source
-                  files this sweep touched (read from .run/*/step-*.html,
-                  mtime-scoped). For `git`, `none`, or missing VCS, prints
+                  files this sweep touched (read from .run/*/step-*.md,
+                  legacy .html fallback, mtime-scoped). For `git`, `none`,
+                  or missing VCS, prints
                   the touched-file list for manual handling. Never submits.
   4. REPORT     — surface every run report + sweep report, and list any
                   deferred Tier-2 UAT items that need your eyes.
@@ -84,9 +85,34 @@ def find_sweep_script() -> Path | None:
 
 # ---- step-file parsing (source of truth for touched files / UAT) ---------
 
+_FENCED_YAML_RE = re.compile(r"^(~~~|```)yaml\s*\n(.*?)\n\1\s*$", re.DOTALL | re.MULTILINE)
+
+
+def _md_output_yaml(md_path: Path) -> dict[str, Any]:
+    """step-<sid>.md stores each contract section as a fenced YAML block
+    under a '## <Section>' heading (executor references/step-envelope.md).
+    Pull the fenced YAML under '## Output' and parse it."""
+    try:
+        text = md_path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return {}
+    m = re.search(r"^## Output\s*\n(.*?)(?=\n## |\Z)", text, re.DOTALL | re.MULTILINE)
+    if not m:
+        return {}
+    m2 = _FENCED_YAML_RE.search(m.group(1))
+    if not m2:
+        return {}
+    try:
+        data = yaml.safe_load(m2.group(2))
+        return data if isinstance(data, dict) else {}
+    except yaml.YAMLError:
+        return {}
+
+
 def _embedded_yaml(html_path: Path) -> dict[str, Any]:
-    """step-<sid>.html stores its contract as YAML inside the opening
-    HTML comment. Pull it out and parse it."""
+    """Legacy step-<sid>.html format: unsupported since the executor moved
+    to Markdown step envelopes. Kept only so pre-existing .html envelopes
+    from older runs still contribute to reconcile/UAT discovery."""
     try:
         text = html_path.read_text(encoding="utf-8", errors="replace")
     except OSError:
@@ -109,14 +135,21 @@ def collect_touched_files(ws: Path, since: float = 0.0) -> list[Path]:
     campaigns. `since=0` includes all step files (illustrative)."""
     out: set[Path] = set()
     camp_root = ws / ".liang" / "campaigns"
-    for step in camp_root.glob("*/.run/*/step-*.html"):
+    steps = [
+        *camp_root.glob("*/.run/*/step-*.md"),
+        *camp_root.glob("*/.run/*/step-*.html"),
+    ]
+    for step in steps:
         try:
             if step.stat().st_mtime < since:
                 continue
         except OSError:
             continue
-        data = _embedded_yaml(step)
-        changed = (data.get("output") or {}).get("files_changed") or []
+        if step.suffix == ".md":
+            changed = _md_output_yaml(step).get("files_changed") or []
+        else:
+            data = _embedded_yaml(step)
+            changed = (data.get("output") or {}).get("files_changed") or []
         for f in changed:
             if not isinstance(f, str) or not f.strip():
                 continue
@@ -134,7 +167,11 @@ def collect_deferred_uat(ws: Path) -> list[tuple[str, str]]:
     deferred Tier-2 UAT items the user still needs to judge."""
     hits: list[tuple[str, str]] = []
     camp_root = ws / ".liang" / "campaigns"
-    for report in camp_root.glob("*/run-report-*.html"):
+    reports = [
+        *camp_root.glob("*/run-report-*.md"),
+        *camp_root.glob("*/run-report-*.html"),
+    ]
+    for report in reports:
         try:
             txt = report.read_text(encoding="utf-8", errors="replace").lower()
         except OSError:
@@ -184,7 +221,7 @@ def run_reconcile(ws: Path, dry_run: bool, enabled: bool, since: float) -> None:
     print("\n=== [3/4] RECONCILE " + "=" * 44)
     files = collect_touched_files(ws, since=since)
     if not files:
-        where = "during this run" if since else "in .run/*/step-*.html"
+        where = "during this run" if since else "in .run/*/step-*.md"
         print(f"  no touched source files recorded {where} (nothing to reconcile).")
         return
     print(f"  {len(files)} source file(s) touched by the sweep:")
@@ -224,7 +261,10 @@ def run_reconcile(ws: Path, dry_run: bool, enabled: bool, since: float) -> None:
 def report(ws: Path) -> None:
     print("\n=== [4/4] REPORT " + "=" * 47)
     camp_root = ws / ".liang" / "campaigns"
-    runs = sorted(camp_root.glob("*/run-report-*.html"))
+    runs = sorted([
+        *camp_root.glob("*/run-report-*.md"),
+        *camp_root.glob("*/run-report-*.html"),
+    ])
     sweeps = sorted((ws / ".liang" / "sweep-reports").glob("*.html"))
     if sweeps:
         print(f"  sweep report : {sweeps[-1].relative_to(ws)}")

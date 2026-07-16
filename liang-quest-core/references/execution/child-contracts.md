@@ -21,7 +21,7 @@ All children across all executors:
 | Verify-child (Tier 1 complex) | `project.yaml` → `models.verify` | Canonical executor |
 | Re-plan-child | `project.yaml` → `models.planning` | Canonical executor |
 
-In Claude mode (`--claude`), Pi CLI invocation is replaced by Claude Code Agent subagent dispatch. Execute-child tiers come from `project.yaml` → `models.claude_mode` (Claude tier aliases only — Claude Code cannot spawn non-Claude children), defaulting to easy → Haiku, medium → Sonnet, hard → Opus when absent. Verify-children use Haiku; re-plan-children use Sonnet.
+In Claude mode (`--claude`), Pi CLI invocation is replaced by Claude Code Agent subagent dispatch. Execute-child tiers come from `project.yaml` → `models.claude_mode` (Claude tier aliases only — Claude Code cannot spawn non-Claude children), defaulting to easy → Haiku, medium → Sonnet, hard → Opus when absent. Verify-children resolve from `models.claude_mode.verify` (default haiku); re-plan-children from `models.claude_mode.planning` (default sonnet).
 
 ---
 

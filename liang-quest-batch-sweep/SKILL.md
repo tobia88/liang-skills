@@ -35,6 +35,11 @@ Per the crosscut decision in `camp-2026-05-24-batch-campaign-sweep` (constraint 
 - Campaigns archived by `liang-quest-archiver` (`.liang/campaigns/archive/<name>/`) are out of sweep scope by construction — sweep.py's one-level discovery glob never sees them (liang-quest-core protocol § Archived Campaigns). Archiving completed campaigns is the standing mitigation for the historical-campaign hazard below.
 - The sweep operates on `.liang/campaigns/` of the current workspace — either workspace-wide, or scoped via `--saga` / `--only` (see Scoped Sweeps). On a workspace with historical campaigns, **default to a scoped sweep**: an unscoped sweep re-dispatches every non-passed quest ever left behind (sweep.py resets `failed`/`skipped` quests to `ready` before dispatch). If the user asks for an unscoped sweep on a workspace where the pre-flight shows more campaigns than they plausibly intend, say so before the Confirmation Gate.
 
+## Harness Support
+
+- This skill is pi-only: `sweep.py` dispatches campaigns as pi CLI children and `sweep-preflight.py` hard-fails when pi is not spawnable. There is no `--claude` sweep mode.
+- On a Claude-only environment, the equivalent is running campaigns individually: `liang-quest-executor <campaign-path> --claude`, in `campaign_depends_on` topological order. The executor holds `manual: true` quests at intake; the sweep-only features you lose are cross-campaign toposort, retry-reset, and sweep reports.
+
 ## Scoped Sweeps (`--saga` / `--only`)
 
 `sweep.py --saga <token>` restricts the sweep to the campaigns listed in one saga's `saga.yaml` (produced by `liang-quest-saga-planner`). The token may be the saga's directory name under `.liang/sagas/` (a unique substring works, e.g. `battle-simulator-port`), or a path to the saga directory or its saga.yaml. `--only <campaign_id,...>` restricts to an explicit list; both flags union.
@@ -132,7 +137,7 @@ It chains four phases and returns sweep.py's exit code:
 
 1. **Preflight** — runs `sweep-preflight.py`; aborts before launch on any FAIL.
 2. **Sweep** — runs `sweep.py` live (campaigns dispatched in non-interactive mode; no-confirm intent is delivered as prompt text, not an argv flag). Per-step pi children run in fresh contexts; pi auto-injects the workspace `CLAUDE.md` governance.
-3. **Reconcile** — runs `p4 reconcile` on **only the source files this run touched** (read from `.run/*/step-*.html`, mtime-scoped). This makes VCS correctness independent of whether an execute-child remembered `p4 edit`/`p4 add`. It never submits. Skipped on non-Perforce projects (p4 absent → prints the file list for manual handling).
+3. **Reconcile** — runs `p4 reconcile` on **only the source files this run touched** (read from `.run/*/step-*.md`, mtime-scoped). This makes VCS correctness independent of whether an execute-child remembered `p4 edit`/`p4 add`. It never submits. Skipped on non-Perforce projects (p4 absent → prints the file list for manual handling).
 4. **Report** — surfaces the sweep report, every run report, and any deferred Tier-2 UAT items the user must still judge (non-interactive mode defers, never auto-accepts, Tier-2 VCs).
 
 Invocation (from any workspace root):
@@ -153,7 +158,7 @@ This skill must never:
 
 1. **Skip the Confirmation Gate in the interactive flow.** When invoked interactively, always require explicit user confirmation before launching in live mode. (The `sweep-afk.py` unattended entry point is the one documented exception — invoking it is itself the explicit authorization.)
 2. **Re-implement campaign discovery, toposort, dispatch, status updates, or report generation.** Those live in sweep.py.
-3. **Modify any `plan.html`, `quest-NNN-*.md`, or run-report-*.html file.** Planner artifacts and generated reports are read-only to this wrapper. Manifest/status mutations and sweep-report generation are `sweep.py`'s job.
+3. **Modify any `plan.html`, `quest-NNN-*.md`, or `run-report-*.md` file.** Planner artifacts and generated reports are read-only to this wrapper. Manifest/status mutations and sweep-report generation are `sweep.py`'s job.
 4. **Retry or re-plan on failure.** The script's exit code is the final outcome.
 5. **Run two sweeps in parallel.** If a sweep is in progress, wait for it to complete.
 6. **Bypass workspace pre-flight.** If `.liang/project.yaml` is missing or sweep.py is absent, abort cleanly with a clear message.

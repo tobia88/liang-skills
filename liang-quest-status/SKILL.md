@@ -179,7 +179,7 @@ Explicit exclusions from scope:
 
 ## Reference Files
 
-- `references/field-registry.md` — manifest field union across v1/v2/v3 and version-aware parsing rules
+- `references/field-registry.md` — manifest field union across v1–v4 and version-aware parsing rules
 - `references/attention-tiers.md` — status-to-tier mapping, campaign-level tier derivation, sort precedence
 - `references/rendering-rules.md` — adaptive density modes, prescribed table format, self-compression, error rendering
 

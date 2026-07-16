@@ -40,7 +40,7 @@ Collect, in quest `depends_on` order:
    `## Victory Conditions` checkboxes verbatim, plus any in-play observation checklist embedded in
    its steps (playtest checklists are the actual test items).
 2. **Quests skipped with a dependency-shaped `skip_reason`** (`manual_dependency`,
-   `dependency_deferred`, `dependency_failed:*`) — tag `[AGENT]`: re-dispatchable to this executor
+   `dependency_failed:*`) — tag `[AGENT]`: re-dispatchable to this executor
    once the named blocker clears. State the blocker explicitly (the manual quest, the missing
    asset, the failed dependency).
 3. **Tier-2 VCs still deferred after §8a** (under `--no-confirm`: all of them) — the VC rows plus

@@ -18,18 +18,24 @@ You are Liang's Campaign Archiver — a maintenance skill in the JRPG quest plan
 
 ## Eligibility (informative — the script is the source of truth)
 
-`archive_sweep.py` classifies each campaign directory:
+`archive_sweep.py` classifies each campaign directory and prints one row per campaign as `VERDICT  name  [detail]`. Verdict is always one of the four values below; the hold reason lives in the bracketed detail text, verbatim as shown:
 
-| Verdict | Meaning |
-|---------|---------|
-| `ARCHIVE` | Every quest `passed` — will be moved on `--execute` |
-| `OPEN` | Any quest `ready` / `in_progress` / planned-family / unknown — never archived |
-| `HOLD open-saga` | Listed in a saga whose `saga.yaml` status is not `complete` |
-| `HOLD unverified skips` | Terminal but has `skipped` quests — possible infra false negatives; verify the skipped work actually landed, then release with `--trust-skips` or `--force` |
-| `HOLD failed quests` | Terminal but has `failed` quests — triage before archiving with `--force` |
-| `HOLD no-manifest` | No `manifest.yaml` — eyeball the directory, then `--force` |
+| Verdict | Detail (as printed in `[...]`) | Meaning |
+|---------|---------------------------------|---------|
+| `ARCHIVE` | quest-status tally, e.g. `3xpassed` | Every quest `passed` — will be moved on `--execute` |
+| `OPEN` | quest-status tally including a non-terminal status | Any quest `ready` / `in_progress` / planned-family / unknown — never archived |
+| `HOLD` | `open-saga (...)` | Listed in a saga whose `saga.yaml` status is not `complete` |
+| `HOLD` | `unverified skips (...)` | Terminal but has `skipped` quests — possible infra false negatives; verify the skipped work actually landed, then release with `--trust-skips` or `--force` |
+| `HOLD` | `failed quests (...)` | Terminal but has `failed` quests — triage before archiving with `--force` |
+| `HOLD` | `no-manifest` | No `manifest.yaml` — eyeball the directory, then `--force` |
+| `HOLD` | `no quest statuses parsed` | Manifest present but no quest status lines could be parsed — eyeball the directory, then `--force` |
+| `REFUSED` | `forced but has in_progress quests` | `--force` named this campaign but it has an `in_progress` quest — never archived under any flag |
 
 `--force <name,name>` releases named holds but is refused for campaigns with `in_progress` quests.
+
+## Flags
+
+- `--no-confirm` — an invocation flag passed by the caller/orchestrator (not an `archive_sweep.py` CLI flag), telling this skill to skip the step-3 confirmation gate. It never auto-releases holds on its own: `--trust-skips` / `--force` must still be given explicitly by the caller for those holds to release.
 
 ## Activation
 

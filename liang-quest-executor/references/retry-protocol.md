@@ -19,7 +19,7 @@ Full protocol for the step-failure retry loop. SKILL.md §7c holds the summary; 
 1. **Extract lesson** — Append to `<campaign-root>/lessons.yaml` with `retry_tier: "replan"`.
 2. **Spawn re-plan-child** — Provide: original step content, failure context, ALL accumulated lessons.
    - **Pi CLI mode:** `pi --model <planning-model> -p "Read the failed step envelope at .run/<quest-id>/step-<sid>.md and lessons.yaml. Produce revised instructions for the failed quest .md step. Write them to the step envelope's Re-plan fenced YAML block."`
-   - **Claude mode:** Dispatch re-plan subagent (tier from `models.claude_mode.planning` or `models.claude_mode.medium` fallback) with same context. Returns in-memory.
+   - **Claude mode:** Dispatch re-plan subagent (tier from `models.claude_mode.planning`, default `sonnet`) with same context. Returns in-memory.
 3. **Read re-plan output** — Expect: `revised_instructions`, `revised_code_block` (optional), `reasoning`, `confidence`.
 4. **Re-execute** — Spawn execute-child with `revised_instructions` replacing the original step description (and `revised_code_block` replacing the original code block if present), plus all accumulated lessons.
 5. **Pass:** Exit loop. Mark step passed. Checkpoint. Next step.

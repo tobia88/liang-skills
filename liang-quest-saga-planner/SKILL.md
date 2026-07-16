@@ -1,6 +1,6 @@
 ---
 name: liang-quest-saga-planner
-description: "Saga-level planner that turns a large prototype (e.g. an HTML game prototype under .liang/prototypes/) into multiple related campaigns via repeated liang-quest-planner handoffs. Four phases: subagent prototype intake (systems inventory + workspace integration map), saga discussion (lock architecture anchors once), campaign decomposition with cross-campaign dependency topology, and a resumable per-campaign handoff phase with two modes — same-context loop or batch fresh-context subagents — that invokes liang-quest-planner --quick with pre-baked Decision Summaries and patches campaign_depends_on into each finalized manifest. Every finalized campaign passes a prototype-alignment verify before it counts as planned. Subagent models route from project.yaml (models.saga_intake / saga_planner / saga_align, claude_mode tier aliases, --claude override). State lives in .liang/sagas/ so planning survives across sessions. Post-execution, a Deferred-UAT Rollup mode (--uat) collects the per-campaign uat-checklist.md artifacts that liang-quest-executor §8b generates and merges them into a single topo-ordered, session-grouped .liang/sagas/<id>/uat-checklist.md; campaigns missing their checklist get parallel §8b standalone-backfill worker subagents (models.saga_uat → models.verify, claude_mode.saga_uat medium tier) — the saga context itself never reconstructs. A companion --tour mode rolls per-campaign walkthrough.md tours the same way, and --handover renders both saga-level rollups into a single read-only handover.html (planner HTML machinery, saga skin); the markdown files stay the source of truth."
+description: "Saga-level planner that turns a large prototype into multiple related campaigns via repeated liang-quest-planner handoffs: subagent prototype intake, anchor-locking saga discussion, campaign decomposition with cross-campaign dependency topology, and a resumable per-campaign handoff phase (same-context or batch fresh-context subagents) where every finalized campaign passes a prototype-alignment verify. State lives in .liang/sagas/ so planning survives across sessions; subagent models route from project.yaml (models.saga_* / claude_mode tier aliases, --claude override). Post-execution companion modes: --uat rolls per-campaign uat-checklist.md files into one saga checklist, --tour rolls walkthrough.md tours, --handover renders both into a single handover.html."
 ---
 
 # Liang Quest Saga Planner
@@ -165,7 +165,7 @@ Both modes share the Decision Summary step. For each campaign, in topological or
 
 ### Batch mode (fresh-context subagent per campaign)
 
-2. **Launch one subagent per campaign** (model per § Model Routing), in topological waves — a campaign launches only when every dependency is `planned`; independent campaigns may run in parallel. The brief contains: the campaign's full Decision Summary, the saga folder path (subagent reads `saga.yaml` + `inventory.md` from disk), the `campaign_id` folder names of its dependency campaigns (subagent reads their manifests/quests for contract phrasing), the saga `skin` override, and the instruction to execute `liang-quest-planner --quick` to **full finalization** — plan.html, quest markdowns, `manifest.yaml`, and the `campaign_depends_on` patch (in batch mode the subagent writes it; the orchestrator verifies).
+2. **Launch one subagent per campaign** (model per § Model Routing), in topological waves — a campaign launches only when every dependency is `planned`; independent campaigns may run in parallel. The brief contains: the campaign's full Decision Summary, the saga folder path (subagent reads `saga.yaml` + `inventory.md` from disk), the `campaign_id` folder names of its dependency campaigns (subagent reads their manifests/quests for contract phrasing), the saga `skin` override, and the instruction to execute `liang-quest-planner --headless` (implies `--quick`; skips Phase 3 discussion and the browser auto-open — no user is present in a subagent) to **full finalization** — plan.html, quest markdowns, `manifest.yaml`, and the `campaign_depends_on` patch (in batch mode the subagent writes it; the orchestrator verifies).
 3. **Verify each returned campaign on disk** before launching its dependents: campaign folder exists and is flat (plan.html + quest files + manifest.yaml), plan.html contains exactly **one** `<div class="page">`, manifest carries the correct `campaign_depends_on`. Then run the Phase 4.5 alignment verify; on pass flip `status: planned` in `saga.yaml` and update `saga.html`.
 4. **Watch for cross-campaign ownership collisions** between parallel subagents — two campaigns claiming the same new type/asset/interface. Steer the live agent mid-flight when possible; otherwise serialize the pair and note the contract owner in the later campaign's Decision Summary.
 5. **Review model**: the user reviews all plan.htmls after the batch; collected notes are applied in a single revision session (planner edit-in-place machinery, per campaign) — not by the saga layer.
@@ -190,124 +190,15 @@ The verifier is evidence-precise, not creative: it reports mismatches with citat
 
 ## Phase 5 — Deferred-UAT Rollup (post-execution, `--uat`)
 
-**Generation is the executor's job; this mode only collects.** `liang-quest-executor` §8b
-regenerates `uat-checklist.md` at each campaign root on every run (manual quests held out,
-dependency-blocked skips, Tier-2 deferrals). This mode aggregates those per-campaign files into
-one saga-ordered checklist. The saga context never re-derives UAT items from manifests, run
-reports, or quest markdowns itself — a missing checklist is backfilled by dispatching §8b
-standalone workers (step 1); a stale one is fixed by re-running the executor on that campaign.
-
-Run when the user asks for the saga's deferred UAT / manual backlog, or after a sweep reports the
-saga's headless portion done. Read-only against campaign folders; the single output is
-`<saga-dir>/uat-checklist.md`.
-
-1. **Collect.** For each campaign in `saga.yaml` (by recorded `campaign_id`), look for
-   `<campaign-dir>/uat-checklist.md`:
-   - **Present** → take its sections as-is (the executor wrote VCs verbatim and tagged
-     `[MANUAL]`/`[AGENT]`).
-   - **Absent, manifest all-passed** → campaign is clean; contributes nothing.
-   - **Absent, manifest has unpassed quests** → the campaign ran before executor §8b existed (or
-     never ran). **Backfill:** spawn one worker subagent per such campaign (model per § Model
-     Routing), all in **parallel** — workers write disjoint campaign folders, so no waves needed.
-     Brief each with: the campaign folder path, and the instruction to execute
-     `liang-quest-executor/references/completion-flow.md` **§8b standalone-backfill** exactly —
-     manifest is authoritative, latest run report by frontmatter `completed_at`, VCs verbatim from
-     quest markdowns, write `uat-checklist.md` (or nothing if clean), no other writes. Verify each
-     file exists on disk before consuming it. If a worker fails or the file is malformed, fall
-     back to listing that campaign in a **"No checklist on disk"** section with its unpassed quest
-     ids and the remedy (re-run the executor on it) — never reconstruct in this context.
-2. **Order and group.** Campaigns in `campaign_depends_on` topological order, each campaign's
-   sections in the order its checklist already has. Merge into numbered **sessions**: consecutive
-   `[MANUAL]` blocks that one editor session can cover (respect any "one session covers quests
-   X–Y" note carried in from the executor) collapse together — session grouping across campaigns
-   is the one judgment this layer adds. Promote any blocker named by multiple campaigns (a missing
-   asset, a broken tool) to a single **Blockers** section up top; verify it still exists on disk
-   before listing.
-3. **Write** `<saga-dir>/uat-checklist.md`: header with the saga's pass count and generation date;
-   the sessions; a final **Wrap-up** section covering manifest status flips (user marks completed
-   quests `passed`), `saga.yaml` status sync, and workspace-standard pre-submit steps (e.g. `p4
-   reconcile`). Announce the path.
-4. **Never** flip quest statuses, edit campaign folders, or execute anything from this mode. On
-   completion suggest — never invoke — `skill:liang-quest-executor` for the `[AGENT]` sessions.
-
-Regeneration is cheap and expected: as manual work lands and executors re-run, per-campaign
-checklists shrink or disappear, and re-running `--uat` shrinks the rollup to match.
+Run when the user asks for the saga's deferred UAT / manual backlog, or after a sweep reports the saga's headless portion done. Generation is the executor's job (`liang-quest-executor` §8b writes each campaign's `uat-checklist.md`); this mode only collects — merging per-campaign checklists into one topo-ordered, session-grouped rollup, backfilling missing ones via parallel §8b workers, never re-deriving UAT items itself. Read-only against campaign folders; the single output is `<saga-dir>/uat-checklist.md`. Full protocol: `references/rollup-uat.md` — load when this mode runs.
 
 ## Phase 6 — Feature Walkthrough (post-execution, `--tour`)
 
-**Generation is the executor's job; this mode only collects.** `liang-quest-executor` §8c writes
-`walkthrough.md` at a campaign root — the tutorial covering **every** quest including passed ones
-(how it works / what changed / where it lives / see-it-run blocks) — on demand only, never during
-a completion flow. This mode aggregates those per-campaign tours into one saga-ordered walkthrough so the user
-can learn what the saga built and exercise it feature by feature. The saga context never writes
-tour content about a campaign itself.
-
-Run when the user asks to be walked through what was built. Read-only against campaign folders;
-the single output is `<saga-dir>/walkthrough.md`.
-
-1. **Collect.** For each campaign in `saga.yaml`, look for `<campaign-dir>/walkthrough.md`:
-   - **Present** → take it as-is.
-   - **Absent** → spawn one §8c standalone worker per such campaign (model per § Model Routing,
-     same chain as UAT-backfill workers), all in **parallel** — disjoint campaign folders. Brief
-     each with: the campaign folder path, and the instruction to execute
-     `liang-quest-executor/references/completion-flow.md` **§8c** exactly — manifest authoritative,
-     latest run report by frontmatter `completed_at`, all quests covered including passed, verify
-     named paths exist on disk, write `walkthrough.md`, no other writes. Verify each file exists
-     before consuming; on worker failure list the campaign under **"No walkthrough on disk"** with
-     the remedy — never reconstruct in this context.
-   - A **stale** campaign walkthrough (quests changed since generation) is refreshed by deleting
-     it and re-running `--tour`.
-2. **Order and interleave.** Campaigns in `campaign_depends_on` topological order, each campaign's
-   quest sections in the order its walkthrough already has. The one judgment this layer adds:
-   where a tour stop is `[PENDING]`, point at the Phase 5 rollup session that unlocks it (never
-   duplicate debt items); where a shared blocker gates several stops, note it once up front.
-3. **Write** `<saga-dir>/walkthrough.md`: header with a one-paragraph saga summary, generation
-   date, pass count; the campaign tours in order; a closing pointer to `uat-checklist.md` for the
-   outstanding debt. Announce the path.
-4. **Never** flip quest statuses, edit campaign folders, or execute anything from this mode.
-
-`--uat` and `--tour` are companions: the checklist retires debt (checkbox items drive manifest
-flips), the walkthrough teaches and exercises (its checkboxes are observation steps, never
-verification records). Run both after a sweep: tour to learn, checklist to close out. For one
-browsable page combining both, Phase 7 (`--handover`) renders them into `handover.html`.
+Run when the user asks to be walked through what was built. Generation is the executor's job (`liang-quest-executor` §8c writes each campaign's `walkthrough.md`, covering every quest including passed ones); this mode only collects — merging per-campaign tours into one saga-ordered walkthrough, backfilling missing ones via parallel §8c workers, never writing tour content itself. Read-only against campaign folders; the single output is `<saga-dir>/walkthrough.md`. Companion to `--uat`; Phase 7 (`--handover`) renders both into one page. Full protocol: `references/rollup-tour.md` — load when this mode runs.
 
 ## Phase 7 — Handover View (post-execution, `--handover`)
 
-**Presentation layer only.** Renders the two saga-level rollups — `uat-checklist.md` (Phase 5) and
-`walkthrough.md` (Phase 6) — into a single self-contained `<saga-dir>/handover.html` the user reads
-in a browser. The two markdown files stay the source of truth: agents parse them, checkbox state
-lives in them, executor re-runs regenerate them. The HTML is a disposable view — regenerated whole
-from the markdown every time, never edited by hand, never a state surface (checked/unchecked
-renders as static text), never collected or parsed by any downstream skill.
-
-1. **Ensure fresh sources.** If `<saga-dir>/uat-checklist.md` is missing, run Phase 5 first; if
-   `<saga-dir>/walkthrough.md` is missing, run Phase 6 first. If the user says either is stale,
-   re-run that phase before rendering — never patch the HTML around stale markdown.
-2. **Render with the planner's Phase 2c machinery** — same body-drafter pattern, same
-   class contract, same `assemble_plan.py` + the saga `skin` (the page joins the `saga.html` /
-   `plan.html` visual family). No bespoke CSS. The handover-shaped mapping onto the contract:
-   - One `section.quest` per **tour stop** (campaign), topological order, `id="c01"`…; TOC heading
-     "Tour Stops"; eyebrow "Stop NN · <passed>/<total>"; `diff-badge` = the campaign's saga-level
-     difficulty; `dep-state` = `<passed>/<total> · depends: <ids>`.
-   - Per stop: purpose = the walkthrough's stop summary; steps = its highlight and see-it-run
-     observation items (static text — no live checkboxes); footer deps col = campaign
-     dependencies, second col heading "Outstanding debt" = the UAT sessions gating this stop, each
-     linking `uat-checklist.md` § that session. Fully-passed stops say "none".
-   - Exactly one `diagram-section` between TOC and main: the **UAT session unlock chain** (nodes =
-     sessions in order, `.is-active` = next actionable, `.is-muted` = blocked, plain = done;
-     legend names each session's `[MANUAL]`/`[AGENT]` tag).
-   - Notes section: cards for shared Blockers and the walkthrough's quick-start tour (if present);
-     the `notes-wide` table = session index — one row per session, pill = its state
-     (`pill-recommended` done / `pill-deferred` next / `pill-rejected` blocked), plus the wrap-up
-     reminders from the checklist's final section.
-   - Depth is LEAN: summaries and links into the two markdown files — never the full checklist
-     item text duplicated into the page.
-3. **Assemble** with `assemble_plan.py` to `<saga-dir>/handover.html` (title "<Saga Title> —
-   Handover"), delete `_body.html`, auto-open in the browser, announce the path.
-4. **Regenerate on demand** — after any `--uat`/`--tour` re-run, offer a one-line "re-render
-   handover.html?"; regeneration is cheap and the file is safe to delete at any time. **Never**
-   flip quest statuses, edit campaign folders, or write anything but `handover.html` from this
-   mode.
+**Presentation layer only.** Renders the two saga-level rollups — `uat-checklist.md` (Phase 5) and `walkthrough.md` (Phase 6) — into a single self-contained `<saga-dir>/handover.html`, via the planner's Phase 2c HTML machinery (body-drafter, class contract, `assemble_plan.py`, saga skin); runs Phase 5/6 first if either source is missing. The markdown files stay the source of truth — the HTML is a disposable, regenerate-whole view, never edited by hand, never a state surface. Single output: `<saga-dir>/handover.html`. Full protocol: `references/rollup-handover.md` — load when this mode runs.
 
 ## Next Move
 
@@ -330,7 +221,10 @@ Always suggest the saga-scoped form — an unscoped sweep is workspace-global an
 
 ## Relationship to Other Skills
 
-- **Downstream (handoff)**: `liang-quest-planner` — invoked once per campaign in `--quick` mode, same-context or via a batch subagent; sole producer of campaign folders. Its Phase 2c HTML machinery (class contract, `assemble_plan.py`, skins) is also reused for `saga.html` (Phase 3.5) and `handover.html` (Phase 7).
+- **Downstream (handoff)**: `liang-quest-planner` — invoked once per campaign: `--quick` in the same-context loop, `--headless` in batch subagents; sole producer of campaign folders. Its Phase 2c HTML machinery (class contract, `assemble_plan.py`, skins) is also reused for `saga.html` (Phase 3.5) and `handover.html` (Phase 7).
 - **Downstream (suggested)**: `liang-quest-batch-sweep` / `liang-quest-executor` — consume the planned campaigns; sweep toposorts via the `campaign_depends_on` fields this skill patches in. The executor's §8b per-campaign `uat-checklist.md` artifacts are Phase 5's sole input; its §8c `walkthrough.md` artifacts are Phase 6's.
 - **Shared foundation**: `liang-quest-core` — manifest schema (`campaign_depends_on` semantics live in `references/campaign/manifest-schema.md`).
 - **Upstream (typical source)**: `liang-game-prototyper` output under `.liang/prototypes/`, but any sufficiently concrete prototype or spec file works as intake material.
+
+## Reference Files
+- `references/rollup-uat.md` (Phase 5, `--uat`), `references/rollup-tour.md` (Phase 6, `--tour`), `references/rollup-handover.md` (Phase 7, `--handover`) — full protocols; load when the matching mode runs.

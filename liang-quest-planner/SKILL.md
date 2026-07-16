@@ -41,7 +41,7 @@ Activate when:
 
 Do not silently activate from generic intent like "plan this." If unclear, ask.
 
-**Quick Mode** activates when the user appends `--quick` (e.g., `skill:liang-quest-planner --quick`) or prefixes with `quick:`. See the Quick Mode section below for the overrides it applies.
+**Quick Mode** activates when the user appends `--quick` (e.g., `skill:liang-quest-planner --quick`) or prefixes with `quick:`. See the Quick Mode section below for the overrides it applies. `--headless` activates Headless Mode (below); it implies `--quick`.
 
 ## Quick Mode
 
@@ -54,6 +54,17 @@ Opt-in path for fast planning when you'd rather iterate against the HTML than ga
 
 Standard mode keeps all gates. The iterative-HTML behavior in Phase 3 applies to both modes.
 
+## Headless Mode
+
+Opt-in path for orchestrated invocation — another skill or a fresh-context subagent running this planner end-to-end (e.g. `liang-quest-saga-planner` batch mode). Implies every Quick Mode override, plus:
+
+- **Gap-Fill cap: 0.** Missing Decision Summary fields stay unspecified; never ask questions — there is no user to answer them.
+- **Phase 3 skipped entirely.** No open discussion; proceed from Phase 2d directly to Phase 4 finalization.
+- **Phase 2d: no auto-open, no visual spot-check.** Never launch a browser or Playwright from a headless context. Still announce the absolute plan.html path on a single line.
+- **Phase 4 Next Move is emitted as output text**, never as a question.
+
+Standard and Quick modes are unchanged; `--headless` is the only mode that skips Phase 3.
+
 ## Phase 1 — Decision Extraction
 
 ### 1a. Confirm intent
@@ -64,7 +75,7 @@ State what the skill will do and confirm the user wants to proceed.
 
 If the conversation contains a `liang-brainstorm-relentless` Strategy Report (locked-decision table, Main Quest / Victory Conditions / Scope / Risks / Fog of War headings), **skip this**.
 
-Otherwise, identify which Decision Summary fields are missing or under-specified and ask 2–5 focused questions covering only the gaps, batched in a single `AskUserQuestion` call where possible.
+Otherwise, identify which Decision Summary fields are missing or under-specified and ask 2–5 focused questions covering only the gaps, batched into a single question round where possible.
 
 - **Hard cap: 5 questions.** If more would be needed, suggest the user run `liang-brainstorm-relentless` first and exit gracefully.
 - Never re-ask anything the conversation already covers. Never re-validate locked decisions.
@@ -137,8 +148,8 @@ Every `plan.html` must contain:
 
 After confirming the file write succeeded (per `references/html-design-contract.md` §4.4):
 
-1. **Run the Visual Spot-Check** per §4.4 — Playwright screenshot at 375px viewport width only, sampling the longest-content quest, the shortest-content quest, the decisions table, and the plan-visual section when present. `base.css` + every skin have been pre-audited; only content-driven breaks remain. Fix any layout issue surfaced in-place before showing the user. Skip the screenshot loop silently if Playwright is unavailable.
-2. **Auto-open** `plan.html` in the user's default browser. Do not ask first; do not offer the in-chat-only path. Per-OS commands:
+1. **Run the Visual Spot-Check** per §4.4 — Playwright screenshot at 375px viewport width only, sampling the longest-content quest, the shortest-content quest, the decisions table, and the plan-visual section when present. `base.css` + every skin have been pre-audited; only content-driven breaks remain. Fix any layout issue surfaced in-place before showing the user. Skip the screenshot loop silently if Playwright is unavailable. Skipped in headless mode.
+2. **Auto-open** `plan.html` in the user's default browser. Do not ask first; do not offer the in-chat-only path. Skipped in headless mode. Per-OS commands:
    - Windows: `cmd //c start "" "<absolute-path>"` (the double-slash escapes `/c` for Git-Bash/MSYS shells)
    - macOS: `open "<absolute-path>"`
    - Linux: `xdg-open "<absolute-path>"`
@@ -146,6 +157,8 @@ After confirming the file write succeeded (per `references/html-design-contract.
 After the open command runs, announce the absolute path in-chat on a single line so the user can re-open it later. If the open command fails (non-zero exit, no browser handler), announce the path and ask the user to open it manually — do not retry blindly.
 
 ## Phase 3 — Open Discussion
+
+Headless mode skips this phase entirely — see Headless Mode.
 
 User leads. No forced walkthrough or section-by-section review. Proceed to Phase 4 when the user signals readiness ("looks good," "write the quests," "proceed").
 

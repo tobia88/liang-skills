@@ -24,7 +24,7 @@ quests:
     status: "ready"          # see Status Vocabulary; planner writes "ready"
 ```
 
-`manual: true` marks a quest as human-in-editor work (UMG assembly, asset authoring, playtest UAT) that must never be dispatched to a headless child. The planner writes it for every quest whose title/purpose is labeled MANUAL. Consumed by the batch sweep orchestrator (sweep.py), which holds such quests — and, transitively, their un-passed in-campaign dependents — at `status: skipped` with `skip_reason: manual_deferred` / `manual_dependency` instead of dispatching them; the campaign then counts as passed-with-manual-backlog. The interactive executor ignores the field today.
+`manual: true` marks a quest as human-in-editor work (UMG assembly, asset authoring, playtest UAT) that must never be dispatched to a headless child. The planner writes it for every quest whose title/purpose is labeled MANUAL. Consumed by both the executor (at §5 campaign intake) and the batch sweep orchestrator (sweep.py), which apply the same hold algorithm: such quests — and, transitively, their un-passed in-campaign dependents — are held at `status: skipped` with `skip_reason: manual_deferred` / `manual_dependency` instead of being dispatched; the campaign then counts as passed-with-manual-backlog. Hold semantics: `liang-quest-core/references/execution/status-transitions.md § Manual Holds`.
 
 No `workflow` field. The planner-native pipeline has a single executor, so no workflow discriminator is needed.
 
@@ -39,8 +39,9 @@ quests[]:
   current_cycle: integer     # 1-based index of step currently executing (0 = not started)
   total_cycles: integer      # total step count parsed from the quest .md's ## Steps section
   skip_reason: string        # present when status is "skipped"; references failed dependency.
-                             #   sweep.py also writes "manual_deferred" / "manual_dependency"
-                             #   here to hold manual quests out of headless dispatch
+                             #   The executor (§5 intake) and sweep.py also write
+                             #   "manual_deferred" / "manual_dependency" here to hold
+                             #   manual quests out of headless dispatch
   started_at: string         # ISO 8601; set on in_progress transition
   completed_at: string       # ISO 8601; set on passed/failed/skipped transition
   usage:                     # child-process spend, harvested from pinned child session files;

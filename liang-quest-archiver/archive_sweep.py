@@ -7,18 +7,24 @@ deleting their .run/ ledgers. Dry-run is the default; the invoking model is
 expected to run dry-run first, present the plan, then re-run with --execute.
 
 Classification rules (holds are release-able only via --force / --trust-skips):
-  ARCHIVE            every quest status == "passed" (and no other hold applies)
-  OPEN               any quest is ready / in_progress / planned /
-                     ready_for_planning / unknown  -> never archived, even forced
-                     (exception: --force may move a campaign with ready quests,
-                     but never one with in_progress quests)
-  HOLD open-saga     campaign is listed (campaign_id) in a saga whose
-                     saga.yaml status is not "complete"
-  HOLD skips         terminal but contains "skipped" quests (possible infra
-                     false negatives; verify, then --trust-skips or --force)
-  HOLD failed        terminal but contains "failed" quests (archiving would
-                     hide a problem; --force after triage)
-  HOLD no-manifest   directory has no manifest.yaml (--force after eyeballing)
+  ARCHIVE                  every quest status == "passed" (no other hold applies)
+  OPEN                     any quest is ready / in_progress / planned /
+                           ready_for_planning / unknown -> never archived, even
+                           forced (exception: --force may move a campaign with
+                           ready quests, but never one with in_progress quests)
+  HOLD open-saga (...)     campaign is listed (campaign_id) in a saga whose
+                           saga.yaml status is not "complete"
+  HOLD unverified skips    terminal but contains "skipped" quests (possible
+  (...)                    infra false negatives; verify, then --trust-skips
+                           or --force)
+  HOLD failed quests (...) terminal but contains "failed" quests (archiving
+                           would hide a problem; --force after triage)
+  HOLD no-manifest         directory has no manifest.yaml (--force after
+                           eyeballing)
+  HOLD no quest statuses   manifest present but no quest status could be
+  parsed                   parsed (--force after eyeballing)
+  REFUSED                  named in --force but has in_progress quests --
+                           never moved
 
 Exit codes: 0 = ok (dry-run or all moves succeeded), 1 = a move failed.
 """

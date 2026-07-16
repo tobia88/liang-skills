@@ -17,7 +17,7 @@ Otherwise, for each VC checkbox in `## Victory Conditions`:
   - VC begins with a verifiable phrase (`grep`, `test -f`, etc., or a shell-like check) → run the implied check with host-appropriate tooling (the phrase names the intent, not a literal command — e.g. use PowerShell equivalents on Windows).
 - **Tier 1 complex:** mentions a check that needs reasoning over file contents (e.g., "the manifest's `quests` array has 3 entries"). Spawn a verify-child:
   - **Pi CLI mode:** `pi --model <verify-model> -p "Read the final step envelope at .run/<quest-id>/step-<sid>.md. Verify this victory condition: <VC text>. Workspace root: <path>. Files touched by this quest: <files_changed across all steps>. Write pass: true|false and reasoning to the step envelope's Verification fenced YAML block."`
-  - **Claude mode:** Verify-child subagent (tier from `models.claude_mode.easy` or harness default) with same context. The executor writes the structured result into the final step envelope's Verification fenced YAML block.
+  - **Claude mode:** Verify-child subagent (tier from `models.claude_mode.verify`, default `haiku`) with same context. The executor writes the structured result into the final step envelope's Verification fenced YAML block.
 - **Tier 2 (judgmental):** VC describes subjective acceptance ("feels right", "renders correctly", "the code is idiomatic"). Add to the **deferred UAT queue**: quest ID, VC text, files changed across all steps, list of step summaries.
 
 ## Inline Result Aggregation
