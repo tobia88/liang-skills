@@ -139,6 +139,20 @@ chain completes — canonical value semantics and write-back rule:
 
 **Under `--no-confirm`:** if `"ask"` or absent, treat as `"ignore"` silently. Do not write the choice back.
 
+## 10a. VCS Source Reconcile (all modes — including `--no-confirm`)
+
+Skip when `.liang/project.yaml` is missing or its `vcs` is not `"perforce"`, or when this run wrote no step envelopes.
+
+1. **Collect touched files** — union of `output.files_changed` across the step envelopes THIS run wrote (`.run/<quest-id>/step-*.md` of every quest processed this run — not envelopes left by earlier runs). Resolve relative paths against the workspace root. Drop anything under `.liang/` (planning/execution bookkeeping is never reconciled), anything with an `Intermediate`, `Binaries`, `Saved`, or `DerivedDataCache` path segment (build/derived output — compile-step children have been observed dumping the build log's rebuilt-file list into `files_changed`, which is not an edit list), and anything §Boundaries item 8 excludes (secrets, large binaries).
+2. **Verify existence** — a collected path that does not exist on disk is suspect (build-log noise or a wrong path), and handing it to `p4 reconcile` would open the depot file **for delete**. Exclude missing paths from the reconcile; list them separately as "recorded but absent on disk — verify manually (deliberate deletion vs envelope noise)". Only reconcile a deletion when the envelope's `implementation_summary` explicitly says the child deleted that file.
+3. **Nothing collected** → state "no source files to reconcile" and continue to §11.
+4. **Reconcile, scoped** — run `p4 reconcile <file> <file> ...` with exactly the surviving list; this opens adds/edits in the default changelist. **NEVER run a bare or workspace-wide `p4 reconcile`** — the workspace may carry deliberate local drift (config edits, held-back deletions) that must not be opened for submit. **NEVER `p4 submit`, `p4 revert`, or any other Perforce write** beyond this one scoped reconcile.
+5. **Report** — echo p4's output, and append the opened-file list to this run's report under a `## Reconcile` body section (front-matter keys stay VCS-neutral per Boundaries item 9). If `p4` is missing from PATH or exits non-zero, print the file list with a ready-to-paste `p4 reconcile <files>` command for manual handling and continue — a reconcile failure never changes quest statuses or the exit code.
+
+Idempotent by design: when a wrapper (e.g. `liang-quest-batch-sweep`'s `sweep-afk.py`) reconciles again afterwards, the second pass finds the files already opened and no-ops.
+
+**Under `--no-confirm`:** run without prompting — the AFK path is exactly where automatic reconcile matters most.
+
 ## 11. Commit Suggestion
 
 **If `.liang/project.yaml` does not exist:** skip entirely.

@@ -158,6 +158,7 @@ After the queue is exhausted, run §8–12 in order per `references/completion-f
 - **§8c Feature Walkthrough Artifact** — `walkthrough.md` at campaign root: a guided tour of **every** quest including passed ones (what was built / where it lives / see-it-run steps). **On demand only** — never part of the completion flow; runs standalone when invoked directly or as a `liang-quest-saga-planner --tour` (Phase 6) worker.
 - **§9 Cleanup** — preserve `lessons.yaml`, run reports, `.run/` envelopes and markers; ask before deleting old scratch. **`--no-confirm`:** preserve all.
 - **§10 VCS Artifact Policy** — apply `vcs_artifacts.execution` (`ignore` / `commit` / `ask`).
+- **§10a VCS Source Reconcile** — when `project.yaml` `vcs: perforce`, run `p4 reconcile` scoped to exactly the `output.files_changed` union from THIS run's step envelopes (never workspace-wide, never submit). Runs in **all** modes including `--no-confirm`. Failure is reported, never fatal.
 - **§11 Commit Suggestion** — gated on `vcs_artifacts.planning` and a VCS health check; suggest a `git add`/`git commit` snippet, never auto-execute.
 - **§12 Open Prompt** — offer to open the run report or campaign folder; never open automatically.
 
@@ -201,6 +202,7 @@ This skill must never:
 14. **Stamp, read, or check a `workflow` field.** The planner-native pipeline has no workflow discriminator.
 15. **Regenerate large identical helper scripts into each campaign `.run/`** when a versioned shared helper exists; reference and record it instead.
 16. **Dispatch a `manual: true` quest to any child process.** Manual quests are held at intake (§5) and reach the user only via the queue display and §8b.
+17. **Perform any VCS write beyond the scoped §10a reconcile.** Never `p4 submit`, `p4 revert`, or a bare/workspace-wide `p4 reconcile` — the workspace may carry deliberate local drift that must never be opened for submit.
 
 If asked for any of the above, decline, explain the boundary, and offer the closest in-scope alternative.
 
