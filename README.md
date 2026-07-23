@@ -44,7 +44,11 @@ in Claude Code via links (see [Install](#install)).
 Clone into the pi skills root — pi discovers every `SKILL.md` directory beneath it:
 
 ```sh
+# Git Bash / macOS / Linux
 git clone https://github.com/tobia88/liang-skills.git ~/.pi/agent/skills/liang-skills
+
+# PowerShell — no tilde: PS passes it to git unexpanded, creating a literal "~" folder
+git clone https://github.com/tobia88/liang-skills.git "$HOME\.pi\agent\skills\liang-skills"
 ```
 
 (HTTPS works on any machine; use `git@github.com:tobia88/liang-skills.git` instead
