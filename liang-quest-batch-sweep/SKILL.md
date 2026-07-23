@@ -105,14 +105,19 @@ Present the pre-flight summary and ask: "Run the sweep? It will dispatch the exe
 
 ### 3. Launch
 
-1. Invoke `python sweep.py` from the workspace root in live mode (no `--dry-run`), with the same `--saga` / `--only` scope flags the dry-run used, if any.
-2. Stream the script's stdout/stderr to the user as it runs. `sweep.py` streams each executor child as combined stdout/stderr, so child progress should appear inline. Do not suppress or filter.
-3. Note clearly that the script is running in the foreground. If the user closes the session, the subprocess detaches with the parent and behavior is undefined — recommend keeping the session open for the duration of the sweep.
-4. Wait for the script to exit. Capture the exit code:
+1. **Never launch sweep.py (or sweep-afk.py without `--detach`) as a foreground exec/bash tool call.** A sweep runs for hours; agent-harness exec tools enforce timeouts (pi's bash tool killed a live sweep's shell at 30 minutes on 2026-07-17). Worse, on Windows the timeout kills only the wrapper shell: sweep.py survives orphaned, its stdout pipe loses its reader, and it later wedges or crashes on a broken pipe mid-campaign — the harness reports a dead sweep from a stale buffered view while the real process grinds on unattended.
+2. After the Confirmation Gate, run exactly one fast call:
+   `python <skill-dir>/sweep-afk.py --workspace <root> --detach` plus the same `--saga` / `--only` scope flags the dry-run used.
+   This one call is all you need — it does no preflight, no sweep, no reconcile itself. It spawns a detached child (internally re-invoking itself with a hidden `--detached-child` flag), writes that child's stdout/stderr to a fresh file under `.liang/sweep-logs/`, and returns almost instantly with the child's PID and the log path.
+3. Verify the launch succeeded: confirm the printed PID is alive and the log file exists and is growing. Report the PID and log path to the user, and state plainly that the sweep now survives the session ending — closing this chat/session does not stop it.
+4. Monitor with short, timeout-safe checks — `sweep-afk.py --workspace <root> --status` (read-only, always exits 0, safe to call anytime a sweep might be running) or tailing the log file — never by holding a long-running tool call open.
+5. Completion is signaled by the log's final `AFK COMPLETE exit=<n> attempts=<n>` line and a new file in `.liang/sweep-reports/`. Interpret the exit code:
    - 0 → all campaigns passed.
    - 1 → at least one campaign failed.
    - 2 → configuration error; the sweep halted before completing.
    - 3 → unexpected crash.
+
+   Codes 0/1/2 are what sweep.py itself reports and are never retried. A bare 3 (or any other unexpected code) is first treated as an infra-level death by the built-in supervisor, which auto-resumes sweep.py up to twice before giving up and surfacing it as final — see Unattended Mode below.
 
 Do NOT attempt to retry, re-plan, or interpret failures yourself. The script's exit code IS the result.
 
@@ -144,11 +149,25 @@ Invocation (from any workspace root):
 
 ```
 python <this-skill-dir>/sweep-afk.py --workspace <root> --dry-run   # validate; runs/opens nothing
-python <this-skill-dir>/sweep-afk.py --workspace <root>             # fire and walk away
+python <this-skill-dir>/sweep-afk.py --workspace <root>             # fire and walk away (foreground)
+python <this-skill-dir>/sweep-afk.py --workspace <root> --detach    # fire, detach, return instantly
 python <this-skill-dir>/sweep-afk.py --workspace <root> --saga <id> # scoped: one saga only
+python <this-skill-dir>/sweep-afk.py --workspace <root> --status    # read-only progress check
 ```
 
-Flags: `--dry-run` (preflight + `sweep.py --dry-run`, no execution), `--no-reconcile` (print the touched-file list instead of opening), `--probe` (one live model call in preflight to confirm the key round-trips), `--saga` / `--only` (forwarded verbatim to sweep.py — see Scoped Sweeps). Always run `--dry-run --probe` once before the first unattended run on a new machine. On a workspace with historical campaigns, prefer the scoped form for AFK runs.
+Flags: `--dry-run` (preflight + `sweep.py --dry-run`, no execution), `--no-reconcile` (print the touched-file list instead of opening), `--probe` (one live model call in preflight to confirm the key round-trips), `--saga` / `--only` (forwarded verbatim to sweep.py — see Scoped Sweeps), `--detach` (below), `--status` (below). Always run `--dry-run --probe` once before the first unattended run on a new machine. On a workspace with historical campaigns, prefer the scoped form for AFK runs.
+
+**`--detach`** re-launches `sweep-afk.py` itself as a detached background process and returns almost immediately with a PID and a log path — this is the flag an agent harness must use (see Launch step 2); it is also convenient from a real terminal when you don't want to hold the shell open. The detached child runs with a hidden `--detached-child` flag that puts it on the supervisor path described below; its combined stdout/stderr goes to a new file under `.liang/sweep-logs/` (named like `2026-07-17T0330Z-afk.log`), unbuffered so `tail -f` shows live progress.
+
+**Supervisor / auto-resume.** Every invocation of `sweep-afk.py` — detached or foreground — runs sweep.py under a small supervisor loop instead of a single call. sweep.py's own terminal exit codes (0 = all passed, 1 = a campaign legitimately failed, 2 = config error) are returned as-is and **never** retried — that ban is contractual, matching hard stop 4 below. Any other exit code (3, negative, or anything unexpected) is treated as an infra-level death — the process got orphaned, its stdout pipe broke mid-campaign, the machine's exec-tool timeout killed only the wrapper shell — and the supervisor relaunches sweep.py (which is resume-aware) up to twice, for three attempts total, logging each transition. The final line of every run is `AFK COMPLETE exit=<n> attempts=<n>`.
+
+**Keep-awake.** The detached child also holds the Windows machine awake for the duration of the run (`SetThreadExecutionState`, reset when the run ends) so a multi-hour AFK sweep doesn't die because the machine went to sleep. No-op on non-Windows.
+
+**Single-instance lockfile.** Before sweep.py dispatches anything in live mode, it takes `.liang/sweep.lock` (pid + start time). A second live sweep started in the same workspace while that lock's pid is still alive exits immediately with configuration-error (2) instead of racing the first sweep's manifest writes. A lock left behind by a pid that is no longer alive (stale — e.g. the machine was rebooted) is detected and silently replaced. `--dry-run` never touches the lock. Note: sweeps started before this hardening pass hold no lock file, so the guard only protects runs launched with the upgraded script.
+
+**`--status`** is a read-only query — safe to run at any time, including while a sweep is in progress, and it always exits 0. It reports: whether `.liang/sweep.lock` is held and by a pid that's alive or dead; the newest log under `.liang/sweep-logs/` with its last ~20 lines; the newest file under `.liang/sweep-reports/` with its modification time; and a one-line quest-status summary per campaign read straight from each `manifest.yaml` (e.g. `5 passed / 1 ready / 1 skipped`). Use it instead of holding a long-running tool call open to watch a sweep.
+
+`sweep-afk.py` is designed to be run from a **real terminal** the user owns. If it is ever launched from inside an agent instead, the same rule as Launch step 1 applies: use `--detach`, never a foreground tool call subject to a harness timeout.
 
 **Cross-platform note:** both `sweep.py` and `sweep-preflight.py` resolve the `pi` launcher via `shutil.which("pi")` before spawning — on Windows the npm shim is `pi.cmd` and bare `["pi", ...]` under `subprocess(shell=False)` raises `FileNotFoundError`. Keep that resolution if editing the spawn sites.
 
@@ -177,6 +196,8 @@ This skill must never:
 - **Live launch exits with code 3:** Unexpected crash. Surface stderr verbatim. Recommend opening the sweep report if one was written.
 - **Sweep report file not found in Phase 4:** Script crashed before report generation. Point at stderr. Do not fabricate counts.
 - **pyyaml not installed:** sweep.py will fail on import. Surface the error and tell the user: "Install dependencies: `pip install -r liang-quest-batch-sweep/requirements.txt`."
+- **A previous foreground launch "timed out":** the sweep is probably NOT dead — the harness killed only the wrapper shell. Before relaunching, check for a live `python … sweep.py` process (`Get-CimInstance Win32_Process | ? { $_.CommandLine -match 'sweep\.py' }`) and compare campaign-manifest / `.run/` artifact mtimes against the harness's report; the report may be a stale buffered view. Never start a second sweep while one is alive (hard stop 5). If a live orphan is found, either let it finish (monitor manifests) or kill its whole tree before relaunching detached. For runs launched with the lockfile-hardened `sweep.py`, this scenario is now largely self-defending: a second live sweep in the same workspace exits 2 immediately instead of racing the first (see next entry), and `sweep-afk.py`'s own supervisor auto-resumes an orphaned/crashed sweep.py without any manual relaunch. This manual-check procedure still matters for sweeps started before the upgrade, or for a wrapper shell around sweep.py that isn't sweep-afk.py.
+- **Second sweep exits 2 immediately:** a sweep is already running in this workspace — `.liang/sweep.lock` is held by a live pid. Do not retry or force it. Run `sweep-afk.py --workspace <root> --status` to see who holds it, how long it's been running, and the live campaign/quest counts; wait for it to finish (or investigate why you thought it wasn't running).
 
 ## Relationship to Other Skills
 
@@ -187,12 +208,14 @@ This skill must never:
   - `.liang/project.yaml` — workspace-wide config; sweep.py reads but does not write.
   - `.liang/campaigns/*/manifest.yaml` — sweep.py reads and atomically updates status fields.
   - `.liang/sweep-reports/*.html` — sweep.py writes; this skill reads.
+  - `.liang/sweep.lock` — sweep.py writes (live mode only) before dispatching, removes on exit; single-instance guard. See Unattended Mode.
+  - `.liang/sweep-logs/*.log` — sweep-afk.py writes when launched with `--detach`; this skill (and `--status`) reads.
 
 ## Reference Files
 
 - `sweep.py` — the multi-campaign orchestrator script. Co-located with this SKILL.md.
 - `sweep-preflight.py` — deep preflight (executor §2/§3 gates + pi runtime). Read-only; used in Phase 1 and by `sweep-afk.py`.
-- `sweep-afk.py` — unattended fire-and-AFK harness (preflight → sweep → p4 reconcile → report). The skill's no-prompt entry point.
+- `sweep-afk.py` — unattended fire-and-AFK harness (preflight → sweep → p4 reconcile → report), with `--detach` (spawn detached + return), `--status` (read-only progress query), and a built-in supervisor that auto-resumes sweep.py on infra-level death. The skill's no-prompt entry point.
 - `requirements.txt` — Python dependencies (currently: `pyyaml>=6.0`).
 
 Always read the script when planning changes to this skill — the script's CLI and exit codes are the source of truth.

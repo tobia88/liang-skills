@@ -309,6 +309,19 @@ def check_campaigns(ws: Path) -> None:
         cid = m.get("campaign_id", entry.name)
         camp_ids.add(cid)
         manifests[entry.name] = (entry, m)
+    # Archived campaigns are terminal but still valid dependency targets —
+    # collect their IDs for Phase 2 only (no quest-level validation).
+    arch_root = camp_root / "archive"
+    if arch_root.is_dir():
+        for entry in sorted(arch_root.iterdir()):
+            man = entry / "manifest.yaml"
+            if not entry.is_dir() or not man.is_file():
+                continue
+            try:
+                m = yaml.safe_load(man.read_text(encoding="utf-8")) or {}
+            except yaml.YAMLError:
+                continue
+            camp_ids.add(m.get("campaign_id", entry.name))
     # Phase 2: validate cross-campaign dependencies (uses the full camp_ids).
     for _dirname, (entry, m) in manifests.items():
         cid = m.get("campaign_id", entry.name)

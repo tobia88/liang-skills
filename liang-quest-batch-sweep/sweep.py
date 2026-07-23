@@ -1085,6 +1085,99 @@ def _force_utf8_stdio() -> None:
             pass
 
 
+# ---- single-instance lock (LIVE mode only) --------------------------------
+#
+# Guards against a second sweep dispatching into the same workspace while one
+# is already running — the scenario that let two orchestrators race the same
+# manifest.yaml files. Sweeps started before this guard was added hold no
+# lock file, so it only protects runs launched after this change.
+
+SWEEP_LOCK_PATH = ".liang/sweep.lock"
+
+
+def _pid_is_alive(pid: int) -> bool:
+    """Cross-platform, non-lethal PID liveness probe.
+
+    POSIX: signal 0 via os.kill delivers nothing — it only checks
+    existence/permission — so probing with it is safe.
+
+    Windows: os.kill's "signal" argument is not a real signal. For any value
+    other than CTRL_C_EVENT/CTRL_BREAK_EVENT, CPython's os.kill() on Windows
+    calls TerminateProcess(), which would KILL the process being probed.
+    Never use it here. Instead go straight to the Win32 API: open a
+    query-only handle and read the exit code — STILL_ACTIVE (259) means the
+    process has not exited yet.
+    """
+    if os.name == "nt":
+        import ctypes
+
+        process_query_limited_information = 0x1000
+        still_active = 259
+        kernel32 = ctypes.windll.kernel32
+        handle = kernel32.OpenProcess(process_query_limited_information, False, pid)
+        if not handle:
+            return False
+        try:
+            exit_code = ctypes.c_ulong(0)
+            if not kernel32.GetExitCodeProcess(handle, ctypes.byref(exit_code)):
+                return False
+            return exit_code.value == still_active
+        finally:
+            kernel32.CloseHandle(handle)
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True  # exists, just owned by someone else
+    return True
+
+
+def _read_sweep_lock(lock_path: Path) -> dict[str, Any] | None:
+    """Parse the lock file (pid + ISO start time). None if missing/malformed."""
+    data = _safe_load_yaml(lock_path)
+    if not isinstance(data, dict) or not isinstance(data.get("pid"), int):
+        return None
+    return data
+
+
+def _acquire_sweep_lock(workspace: Path) -> Path | None:
+    """
+    Take the single-instance lock for a LIVE sweep. Returns the lock path on
+    success (the caller must release it via _release_sweep_lock in a finally
+    block on every exit path); returns None if another sweep is already
+    alive, after printing the error — the caller should exit EXIT_CONFIG_ERROR.
+    """
+    lock_path = workspace / SWEEP_LOCK_PATH
+    existing = _read_sweep_lock(lock_path)
+    if existing is not None:
+        pid = existing.get("pid")
+        started = existing.get("started", "unknown")
+        if _pid_is_alive(pid):
+            print(
+                f"[sweep] another sweep is already running in this workspace "
+                f"(pid {pid}, started {started}) — refusing to start a second "
+                f"one. Check on it with sweep-afk.py --status.",
+                file=sys.stderr,
+            )
+            return None
+        print(f"[sweep] stale lock from pid {pid} — replacing", file=sys.stderr)
+
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    payload = {"pid": os.getpid(), "started": datetime.now(timezone.utc).isoformat()}
+    lock_path.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
+    return lock_path
+
+
+def _release_sweep_lock(lock_path: Path | None) -> None:
+    if lock_path is None:
+        return
+    try:
+        lock_path.unlink(missing_ok=True)
+    except OSError:
+        pass
+
+
 def main(argv: list[str] | None = None) -> int:
     _force_utf8_stdio()
     args = parse_args(argv)
@@ -1255,6 +1348,36 @@ def main(argv: list[str] | None = None) -> int:
     results: list[dict[str, Any]] = []
     skipped_by_cascade: set[str] = set()
 
+    # Single-instance guard: LIVE mode only, taken right before the first
+    # possible dispatch so a --dry-run never touches the lock file and every
+    # earlier config-error return above exits without acquiring anything.
+    lock_path: Path | None = None
+    if not args.dry_run:
+        lock_path = _acquire_sweep_lock(workspace)
+        if lock_path is None:
+            return EXIT_CONFIG_ERROR
+
+    try:
+        return _dispatch_loop(
+            args, workspace, ordered, campaigns, results, skipped_by_cascade,
+            campaign_timeout,
+        )
+    finally:
+        _release_sweep_lock(lock_path)
+
+
+def _dispatch_loop(
+    args: argparse.Namespace,
+    workspace: Path,
+    ordered: list[dict[str, Any]],
+    campaigns: list[dict[str, Any]],
+    results: list[dict[str, Any]],
+    skipped_by_cascade: set[str],
+    campaign_timeout: float | None,
+) -> int:
+    """The dispatch loop body, split out of main() so the lock acquired right
+    before it can be released in a finally block regardless of which of the
+    loop's several mid-flight `return` statements fires."""
     for order_idx, campaign in enumerate(ordered, start=1):
         cid = campaign["campaign_id"]
         campaign_dir = campaign["campaign_dir"]
