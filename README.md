@@ -43,9 +43,12 @@ in Claude Code via links (see [Install](#install)).
 
 Clone into the pi skills root — pi discovers every `SKILL.md` directory beneath it:
 
+```sh
+git clone https://github.com/tobia88/liang-skills.git ~/.pi/agent/skills/liang-skills
 ```
-git clone git@github.com:tobia88/liang-skills.git ~/.pi/agent/skills/liang-skills
-```
+
+(HTTPS works on any machine; use `git@github.com:tobia88/liang-skills.git` instead
+if the machine has an SSH key registered with GitHub.)
 
 ### Claude Code
 
@@ -53,7 +56,7 @@ Claude Code only loads `~/.claude/skills/<name>/SKILL.md` one level deep, so the
 can't be cloned there directly. Instead run the installer, which links every skill
 directory into `~/.claude/skills/` (junctions on Windows — no admin needed):
 
-```
+```sh
 # Windows
 powershell -File install.ps1
 
