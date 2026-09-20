@@ -30,7 +30,7 @@ Per the crosscut decision in `camp-2026-05-24-batch-campaign-sweep` (constraint 
 
 - One invocation → at most one sweep. Never overlap two sweeps in the same workspace.
 - Always present a pre-flight report and require explicit user confirmation before launching the script. Do not skip the confirmation gate.
-- Sweep orchestration is entirely owned by `sweep.py`. This skill never modifies manifests, planner artifacts, run reports, or any other on-disk artifact; planner-authored `plan.html` and `quest-NNN-*.md` files remain read-only.
+- Sweep orchestration is entirely owned by `sweep.py`. This skill never modifies manifests, planner artifacts, run reports, or any other on-disk artifact; planner-authored `plan.md` (and `plan.html` when present) and `quest-NNN-*.md` files remain read-only.
 - This skill never re-implements campaign discovery, toposort, dispatch, or report generation. All those live in sweep.py.
 - Campaigns archived by `liang-quest-archiver` (`.liang/campaigns/archive/<name>/`) are out of sweep scope by construction — sweep.py's one-level discovery glob never sees them (liang-quest-core protocol § Archived Campaigns). Archiving completed campaigns is the standing mitigation for the historical-campaign hazard below.
 - The sweep operates on `.liang/campaigns/` of the current workspace — either workspace-wide, or scoped via `--saga` / `--only` (see Scoped Sweeps). On a workspace with historical campaigns, **default to a scoped sweep**: an unscoped sweep re-dispatches every non-passed quest ever left behind (sweep.py resets `failed`/`skipped` quests to `ready` before dispatch). If the user asks for an unscoped sweep on a workspace where the pre-flight shows more campaigns than they plausibly intend, say so before the Confirmation Gate.
@@ -177,7 +177,7 @@ This skill must never:
 
 1. **Skip the Confirmation Gate in the interactive flow.** When invoked interactively, always require explicit user confirmation before launching in live mode. (The `sweep-afk.py` unattended entry point is the one documented exception — invoking it is itself the explicit authorization.)
 2. **Re-implement campaign discovery, toposort, dispatch, status updates, or report generation.** Those live in sweep.py.
-3. **Modify any `plan.html`, `quest-NNN-*.md`, or `run-report-*.md` file.** Planner artifacts and generated reports are read-only to this wrapper. Manifest/status mutations and sweep-report generation are `sweep.py`'s job.
+3. **Modify any `plan.md`, `plan.html`, `quest-NNN-*.md`, or `run-report-*.md` file.** Planner artifacts and generated reports are read-only to this wrapper. Manifest/status mutations and sweep-report generation are `sweep.py`'s job.
 4. **Retry or re-plan on failure.** The script's exit code is the final outcome.
 5. **Run two sweeps in parallel.** If a sweep is in progress, wait for it to complete.
 6. **Bypass workspace pre-flight.** If `.liang/project.yaml` is missing or sweep.py is absent, abort cleanly with a clear message.

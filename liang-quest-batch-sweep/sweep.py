@@ -201,7 +201,7 @@ def preflight_campaign(campaign: dict[str, Any]) -> tuple[list[str], list[str]]:
 
     Checks performed:
       1. quests[] is a non-empty list.
-      2. Campaign has a campaign-level plan.html.
+      2. Campaign has a campaign-level plan.md.
       3. Every quest has a file field that resolves to an existing .md file.
     """
     blocking: list[str] = []
@@ -215,9 +215,9 @@ def preflight_campaign(campaign: dict[str, Any]) -> tuple[list[str], list[str]]:
         blocking.append(f"{cid}: quests[] is missing or empty")
         return blocking, warnings
 
-    plan_html = campaign_dir / "plan.html"
-    if not plan_html.is_file():
-        blocking.append(f"{cid}: campaign plan.html missing at {plan_html}")
+    plan_md = campaign_dir / "plan.md"
+    if not plan_md.is_file():
+        blocking.append(f"{cid}: campaign plan.md missing at {plan_md}")
 
     for quest in quests:
         qid = quest.get("id", "<unknown>")

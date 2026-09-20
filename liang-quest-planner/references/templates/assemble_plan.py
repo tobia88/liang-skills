@@ -83,6 +83,60 @@ def _inline_style_ok(value: str) -> bool:
 
 
 # ---------------------------------------------------------------------------
+# Mojibake tripwire — reverse cp1252 laundering baked into drafted text
+# ---------------------------------------------------------------------------
+# A body (or --title) whose UTF-8 bytes round-tripped through one Windows-1252
+# decode carries every non-ASCII char as a laundered run: the em dash U+2014
+# (bytes E2 80 94) arrives as the literal chars "â€”". Each run is the
+# cp1252 rendering of one UTF-8 byte sequence, so it reverses losslessly.
+
+def _cp1252_char(byte: int) -> str:
+    # Windows decoders map the five cp1252-undefined bytes to C1 controls
+    # instead of erroring, so laundered text can carry U+0081/8D/8F/90/9D.
+    if byte in (0x81, 0x8D, 0x8F, 0x90, 0x9D):
+        return chr(byte)
+    return bytes([byte]).decode("cp1252")
+
+
+_MOJI_CONT = "".join(_cp1252_char(b) for b in range(0x80, 0xC0))
+_MOJI_BYTE = {_cp1252_char(b): b for b in range(0x80, 0x100)}
+_MOJI_SEQ = re.compile(
+    "[à-ï][{c}]{{2}}|[Â-ß][{c}]|[ð-ô][{c}]{{3}}".format(
+        c=re.escape(_MOJI_CONT)
+    )
+)
+
+
+def repair_mojibake(text: str) -> tuple[str, int]:
+    """
+    Reverse UTF-8→cp1252→UTF-8 laundering; returns (repaired_text, run_count).
+
+    Only spans that reconstruct into valid UTF-8 are touched; clean text passes
+    through unchanged. Repairing here (instead of failing validation) is
+    deliberate: a failure bounces to the same drafter whose context carried the
+    laundered glyphs, and it would faithfully re-emit them on every retry.
+    """
+    total = 0
+    for _ in range(3):  # a double-laundered file unwinds one layer per pass
+        fixed = 0
+
+        def _fix(m: re.Match[str]) -> str:
+            nonlocal fixed
+            try:
+                original = bytes(_MOJI_BYTE[ch] for ch in m.group(0)).decode("utf-8")
+            except (KeyError, UnicodeDecodeError):
+                return m.group(0)
+            fixed += 1
+            return original
+
+        text = _MOJI_SEQ.sub(_fix, text)
+        total += fixed
+        if not fixed:
+            break
+    return text, total
+
+
+# ---------------------------------------------------------------------------
 # Validation
 # ---------------------------------------------------------------------------
 
@@ -333,6 +387,7 @@ def assemble(
     except FileNotFoundError:
         print(f"ERROR: body file not found: {body_path}", file=sys.stderr)
         return 1
+    body, moji_runs = repair_mojibake(body)
 
     skin_path = TPL / f"skin-{skin_name}.css"
     try:
@@ -362,7 +417,17 @@ def assemble(
         # Extracted from the body, so already entity-encoded — do not re-escape.
         title = _extract_title(body, output_path.stem)
     else:
+        title, title_runs = repair_mojibake(title)
+        moji_runs += title_runs
         title = html.escape(title)
+
+    if moji_runs:
+        print(
+            f"MOJIBAKE: repaired {moji_runs} cp1252-laundered sequence(s) — the "
+            "drafting context is poisoned; re-Read source files from disk instead "
+            "of retyping displayed glyphs",
+            file=sys.stderr,
+        )
 
     # --- Write output ------------------------------------------------------
     output_path.parent.mkdir(parents=True, exist_ok=True)

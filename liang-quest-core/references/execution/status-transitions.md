@@ -38,6 +38,7 @@ Any transition not listed above is a violation.
 |-------|----------|---------|
 | Retry 1 | Lesson-only | Execute-child receives `accumulated_lessons` + `previous_failure`. No re-plan-child. Original step content unchanged. |
 | Retry 2+ | Re-plan escalation | Re-plan-child invoked with planning model. Produces `revised_instructions` (and optionally `revised_code_block`). Execute-child receives revised content + all accumulated lessons. |
+| Plan contradiction (any attempt) | Re-plan, lesson-only skipped | Execute-child returned a non-empty `plan_contradictions`. The first retry is already a re-plan-child call. `resolvable: false` → step and quest `failed`, contradiction written to the run report's `## Decisions needed`; the user is never prompted. |
 | Max retries exhausted | Hard fail | Step → `failed`. Quest → `failed`. Final lesson extracted. Transitive dependents cascade-skipped. |
 
 Retry tier does not affect status transitions — both tiers stay in `in_progress`. The tier distinction is recorded in the lesson schema for post-run analysis. Retry limit is `executor.max_step_retries` in `project.yaml` (default: 3).

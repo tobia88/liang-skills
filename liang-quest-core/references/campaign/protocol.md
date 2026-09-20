@@ -10,10 +10,11 @@ Input layout (produced by `liang-quest-planner`):
 
 ```
 .liang/campaigns/campaign-<YYYY-MM-DD>-<HHMM>-<slug>/
-  plan.html                       # campaign-level editorial dossier
+  plan.md                         # REQUIRED planner-authored dossier, the "why"; executor ignores it
+  plan.html                       # OPTIONAL render of plan.md + quests; present only when planner.html is true
   quest-001-<name>.md             # executable "do" doc (steps + code blocks)
   quest-002-<name>.md
-  manifest.yaml
+  manifest.yaml                   # lands last; its presence is what makes the folder visible to the pipeline
 ```
 
 Status path: `ready` → `in_progress` → `passed` | `failed` | `skipped`
@@ -23,7 +24,8 @@ No workflow stamp. The planner-native pipeline has a single executor — there i
 
 ## Layered Truth
 
-- **Plan HTML** (`plan.html`) is a planner-authored human dossier. The executor ignores it.
+- **Plan Markdown** (`plan.md`) is the planner-authored human dossier — the "why" (rationale, risks, decisions). The executor ignores it.
+- **Plan HTML** (`plan.html`) is an optional render of `plan.md` + the quest files, present only when `planner.html` is true in `.liang/project.yaml`. The executor ignores it.
 - **Quest Markdown** (`quest-NNN-*.md`) carries the executable contract: steps, code blocks, dependencies, and victory conditions.
 - **Step envelopes** (`.run/<quest-id>/step-<sid>.md`) are executor-generated Markdown transport/ledger artifacts.
 - **Run Report Markdown** (`run-report-<timestamp>.md`) carries the full run result.
@@ -77,14 +79,15 @@ implementation_summary: ""
 ~~~
 ```
 
-The Markdown body between fenced sections is the human-readable transport/ledger view. The fenced YAML blocks are the machine-readable contract. For `plan.html`, the quest Markdown remains the executable contract.
+The Markdown body between fenced sections is the human-readable transport/ledger view. The fenced YAML blocks are the machine-readable contract. Against the planner's dossier (`plan.md`, and `plan.html` when rendered), the quest Markdown remains the executable contract.
 
 ## Campaign Folder Structure
 
 ```
 .liang/campaigns/
   campaign-<yyyy-mm-dd>-<HHMM>-<slug>/
-    plan.html                    # planner-authored human dossier (ignored by executor)
+    plan.md                      # planner-authored human dossier, the "why" (ignored by executor)
+    plan.html                    # optional render of plan.md + quests; only when planner.html is true
     manifest.yaml                # machine-readable quest index
     quest-001-<name>.md          # executable "do" doc
     quest-002-<name>.md
@@ -103,7 +106,7 @@ The Markdown body between fenced sections is the human-readable transport/ledger
 ```
 
 Key points:
-- `plan.html` remains the planner-authored human dossier; the executor never reads it.
+- `plan.md` remains the planner-authored human dossier; `plan.html` is an optional render of it. The executor never reads either.
 - Quest step envelopes live under `.run/<quest-id>/step-<sid>.md`.
 - Run reports are Markdown files with YAML front matter: `run-report-<timestamp>.md`.
 - The `.run/` directory is executor-owned metadata; no campaign semantics depend on it for correctness.
@@ -113,7 +116,7 @@ Key points:
 Completed campaigns may be moved to `.liang/campaigns/archive/<campaign-name>/` by `liang-quest-archiver`.
 
 - `archive/` is **out of scope for every family skill**. Status, executor, batch-sweep, and planner discover campaigns via the one-level glob `.liang/campaigns/*/manifest.yaml`; archived campaigns sit one level deeper and are therefore invisible to the pipeline by construction. Never deepen that glob.
-- Archived campaigns keep their manifest, quest markdowns, run reports, `lessons.yaml`, and `plan.html`. `.run/` ledgers are deleted at archive time (they are executor-owned metadata with no campaign semantics).
+- Archived campaigns keep their manifest, quest markdowns, run reports, `lessons.yaml`, `plan.md`, and `plan.html` when present. `.run/` ledgers are deleted at archive time (they are executor-owned metadata with no campaign semantics).
 - Eligibility rules live in `liang-quest-archiver` (its `archive_sweep.py` is the source of truth), not here — this section defines only the directory convention.
 - Archival is one-way by convention; restoring a campaign is a manual move back out of `archive/`.
 
@@ -121,7 +124,7 @@ Completed campaigns may be moved to `.liang/campaigns/archive/<campaign-name>/` 
 
 Reusable executor helpers are owned by the quest skill/core layer, not by campaign `.run/` directories. Use `liang-quest-executor` for executor-only helpers and `liang-quest-core` for helpers shared across quest-family skills. A campaign may record helper metadata or a deliberate reproducibility snapshot in `.run/`, but the canonical implementation should not be regenerated per campaign.
 
-Before adding shared helper code, decide the concrete owner path, reference-vs-snapshot policy, whether `plan.html` remains a human-only dossier (the executor never reads it), and whether run-report generation is executor-local or core-shared.
+Before adding shared helper code, decide the concrete owner path, reference-vs-snapshot policy, whether `plan.md` remains a human-only dossier (the executor never reads it, nor its optional `plan.html` render), and whether run-report generation is executor-local or core-shared.
 
 ## Quest Dependency Order
 

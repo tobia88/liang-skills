@@ -338,9 +338,9 @@ def check_campaigns(ws: Path) -> None:
             continue  # terminal — sweep will skip; no detailed quest validation
         runnable += 1
         cid = m.get("campaign_id", entry.name)
-        # plan.html (sweep.py + executor expectation)
-        if not (entry / "plan.html").is_file():
-            record(FAIL, f"plan.html present [{cid}]", "sweep.py preflight blocks")
+        # plan.md (sweep.py preflight expectation; plan.html is optional and never checked)
+        if not (entry / "plan.md").is_file():
+            record(FAIL, f"plan.md present [{cid}]", "sweep.py preflight blocks")
         # per-quest gates (executor §3)
         for q in quests:
             qid = q.get("id", "?")

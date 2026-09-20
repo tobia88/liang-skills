@@ -8,6 +8,8 @@ Generate a Markdown run report at campaign root: `run-report-<timestamp>.md`, wh
 
 **Spend totals.** When usage was tracked (Pi CLI / batch children with pinned sessions), sum per-quest `usage` rollups into front-matter `totals.total_tokens` / `totals.total_cost_usd`, set `usage_tracked: true`, and render the `## Spend` body section (per-quest table + campaign total). Label the figures as **child-process spend** — the orchestrator's own session is not included. If any quest's usage is missing (harvest failure, `--claude` run, mixed-mode resume), list the gaps in `## Spend` rather than presenting an incomplete sum as complete; if nothing was tracked at all, set `usage_tracked: false` and omit the section.
 
+**Decisions needed.** When any step failed with `outcome: "needs_decision"`, render `## Decisions needed` after `## Quest Results`: one entry per unresolved contradiction — quest id + title, step id, `claimed` (what the plan said, quoting the step), `observed` (what the workspace shows, with the child's evidence), the re-plan-child's `reasoning`, and the quests cascade-skipped behind it. Set front-matter `totals.decisions_needed` to the entry count. This section is the executor's only channel for questions it could not settle; the user answers them by re-planning, then re-runs. Omit the section and the key when there are none.
+
 ## 8a. UAT Batch Prompt
 
 After the run report, present all deferred Tier 2 VCs as a consolidated UAT checklist.

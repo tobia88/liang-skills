@@ -26,6 +26,8 @@ You are Liang's planner-native quest executor — the canonical execution skill 
 - **Three modes:** default Pi CLI (spawned `pi --model ...` with file I/O via step envelopes), `--claude` (Claude Code Agent subagents, in-memory I/O), `--batch` (background script + polling).
 - **Quest-level VC verification** after all steps pass: auto-classify each VC — mechanical → Tier 1 (inline, or verify-child for complex cases); judgmental → Tier 2 deferred UAT queue; the quest passes provisionally until §8a.
 - **Tiered retry per step:** Retry 1 lesson-only; retry 2+ re-plan-child for revised instructions; bounded by `max_step_retries` (default 3). Re-plan revisions never touch the quest `.md` on disk.
+- **Plan contradictions:** a child that finds the step's stated facts false against the workspace (a count, a path, a pattern, a measured value) reports them in `plan_contradictions`. A non-empty list is a step failure with `failure_type: "plan_contradiction"` that enters §7c **directly at the re-plan tier** — the planning model decides, never the user. Contradictions the re-plan-child cannot resolve fail the quest and land in the run report's `## Decisions needed`.
+- **Unattended by default when configured:** `executor.unattended: true` in `project.yaml` implies `--no-confirm` on every run; `--confirm` restores the interactive gates for one run. Between the intake confirm (or launch, when unattended) and §8a the executor never puts a question to the user — see Boundaries 18.
 - **Step envelope I/O:** Each step gets one executor-generated `step-<sid>.md` envelope in `.run/<quest-id>/` — transport/ledger with fenced YAML blocks, full parity across modes (`references/step-envelope.md`).
 - **Usage tracking:** Every Pi CLI / batch child runs with its session pinned under `.run/<quest-id>/sessions/`; after each child exits the executor harvests token + cost records from the session file into the envelope's `usage` section, rolls quest totals into `complete.yaml` and the manifest's `usage` field, and reports campaign spend in the run report (`references/step-envelope.md § Usage Harvest`). `--claude` mode is untracked — subagent dispatch exposes no usage data.
 - **Shared helper policy:** `.run/` is a per-run ledger, not the home of reusable tooling. Reference versioned shared helpers (record name, owner path, version/hash in run metadata) instead of copying them per campaign.
@@ -47,7 +49,9 @@ Do **not** activate from generic intent like "run this," "execute this," "do thi
 
 ## Non-Interactive Invocation (`--no-confirm`)
 
-Bypasses all interactive gates with documented defaults, for parent-process invocation (e.g. a multi-campaign sweep). Independent of `--batch` and `--claude`; combine in any subset.
+Bypasses all interactive gates with documented defaults, for parent-process invocation (e.g. a multi-campaign sweep) and for unattended direct runs. Independent of `--batch` and `--claude`; combine in any subset.
+
+**Implied by config.** When `.liang/project.yaml` has `executor.unattended: true`, every run behaves as if `--no-confirm` were passed. `--confirm` on the invocation overrides the setting for that run; `--no-confirm` on the invocation is redundant but harmless. Announce which source resolved the mode in one line at startup ("unattended: project.yaml" / "unattended: --no-confirm" / "interactive").
 
 **Bypasses:** §1 confirm (proceed), §4 crash recovery (Resume), §5 intake confirm (proceed), §8a UAT (skip; Tier 2 VCs stay `tier_2_deferred` — §8b still writes `uat-checklist.md`), §9 cleanup (preserve all), §10 VCS policy (`"ask"`/absent → treat as `"ignore"` silently, no write-back), §11 commit suggestion (skip).
 
@@ -80,7 +84,7 @@ State what the run will do (queue `ready` quests in dependency order; per quest 
 
 ### 2. Project Config Check
 
-Read `.liang/project.yaml`. If absent: offer to bootstrap a minimal one interactively, or stop. If present: validate `schema_version`, `vcs`, `models.planning`, `models.execution_by_difficulty.{easy,medium,hard}`; read optional `executor.max_step_retries` (default 3), `executor.child_timeout_seconds` (default 300), and in `--claude` mode `models.claude_mode.{easy,medium,hard,verify,planning}` (all optional with documented defaults).
+Read `.liang/project.yaml`. If absent: offer to bootstrap a minimal one interactively, or stop. If present: validate `schema_version`, `vcs`, `models.planning`, `models.execution_by_difficulty.{easy,medium,hard}`; read optional `executor.max_step_retries` (default 3), `executor.child_timeout_seconds` (default 300), `executor.unattended` (default false; `true` implies `--no-confirm` unless `--confirm` was passed — resolve this **before** §1 runs), and in `--claude` mode `models.claude_mode.{easy,medium,hard,verify,planning}` (all optional with documented defaults).
 
 **Hard block — `models.verify` must be configured.** If absent: explain why the verify model is needed, present an interactive model selection prompt, write the choice to `project.yaml`. Never silently default.
 
@@ -129,11 +133,11 @@ For each step in order: set manifest `current_cycle` (1-based), then spawn the e
   Wait for exit (timeout `executor.child_timeout_seconds`), read the envelope's Output block, then harvest usage from the pinned session into the envelope's `usage` section (`references/step-envelope.md § Usage Harvest` — applies to every child this skill spawns, including §7c re-plan and §7d verify children).
 - **Claude mode:** dispatch a Claude Code Agent subagent (tier per difficulty) with step content + target files + quest context in-memory; the subagent returns a structured result and the executor back-fills the envelope afterward. No timeout — subagent dispatch has no kill mechanism; wait for the return.
 
-Expected output: `files_changed` (list), `implementation_summary` (string), `status` (`"success"`/`"error"`), `error_message` (when error). On success: finalize the envelope's Output block, VCS-neutral checkpoint, next step. On error or timeout: enter §7c.
+Expected output: `files_changed` (list), `implementation_summary` (string), `status` (`"success"`/`"error"`), `error_message` (when error), `plan_contradictions` (list, may be empty). On success with an empty `plan_contradictions`: finalize the envelope's Output block, VCS-neutral checkpoint, next step. On error or timeout: enter §7c. On a non-empty `plan_contradictions` (whatever `status` says): treat as a failure with `failure_type: "plan_contradiction"` and enter §7c at the re-plan tier.
 
 #### 7c. Tiered Retry Loop
 
-Bounded by `max_step_retries` (default 3). Retry 1 re-executes the unchanged step with accumulated lessons only; retry 2+ spawns a re-plan-child (planning model) whose `revised_instructions` / optional `revised_code_block` replace the step content for that attempt. Every failure appends a lesson to `<campaign-root>/lessons.yaml`. Retries exhausted → step `failed`, final lesson `outcome: "exhausted"`, quest `failed`, exit to §7e. The quest `.md` on disk is never modified. Full payloads and lesson fields: `references/retry-protocol.md` — load on first step failure.
+Bounded by `max_step_retries` (default 3). Retry 1 re-executes the unchanged step with accumulated lessons only; retry 2+ spawns a re-plan-child (planning model) whose `revised_instructions` / optional `revised_code_block` replace the step content for that attempt. A `plan_contradiction` failure skips the lesson-only tier: its first retry is already a re-plan, because re-running a step against facts known to be false cannot help. The re-plan-child receives the contradiction list; when it answers `resolvable: false` (the contradiction needs a decision the plan never made), the step fails immediately, the quest fails, and the contradiction is carried into the run report's `## Decisions needed` — the executor does not ask the user. Every failure appends a lesson to `<campaign-root>/lessons.yaml`. Retries exhausted → step `failed`, final lesson `outcome: "exhausted"`, quest `failed`, exit to §7e. The quest `.md` on disk is never modified. Full payloads and lesson fields: `references/retry-protocol.md` — load on first step failure.
 
 #### 7d. Quest-Level Victory Condition Verification
 
@@ -152,7 +156,7 @@ Skip if the quest already failed in the step loop (proceed to §7e). Otherwise a
 
 After the queue is exhausted, run §8–12 in order per `references/completion-flow.md` (load it at this point):
 
-- **§8 Run Report** — Markdown at campaign root: `run-report-<YYYY-MM-DD-HHMM>.md` (local time, lexical sort), YAML front matter + Markdown body.
+- **§8 Run Report** — Markdown at campaign root: `run-report-<YYYY-MM-DD-HHMM>.md` (local time, lexical sort), YAML front matter + Markdown body. Includes `## Decisions needed` whenever a quest failed on an unresolvable plan contradiction: one entry per contradiction, with the quest, the step, what the plan said, what the workspace shows, and the re-plan-child's reasoning. This section is the only channel for questions the run could not settle itself.
 - **§8a UAT Batch Prompt** — present deferred Tier 2 VCs as a consolidated yes/no checklist; any "no" downgrades the quest to `failed` with lesson `uat_rejected`. **`--no-confirm`:** skip; items stay `tier_2_deferred`.
 - **§8b UAT Checklist Artifact** — regenerate `uat-checklist.md` at campaign root: unpassed `manual: true` quests `[MANUAL]`, dependency-blocked skips `[AGENT]` with their blocker named, remaining Tier-2 deferrals — VCs verbatim, quest-dependency order; delete the file when nothing qualifies. Runs in **all** modes including `--no-confirm` (there it is the only persistent UAT surface). `liang-quest-saga-planner --uat` collects these files saga-wide.
 - **§8c Feature Walkthrough Artifact** — `walkthrough.md` at campaign root: a guided tour of **every** quest including passed ones (what was built / where it lives / see-it-run steps). **On demand only** — never part of the completion flow; runs standalone when invoked directly or as a `liang-quest-saga-planner --tour` (Phase 6) worker.
@@ -203,6 +207,8 @@ This skill must never:
 15. **Regenerate large identical helper scripts into each campaign `.run/`** when a versioned shared helper exists; reference and record it instead.
 16. **Dispatch a `manual: true` quest to any child process.** Manual quests are held at intake (§5) and reach the user only via the queue display and §8b.
 17. **Perform any VCS write beyond the scoped §10a reconcile.** Never `p4 submit`, `p4 revert`, or a bare/workspace-wide `p4 reconcile` — the workspace may carry deliberate local drift that must never be opened for submit.
+18. **Put a question to the user between the §5 intake confirm and §8a.** (Unattended runs: between launch and the run report.) That includes "which option do you want", "may I overwrite", "is this finding right" and every other mid-run prompt, in any mode — `--claude` mode runs in the user's session, which makes asking cheap and is exactly why it is forbidden. A decision the executor cannot make mechanically goes to the re-plan-child; one the re-plan-child cannot make fails the quest and is written to `## Decisions needed`. The user is never the planning tier. The only prompts in a run are the documented gates (§1, §4, §5, §8a, §9, §10, §12) and the planner-authored "stop and report" instructions inside a quest step, which end the quest as `failed` with the report in the run report — they do not open a dialogue.
+19. **Invent steps.** No "addendum" or "extra" steps outside the quest's `## Steps`. Work the plan did not foresee is either a re-plan-child revision of an existing step (recorded in that step's envelope) or an entry in `## Decisions needed` for the next planning pass. A quest cannot pass on work its own step list never asked for.
 
 If asked for any of the above, decline, explain the boundary, and offer the closest in-scope alternative.
 

@@ -148,7 +148,14 @@ status: "success" | "error"
 files_changed: [string]
 implementation_summary: string
 error_message: string            # only when status is "error"
+plan_contradictions:             # facts the step asserts that the workspace contradicts; [] when none
+  - claimed: string              # what the step says, quoted
+    observed: string             # what the workspace shows
+    evidence: string             # file:line, command + output, or measurement that shows it
+    blocks_step: boolean         # true when the step cannot be completed as written
 ```
+
+`plan_contradictions` is the child's only channel for "the plan is wrong". A child never asks the caller a question and never decides a contradiction on its own when `blocks_step` is true — it stops, reports, and lets the executor route it to a re-plan-child. When `blocks_step` is false the child may complete the step on the observed facts and still report the contradiction, so the run report records the drift.
 
 The child is responsible for: reading existing files referenced by the step, applying the code blocks (write files specified by `// file:` markers), making any edits the step description calls for, and confirming the result with a brief implementation summary. No pre/postcondition validation — the planner-native format does not specify them per step.
 
@@ -222,10 +229,15 @@ quest_context:
   dependencies: [string]         # quest IDs this quest depends on
 failure_context:
   attempt: integer
-  failure_type: string           # error | timeout | malformed_output | unexpected
+  failure_type: string           # error | timeout | malformed_output | plan_contradiction | unexpected
   error_summary: string
   stdout_tail: string
   stderr_tail: string
+  plan_contradictions:           # present when failure_type is plan_contradiction; verbatim from the execute-child
+    - claimed: string
+      observed: string
+      evidence: string
+      blocks_step: boolean
 
 previous_lessons: [string]       # all lesson entries for this step
 
@@ -248,7 +260,13 @@ revised_code_block:              # optional; only when the code block needs repl
 reasoning: string
 confidence: "high" | "medium" | "low"
 root_cause_hypothesis: string
+resolvable: boolean              # false when a contradiction needs a decision the plan never made
+                                 # (a changed deliverable count, a different file to overwrite, a
+                                 # public name); the executor then fails the quest and reports it
+                                 # under "Decisions needed" instead of re-executing
 ```
+
+The re-plan-child decides plan contradictions itself, from the quest purpose, the campaign `plan.md`, and the evidence. It has no user to ask; `resolvable: false` is the only way to hand a decision back, and it goes to the run report, not to a prompt.
 
 The re-plan-child must NOT modify the source quest `.md` file. Its output lives in the `step-<sid>.md` step envelope's re-plan section and is consumed by the next execute-child attempt in-memory.
 

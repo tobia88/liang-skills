@@ -2,6 +2,8 @@
 
 Load when running --handover; source of truth for this mode.
 
+**Gated on `planner.html`.** This mode runs only when `planner.html` is true in `.liang/project.yaml`. With it false there is no HTML surface: `--handover` reports that `uat-checklist.md` and `walkthrough.md` are the deliverable, names their paths, and stops without rendering.
+
 **Presentation layer only.** Renders the two saga-level rollups — `uat-checklist.md` (Phase 5) and
 `walkthrough.md` (Phase 6) — into a single self-contained `<saga-dir>/handover.html` the user reads
 in a browser. The two markdown files stay the source of truth: agents parse them, checkbox state
@@ -14,7 +16,7 @@ renders as static text), never collected or parsed by any downstream skill.
    re-run that phase before rendering — never patch the HTML around stale markdown.
 2. **Render with the planner's Phase 2c machinery** — same body-drafter pattern, same
    class contract, same `assemble_plan.py` + the saga `skin` (the page joins the `saga.html` /
-   `plan.html` visual family). No bespoke CSS. The handover-shaped mapping onto the contract:
+   `plan.html` visual family, when those renders exist). No bespoke CSS. The handover-shaped mapping onto the contract:
    - One `section.quest` per **tour stop** (campaign), topological order, `id="c01"`…; TOC heading
      "Tour Stops"; eyebrow "Stop NN · <passed>/<total>"; `diff-badge` = the campaign's saga-level
      difficulty; `dep-state` = `<passed>/<total> · depends: <ids>`.

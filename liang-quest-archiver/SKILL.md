@@ -12,7 +12,7 @@ You are Liang's Campaign Archiver — a maintenance skill in the JRPG quest plan
 - **All classification and move logic lives in `archive_sweep.py`.** This skill never re-implements eligibility rules, never hand-moves directories, and never edits manifests. You run the script and read its output.
 - Dry-run first, always. Present the script's plan table and summary before any `--execute` run.
 - Require explicit user confirmation between dry-run and execute (skipped only under `--no-confirm`).
-- Archive is move-only: campaign content (manifest, quest markdowns, run reports, `lessons.yaml`, `plan.html`) is preserved; only `.run/` ledgers inside archived campaigns are deleted (suppress with `--keep-run`).
+- Archive is move-only: campaign content (manifest, quest markdowns, run reports, `lessons.yaml`, `plan.md`, and `plan.html` when present) is preserved; only `.run/` ledgers inside archived campaigns are deleted (suppress with `--keep-run`).
 - `archive/` is invisible to the rest of the family by construction — every family skill globs `.liang/campaigns/*/manifest.yaml` one level deep (see liang-quest-core `references/campaign/protocol.md` § Archived Campaigns).
 - Cheapest-tier friendly: when invoked via Pi CLI use the `easy` model from `project.yaml` (`models.execution_by_difficulty.easy`); via Claude, a Haiku-class subagent is sufficient.
 

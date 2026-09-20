@@ -39,7 +39,7 @@ The declaration must be prominent and unambiguous — any skill reading quest-co
 | Skill | Role | Reads From Core |
 |---|---|---|
 | **liang-quest-core** | Shared references (this skill) | — |
-| **liang-quest-planner** | Same-context campaign planner — extracts decisions from in-session conversation, writes `plan.html` + flat `quest-NNN-*.md` files + `manifest.yaml` | `campaign/` (manifest schema, protocol), `code-style/` (UE C++ code blocks) |
+| **liang-quest-planner** | Same-context campaign planner — extracts decisions from in-session conversation, writes `plan.md` (+ optional `plan.html`) + flat `quest-NNN-*.md` files + `manifest.yaml` | `campaign/` (manifest schema, protocol), `code-style/` (UE C++ code blocks) |
 | **liang-quest-executor** | Planner-native executor — spawns child processes per step (Pi CLI / Claude subagents / batch), tiered retry, quest-level VC verification with Tier 1 inline + Tier 2 deferred UAT | `campaign/`, `execution/`, `project/`, `code-style/` |
 | **liang-quest-batch-sweep** | Multi-campaign sweep launcher/orchestrator — wraps `sweep.py`, dispatches executor per eligible campaign, writes sweep reports | `campaign/`, `project/` |
 | **liang-quest-status** | Read-only campaign status dashboard. Scans all manifests across all formats and renders an adaptive markdown view. | `campaign/` (protocol) |

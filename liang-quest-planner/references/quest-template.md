@@ -6,8 +6,11 @@
   - Code blocks must have a file path comment on the first line.
   - Lean executable contract only: Purpose, Steps/code blocks, Dependencies, Victory Conditions.
   - No tutorial prose, rationale, or "why" explanations.
+  - Every count, path, pattern, or measured value in a step was checked against the
+    workspace (plan.md "Verified facts"); one that could not be checked is written
+    as "assumed: <fact>" so the execute-child verifies it before building on it.
   - Victory conditions use checkbox format, not narrative.
-  - This is the "do" doc; plan.html is the "why" doc.
+  - This is the "do" doc; plan.md is the "why" doc.
 -->
 
 # Quest [NNN]: [QUEST_TITLE]

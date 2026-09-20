@@ -1,6 +1,6 @@
 # plan.html Class Contract
 
-The interface between the three generation layers. **Read this before authoring any `base.css`, any `skin-*.css`, or the Phase 2 body generator.** All three layers target the same class names defined here. Change a name here and you must update `base.css` + all skins + the generator in lockstep — that is why this is pinned first.
+The interface between the three generation layers. **Read this before authoring any `base.css`, any `skin-*.css`, or the Phase 2 body generator.** The body is a transcription of the campaign's `plan.md` and quest files, read from disk — the class names below say where each piece of those files lands, never what the page should say. All three layers target the same class names defined here. Change a name here and you must update `base.css` + all skins + the generator in lockstep — that is why this is pinned first.
 
 ## The three layers
 

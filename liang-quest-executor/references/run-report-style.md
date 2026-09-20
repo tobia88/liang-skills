@@ -8,6 +8,7 @@ Run reports use native Markdown structure only — no HTML, CSS, JavaScript, ima
 - `## Quest Results` — summary table (see below).
 - `## Quest Details` — per-quest breakdown with step tables.
 - `## Lessons` — structured failure records.
+- `## Decisions needed` — unresolved plan contradictions, one entry each (quest, step, claimed, observed, evidence, re-plan reasoning, cascade). Only when at least one exists.
 - `## Deferred UAT` — Tier 2 victory condition items.
 - Sub-headings under quest details use `### <Quest ID>: <Title>`.
 

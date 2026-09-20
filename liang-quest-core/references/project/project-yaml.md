@@ -29,7 +29,7 @@ created_at: string           # ISO 8601
 
 ```yaml
 models:
-  body_drafter: string       # model ID for the planner's body-drafting subagent (Phase 2c / Phase 3 full regens)
+  body_drafter: string       # model ID for the planner's body-drafting subagent (planner 2c and Phase 3 re-renders)
   apply_brief: string        # model ID for liang-brainstorm-quick's Option A (apply-immediately) delegation
   saga_intake: string        # model ID for liang-quest-saga-planner's Phase 1 intake subagent
   saga_planner: string       # model ID for the saga planner's batch-mode per-campaign planner subagent
@@ -59,7 +59,7 @@ Both keys are additive-optional: safe defaults when absent, no `schema_version` 
 
 A step that resolves to a model the current harness cannot spawn is treated as **unresolved** — continue down the chain. Harnesses that spawn subagents by tier alias rather than raw model ID (Claude Code can only spawn Claude tiers) resolve through the `claude_mode` namespace instead: `models.claude_mode.body_drafter` → `models.claude_mode.medium` → `sonnet` (the namespace's medium default). This keeps a mixed-vendor `execution_by_difficulty` block (e.g. pi model IDs) from silently routing the drafter to the session model under Claude Code. The planner announces the resolved drafter model — and any step skipped as unspawnable — in one line before spawning.
 
-If `project.yaml` itself is missing at planning time, the planner skips to step 3 silently — planning may legitimately run in a fresh workspace before the executor's first-run interview has ever run. The planner never writes `project.yaml`, and the first-run interview does not ask for this key.
+`project.yaml` is required at planning time, so this chain always resolves against a real file: when the file is missing, the planner runs the shared first-run interview (see § First-Run Interview) before drafting. The harness-default step covers a missing `models.body_drafter` **key**, not a missing file. The first-run interview does not ask for this key.
 
 **`models.apply_brief`** — Model used by liang-brainstorm-quick's Option A (apply-immediately) delegation. Resolution chain: `models.apply_brief` → `models.execution_by_difficulty.medium` → harness default. Additive optional key; absence does not bump schema_version.
 
@@ -72,11 +72,21 @@ If `project.yaml` itself is missing at planning time, the planner skips to step 
 ```yaml
 planner:
   visual: string             # "auto" | "always" | "never" — plan-visual policy for liang-quest-planner (default: "auto")
+  html: boolean              # true | false — REQUIRED, no default; plan/saga render surface
 ```
 
-Additive-optional: when the block or key is absent, `auto` applies; no `schema_version` bump.
+`planner.visual` is additive-optional: when the block or key is absent, `auto` applies. `planner.html` has **no default** — an absent key is asked once and written back (below). Neither key bumps `schema_version`.
 
 **`planner.visual`** — consumed read-only by `liang-quest-planner` in Phase 2a (semantics in the planner's `references/html-design-contract.md` §10). `auto` lets the skip-biased classifier decide per campaign (UI wireframe / flow-state diagram / sequence timeline / none); `always` forces a visual on every plan (the planner still picks the type); `never` suppresses visuals entirely. Per-run invocation flags `--visual` / `--no-visual` override this key. The first-run interview does not ask for it; add it manually when explicit control is wanted.
+
+**`planner.html`** — the render surface for `liang-quest-planner` and `liang-quest-saga-planner`. A **required boolean with no default**:
+
+- `true` — the planner renders `plan.html` and opens it, and discussion happens on the page; the saga planner renders `saga.html` and `handover.html`.
+- `false` — **trust mode**: no HTML, no discussion phase. The markdown dossiers (`plan.md`, `saga.md`) are the only human-readable output.
+
+Per-run invocation flags `--html` / `--no-html` override the key for one invocation. There is no `auto` value.
+
+When the key is absent, the next planner or saga-planner run asks interview question 8 once and writes the answer back to `project.yaml` — the same self-healing pattern as `vcs_artifacts` and `models.verify`. In headless mode (no user to answer) a missing key is a hard stop with a clear message, exactly like a missing file.
 
 ### Executor Extensions (optional)
 
@@ -85,9 +95,12 @@ executor:
   max_step_retries: integer          # default: 3; max retry attempts per step. Read by liang-quest-executor.
   child_timeout_seconds: integer     # default: 300; max time per child invocation
   campaign_timeout_seconds: number   # default: 3600; max time per campaign dispatch in liang-quest-batch-sweep; 0 disables
+  unattended: boolean                # default: false; true makes every liang-quest-executor run behave as --no-confirm
 ```
 
 If the `executor` block is absent, use defaults silently.
+
+**`executor.unattended`** — when `true`, `liang-quest-executor` treats every invocation as `--no-confirm`: no intent confirm, no intake confirm, crash recovery resumes, UAT stays deferred to `uat-checklist.md`, cleanup preserves, VCS policy `ask` reads as `ignore`. A `--confirm` flag on one invocation restores the interactive gates for that run only. The setting does not change what the executor may ask mid-run — that is never anything, in any mode — it only removes the start and end gates. Additive-optional; no `schema_version` bump.
 
 ### VCS Artifact Policy (optional)
 
@@ -123,9 +136,11 @@ vcs_artifacts:
 created_at: "2026-05-19T22:31:00+08:00"
 ```
 
-## First-Run Interview
+## First-Run Interview (shared: executor, planner, saga planner)
 
-The canonical `liang-quest-executor` bootstraps `project.yaml` via an interactive interview when the file is missing.
+`project.yaml` is required by `liang-quest-executor`, `liang-quest-planner`, and `liang-quest-saga-planner`. Whichever of the three runs first against a workspace that has no `project.yaml` bootstraps it via this interactive interview — the definition lives here so all three ask the same questions in the same order.
+
+In headless mode (a fresh-context subagent or any invocation with no user present) a missing `project.yaml` — or a present file missing the `planner.html` key — is a **hard stop**: report which file or key is missing and exit without planning. Never guess a value.
 
 Questions are asked one at a time, in order:
 
@@ -141,10 +156,11 @@ Questions are asked one at a time, in order:
 5. **Easy execution model** — Ask for easy-difficulty model ID.
 6. **Medium execution model** — Ask for medium-difficulty model ID.
 7. **Hard execution model** — Ask for hard-difficulty model ID.
+8. **Plan render surface** — "Will you read plan pages in a browser for this project? (yes = render plan.html and discuss on it; no = trust mode, markdown only)". Write the answer to `planner.html` as `true` or `false`.
 
 Each question is independent — no "same as previous" shortcuts. The user may type any model ID.
 
-The interview does not ask for the optional routing keys (`models.body_drafter`, `models.claude_mode`) or `planner.visual` — their fallback chains and defaults make them optional in practice; add them to `project.yaml` manually when explicit control is wanted.
+The interview does not ask for the optional routing keys (`models.body_drafter`, `models.claude_mode`) or `planner.visual` — their fallback chains and defaults make them optional in practice; add them to `project.yaml` manually when explicit control is wanted. `planner.html` **is** asked, because it has no default.
 
 ## Verify Model Configuration
 
@@ -158,7 +174,7 @@ The `models.verify` field is required by both executors. If absent when an execu
 ## Schema Versioning
 
 - Current version: `schema_version: 1`
-- **Additive-optional** fields (new keys with a safe default when absent) do not require a `schema_version` bump. Examples: `vcs_artifacts` defaults to `"ask"` when absent; `models.body_drafter` and `models.claude_mode` fall back to their documented resolution chains; `planner.visual` defaults to `"auto"`.
+- **Additive-optional** fields (new keys with a safe default when absent) do not require a `schema_version` bump. Examples: `vcs_artifacts` defaults to `"ask"` when absent; `models.body_drafter` and `models.claude_mode` fall back to their documented resolution chains; `planner.visual` defaults to `"auto"`. `planner.html` has no default, but its absence triggers a one-time prompt and write-back rather than a parse failure — the same additive-optional shape as `vcs_artifacts`.
 - **Breaking changes** (removed fields, changed semantics, new required fields without safe defaults) require a `schema_version` bump.
 - Never retroactively edit existing configs for schema changes
 - Skills must check `schema_version` before parsing
@@ -166,7 +182,7 @@ The `models.verify` field is required by both executors. If absent when an execu
 ## Rules
 
 - The canonical `liang-quest-executor` creates `project.yaml` when absent and reads it on every run.
-- `liang-quest-planner` reads `project.yaml` (for `models.body_drafter` and `planner.visual` resolution) but never creates or writes it.
+- `liang-quest-planner` and `liang-quest-saga-planner` require `project.yaml` and read it on every run (`models.body_drafter`, `planner.visual`, `planner.html`, and the saga `models.saga_*` chains). Both may bootstrap the file via the shared first-run interview when it is missing, and both may write back `planner.html` after asking question 8. They write no other key.
 - The executor may add the `executor` block if absent (extension, not core change).
 - The executor may add `models.verify` via interactive prompt if absent.
 - No skill may extend the schema beyond defined fields without a version bump.
