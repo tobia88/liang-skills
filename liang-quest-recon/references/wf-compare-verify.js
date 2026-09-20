@@ -14,8 +14,9 @@
 //   deltaNote       (optional) one paragraph pointing at the delta doc and what it implies
 //   today           (optional) date string stamped into 00-index.md frontmatter
 //   pipelineNote    (optional) run-identifier text for the index frontmatter
-//   models          (optional) { compare, verify, fix, cross, synthesis } — default sonnet everywhere
-//                   except synthesis, which defaults to null = inherit the session model (top tier)
+//   excludedSpans   (optional) the chunk map's excluded ranges, as text — workers never read them
+//   models          (optional) { compare, verify, fix, cross, synthesis } — resolved by the orchestrator from
+//                   project.yaml; an absent key means no model override (harness default)
 //   efforts         (optional) { compare, verify, fix, cross, synthesis } — default high/high/medium/high/high
 //
 // Returns: { perSystem, lostSystems, consistencyIssues, consistencyPath, indexPath, headline, perSystemLines }.
@@ -33,13 +34,15 @@ export const meta = {
 }
 
 if (!args || !args.protoPath || !args.outDir || !args.projectContext || !args.sourceContext || !args.scopeRule || !args.lockedDecisions || !Array.isArray(args.systems) || !args.systems.length) {
-  throw new Error('recon-compare-verify requires args: protoPath, outDir, projectContext, sourceContext, scopeRule, lockedDecisions, systems[] (plus optional hintsPreamble, deltaNote, today, pipelineNote, models, efforts)')
+  throw new Error('recon-compare-verify requires args: protoPath, outDir, projectContext, sourceContext, scopeRule, lockedDecisions, systems[] (plus optional excludedSpans, hintsPreamble, deltaNote, today, pipelineNote, models, efforts)')
 }
 
 const PROTO = args.protoPath
 const OUT = args.outDir
 const SYSTEMS = args.systems
-const M = Object.assign({ compare: 'sonnet', verify: 'sonnet', fix: 'sonnet', cross: 'sonnet', synthesis: null }, args.models || {})
+const M = args.models || {}
+// No default model lives here: an unresolved role is spawned without a model override (harness default).
+const opt = (o, m) => (m ? { ...o, model: m } : o)
 const E = Object.assign({ compare: 'high', verify: 'high', fix: 'medium', cross: 'high', synthesis: 'high' }, args.efforts || {})
 const TODAY = args.today || 'unknown-date'
 
@@ -53,6 +56,9 @@ const VOCAB = `STATUS VOCABULARY (assign exactly one per feature):
 LOCKED-DECISION RULE: a feature conflicting with a locked decision is "divergent" with a locked-decision note, never "missing" — decisions supersede the prototype.
 EVIDENCE RULES: every done/partial/divergent verdict cites at least one repo-relative path:line you actually opened — a skeptic will re-open every citation and fail the document on any citation that does not support its verdict. Judge by MECHANIC, not medium. Compare against the current on-disk state of the source. Where the code is ahead of the prototype, note it as "ahead", not a gap. Explicit prose in the prototype is assessed mechanics-only and never reproduced.`
 
+// stage-briefs.md "Common rules (append to every brief)"
+const COMMON = `COMMON RULES: the Read tool may render UTF-8 punctuation as mojibake — write proper punctuation, never transcribe mojibake bytes. Read the prototype only in slices of at most 1500 lines via offset/limit; never the whole file; never these excluded ranges: ${args.excludedSpans || '(none listed — see _chunkmap.json "excluded")'}. Explicit adult prose is summarized mechanics-only, never reproduced. Base64/data-URI lines are never read.`
+
 const CTX = `${args.projectContext}
 
 You are one stage of a multi-agent recon pipeline that turned the prototype ${PROTO} into per-system breakdown docs under ${OUT}, now being compared against the target codebase.
@@ -63,7 +69,9 @@ SCOPE RULE: ${args.scopeRule}
 
 LOCKED DECISIONS (authoritative over the prototype): ${args.lockedDecisions}
 
-${VOCAB}`
+${VOCAB}
+
+${COMMON}`
 
 const HINTS_PRE = args.hintsPreamble || 'Hints below are UNVERIFIED CLAIMS from prior planning memory — verify every one against the code; recorded campaign statuses may have drifted in either direction.'
 const DELTA_NOTE = args.deltaNote || ''
@@ -179,7 +187,9 @@ Return JSON: system, changes (one string per correction made), md_updated.`
 
 function reverifyPrompt(s, i, errors) {
   const md = OUT + '/' + nn(i) + '-' + s.id + '.md'
-  return `You are re-auditing the document ${md} (system "${s.title}", prototype ${PROTO}) after a fixer addressed these previously-found errors:
+  return `${COMMON}
+
+You are re-auditing the document ${md} (system "${s.title}", prototype ${PROTO}) after a fixer addressed these previously-found errors:
 ${JSON.stringify(errors, null, 2)}
 
 Check ONLY that each listed error is now actually resolved in the document (open the corrected lines/citations and confirm; for status changes confirm the table, Missing, and Modify sections are consistent). If every listed error is resolved, change the doc's frontmatter status line to "status: verified" (your only permitted edit); otherwise edit nothing. Return JSON: system, verdict (pass if every listed error is resolved, else fail), errors (only the still-unresolved ones), checks_done.`
@@ -187,10 +197,10 @@ Check ONLY that each listed error is now actually resolved in the document (open
 
 const rows = await pipeline(
   SYSTEMS,
-  (s, _o, i) => agent(comparePrompt(s, i), { label: 'compare:' + s.id, phase: 'Compare', schema: CMP_SCHEMA, model: M.compare, effort: E.compare }),
+  (s, _o, i) => agent(comparePrompt(s, i), opt({ label: 'compare:' + s.id, phase: 'Compare', schema: CMP_SCHEMA, effort: E.compare }, M.compare)),
   (cmp, s, i) => {
     if (!cmp) return null
-    return agent(verifyPrompt(s, i), { label: 'verify:' + s.id, phase: 'Verify', schema: VER_SCHEMA, model: M.verify, effort: E.verify })
+    return agent(verifyPrompt(s, i), opt({ label: 'verify:' + s.id, phase: 'Verify', schema: VER_SCHEMA, effort: E.verify }, M.verify))
       .then(ver => ({ cmp, ver }))
   },
   async (pv, s, i) => {
@@ -198,8 +208,8 @@ const rows = await pipeline(
     if (!pv.ver) return { ...pv, finalVerdict: 'unverified', fixed: false }
     if (pv.ver.verdict === 'pass') return { ...pv, finalVerdict: 'pass', fixed: false }
     log('Doc failed verify, fixing: ' + s.id + ' (' + pv.ver.errors.length + ' errors)')
-    const fix = await agent(fixPrompt(s, i, pv.ver.errors), { label: 'fix:' + s.id, phase: 'Fix', schema: FIX_SCHEMA, model: M.fix, effort: E.fix })
-    const rv = await agent(reverifyPrompt(s, i, pv.ver.errors), { label: 'reverify:' + s.id, phase: 'Fix', schema: VER_SCHEMA, model: M.fix, effort: E.fix })
+    const fix = await agent(fixPrompt(s, i, pv.ver.errors), opt({ label: 'fix:' + s.id, phase: 'Fix', schema: FIX_SCHEMA, effort: E.fix }, M.fix))
+    const rv = await agent(reverifyPrompt(s, i, pv.ver.errors), opt({ label: 'reverify:' + s.id, phase: 'Fix', schema: VER_SCHEMA, effort: E.verify }, M.fix))
     return { ...pv, fixed: true, fixChanges: fix ? fix.changes : [], finalVerdict: rv ? rv.verdict : 'unverified', residualErrors: rv ? rv.errors : [] }
   }
 )
@@ -229,10 +239,9 @@ Mandates:
 5. Status sanity: statuses for the SAME underlying mechanic referenced from two docs must not contradict.
 
 Write ${OUT}/_consistency.md with sections mirroring the five mandates (concise, actionable, reference docs by NN-id and rows by number). Return JSON: issues (severity info|warn|error, systems, detail), resolutions (open questions you resolved), md_path.`,
-  { label: 'cross:consistency', phase: 'Cross', schema: CON_SCHEMA, model: M.cross, effort: E.cross })
+  opt({ label: 'cross:consistency', phase: 'Cross', schema: CON_SCHEMA, effort: E.cross }, M.cross))
 
-const synthOpts = { label: 'cross:synthesis', phase: 'Cross', schema: SYN_SCHEMA, effort: E.synthesis }
-if (M.synthesis) synthOpts.model = M.synthesis
+const synthOpts = opt({ label: 'cross:synthesis', phase: 'Cross', schema: SYN_SCHEMA, effort: E.synthesis }, M.synthesis)
 
 const synthesis = await agent(`${CTX}
 ${DELTA_NOTE}
@@ -240,11 +249,12 @@ ${DELTA_NOTE}
 You are the SYNTHESIS agent — the last stage of the pipeline. The folder ${OUT} contains the verified per-system docs (NN-*.md with per-feature status tables), _features.json, _chunkmap.json, the delta doc if present, and _consistency.md. The per-system verify outcomes were: ${JSON.stringify(summary.map(x => ({ system: x.system, verdict: x.verdict, fixed: x.fixed, residual: x.residual, counts: x.counts })))}.
 Consistency findings: ${JSON.stringify((consistency && consistency.issues) || [])}.
 
-Read _consistency.md and every NN-*.md (at minimum: frontmatter, Current state paragraph + table, Missing, Modify). Then write ${OUT}/00-index.md — the single entry point a saga-planning skill (and the user) reads first. Structure:
+Read _consistency.md and every NN-*.md (at minimum: frontmatter, Current state paragraph + table, Missing, Modify). Then write ${OUT}/00-index.md (overwrite any existing one — a lite index left by an earlier lite run is stale, not a source) — the single entry point the planning skills (and the user) read first. Structure:
 
 ---
 title: <prototype name> Breakdown Index
 source_prototype: ${PROTO}
+profile: full
 generated: ${TODAY}
 pipeline: ${args.pipelineNote || 'liang-quest-recon'}
 ---
@@ -266,7 +276,7 @@ The shared-state ownership map in target-codebase terms (prototype global state 
 Deduplicated open questions that survive cross-resolution, grouped by system, each tagged [design] (needs a decision) vs [code] (needs archaeology).
 
 # How to consume this folder
-Reading order; what _features.json/_chunkmap.json are; and one paragraph telling the saga planner to treat THIS FOLDER (not the raw prototype) as intake material, with per-doc line refs available for drill-down. State the planner contract: divergent / prototype-only / oos-native rows are NOT work; scope campaigns from the Missing and Modify sections; build on code that is ahead of the prototype.
+Reading order; what _features.json/_chunkmap.json are; and one paragraph telling downstream planners (liang-quest-saga-planner, or a single liang-quest-planner run) to treat THIS FOLDER (not the raw prototype) as their source, with per-doc line refs available for drill-down. State the planner contract: work is the Missing sections, the Modify sections minus rows flagged as locked decisions, and the absent behavior each partial row's note names; divergent rows that follow a locked decision, prototype-only and oos-native rows are NOT work; build on code that is ahead of the prototype; the folder is a frozen snapshot that consumers never edit.
 
 Keep it under ~250 lines, information-dense, no filler. Return JSON: md_path, headline (one sentence: the single most important fact about the gap), per_system (system + one-line status_line each).`, synthOpts)
 

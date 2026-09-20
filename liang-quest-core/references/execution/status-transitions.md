@@ -12,7 +12,7 @@ The canonical pipeline (`liang-quest-planner` → `liang-quest-executor`) uses a
 | `in_progress` | Execution underway | Executor |
 | `passed` | All steps completed and Tier 1 VCs verified (Tier 2 VCs may still be pending UAT) | Executor |
 | `failed` | A step exhausted retries, a Tier 1 VC failed, or a Tier 2 VC failed in post-run UAT | Executor |
-| `skipped` | Dependency failed (cascade) | Executor |
+| `skipped` | Dependency failed (cascade), or manual hold (see `skip_reason`) | Executor / `sweep.py` |
 
 ### Allowed Transitions
 
@@ -26,6 +26,9 @@ ready         → skipped            (manual hold, applied at executor intake §
 failed        → skipped            (manual hold re-applied at intake — manual quests and their
                                     un-passed dependents are held regardless of a prior failure)
 skipped       → ready              (stale manual-hold release, applied at executor intake §5)
+failed        → ready              (sweep retry-reset — see § Sweep Retry-Reset)
+skipped       → ready              (sweep retry-reset; never releases a manual hold)
+in_progress   → ready              (sweep retry-reset of a quest left behind by a dead run)
 ```
 
 Any transition not listed above is a violation.
@@ -38,10 +41,14 @@ Any transition not listed above is a violation.
 |-------|----------|---------|
 | Retry 1 | Lesson-only | Execute-child receives `accumulated_lessons` + `previous_failure`. No re-plan-child. Original step content unchanged. |
 | Retry 2+ | Re-plan escalation | Re-plan-child invoked with planning model. Produces `revised_instructions` (and optionally `revised_code_block`). Execute-child receives revised content + all accumulated lessons. |
-| Plan contradiction (any attempt) | Re-plan, lesson-only skipped | Execute-child returned a non-empty `plan_contradictions`. The first retry is already a re-plan-child call. `resolvable: false` → step and quest `failed`, contradiction written to the run report's `## Decisions needed`; the user is never prompted. |
+| Plan contradiction (any attempt) | Re-plan, lesson-only skipped | Execute-child returned a `plan_contradictions` entry with `blocks_step: true`. The first retry is already a re-plan-child call. `resolvable: false` → step and quest `failed`, contradiction written to the run report's `## Decisions needed`; the user is never prompted. |
 | Max retries exhausted | Hard fail | Step → `failed`. Quest → `failed`. Final lesson extracted. Transitive dependents cascade-skipped. |
 
 Retry tier does not affect status transitions — both tiers stay in `in_progress`. The tier distinction is recorded in the lesson schema for post-run analysis. Retry limit is `executor.max_step_retries` in `project.yaml` (default: 3).
+
+## Sweep Retry-Reset
+
+Owned by `liang-quest-batch-sweep`'s `sweep.py`, never by the executor. Before dispatching a campaign, the sweep returns that campaign's `failed`, `skipped`, and stale `in_progress` quests to `ready` so the executor's intake queues them again, and clears their `skip_reason`, `started_at`, `completed_at`, `current_cycle` and `total_cycles`. Manual holds (§ Manual Holds) are applied first and the reset skips every held quest, so it never releases a hold. It runs only for campaigns the sweep actually dispatches. This is why an unscoped sweep re-dispatches every non-passed quest a workspace has ever left behind.
 
 ## Executor-Owned Manifest Fields
 
@@ -58,7 +65,7 @@ quests[]:
   completed_at: string        # ISO 8601; set on passed/failed/skipped transition
 ```
 
-All other manifest fields (id, title, file, difficulty, depends_on) are read-only to executors.
+The executor also writes the `usage` block — full field list: `liang-quest-core/references/campaign/manifest-schema.md` § Executor-Managed Fields. All other manifest fields (id, title, file, difficulty, depends_on) are read-only to executors.
 
 ## Cascade Skip
 
@@ -91,3 +98,5 @@ The canonical executor supports crash recovery:
 2. Inspect `.run/<quest-id>/` for checkpoint state.
 3. Offer the user: **Resume** from last checkpoint, or **Restart** (reset to ready, clean .run/).
 4. Never silently resume when invoked interactively — always ask. Documented exception: under the executor's `--no-confirm` flag, default to **Resume** without prompting (non-interactive behavior per the executor's `--no-confirm` contract).
+
+Under a sweep, steps 1–4 never trigger for a dispatched campaign: § Sweep Retry-Reset has already returned a stale `in_progress` quest to `ready` before the executor starts, so the quest restarts from its first step. The reset changes manifest fields only and leaves `.run/<quest-id>/` as it found it.

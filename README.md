@@ -12,9 +12,9 @@ in Claude Code via links (see [Install](#install)).
 | Skill | What it does |
 | --- | --- |
 | `liang-quest-core` | Shared protocol library: campaign protocol, manifest/plan schemas, status transitions, child-process contracts, run-report format. Not invocable. |
-| `liang-quest-recon` | Scouting stage above the saga planner: breaks one large prototype into adversarially-verified breakdown + gap-analysis docs, each verdict citing code `file:line` evidence. |
+| `liang-quest-recon` | Side scout and the only skill that reads a raw prototype: breaks it into line-referenced breakdown docs (lite), plus adversarially-verified gap analysis citing code `file:line` evidence (full). |
 | `liang-quest-planner` | Turns brainstorm output and/or conversation into a campaign: locked decisions → HTML plan → quest markdown files. |
-| `liang-quest-saga-planner` | Decomposes a large prototype into multiple related campaigns with cross-campaign dependencies; resumable state in `.liang/sagas/`. |
+| `liang-quest-saga-planner` | Upper orchestrator: turns a discussion's decisions (plus optional recon folders) into multiple related campaigns with cross-campaign dependencies; resumable state in `.liang/sagas/`. |
 | `liang-quest-executor` | Runs planner campaigns quest-by-quest via child processes; models routed from `project.yaml` `execution_by_difficulty`. |
 | `liang-quest-batch-sweep` | Multi-campaign sweep (`sweep.py`): pre-flight report, confirmation gate, live launch, post-sweep summary. |
 | `liang-quest-status` | Read-only campaign dashboard scanned from `manifest.yaml` files, with tiered attention highlighting. |
@@ -83,7 +83,7 @@ picked up automatically when a Claude Code session runs inside this repo.
 ## Conventions
 
 - **Slim skills.** `SKILL.md` states the contract only (triggers, inputs/outputs,
-  control flow; soft cap ~200 lines). Templates, schemas, and edge-case rules live
+  control flow; soft cap per the family criteria below). Templates, schemas, and edge-case rules live
   in `references/`, loaded on demand. Protocol shared by sibling skills belongs in
   a `*-core` skill, never duplicated.
 - **Cross-harness prose.** pi runs these with varying models — skill text never
@@ -92,5 +92,11 @@ picked up automatically when a Claude Code session runs inside this repo.
 - **Artifacts stay out of the repo.** Everything a skill generates at runtime goes
   to the active workspace's `.liang/<category>/` (campaigns, reviews, reports).
   `.liang/` is machine-local runtime state and is gitignored.
+- **Family rules travel with the skills.** Each family's rules live in its core at
+  `liang-<family>-core/references/family/` (criteria, drift ledger; the quest family
+  also keeps its topology and decision log there). Generic rules and the deterministic
+  audit live in `_family-audit/` — run `python _family-audit/preflight.py`; a family is
+  *aligned* at zero critical findings with every advisory fixed or ledgered. Audit
+  output goes to the gitignored `.liang/goal/runs/`.
 - **Machine-local files** (not in git): `Agent.md` (agent preferences, e.g.
   English-only output), `.liang/`, `.pi/`, `.claude/settings.local.json`.

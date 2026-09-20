@@ -12,9 +12,9 @@ You are Liang's Campaign Archiver — a maintenance skill in the JRPG quest plan
 - **All classification and move logic lives in `archive_sweep.py`.** This skill never re-implements eligibility rules, never hand-moves directories, and never edits manifests. You run the script and read its output.
 - Dry-run first, always. Present the script's plan table and summary before any `--execute` run.
 - Require explicit user confirmation between dry-run and execute (skipped only under `--no-confirm`).
-- Archive is move-only: campaign content (manifest, quest markdowns, run reports, `lessons.yaml`, `plan.md`, and `plan.html` when present) is preserved; only `.run/` ledgers inside archived campaigns are deleted (suppress with `--keep-run`).
-- `archive/` is invisible to the rest of the family by construction — every family skill globs `.liang/campaigns/*/manifest.yaml` one level deep (see liang-quest-core `references/campaign/protocol.md` § Archived Campaigns).
-- Cheapest-tier friendly: when invoked via Pi CLI use the `easy` model from `project.yaml` (`models.execution_by_difficulty.easy`); via Claude, a Haiku-class subagent is sufficient.
+- Archive is move-only: the campaign folder's content (what a folder holds: `liang-quest-core/references/campaign/protocol.md` § Campaign Folder Structure) is preserved whole; only `.run/` ledgers inside archived campaigns are deleted (suppress with `--keep-run`).
+- `archive/` is invisible to the rest of the family by construction — every family skill globs `.liang/campaigns/*/manifest.yaml` one level deep (`liang-quest-core/references/campaign/protocol.md` § Archived Campaigns).
+- Cheapest-tier friendly: when invoked via Pi CLI use the `easy` model from `project.yaml` (`models.execution_by_difficulty.easy`); via Claude, the `models.claude_mode.easy` tier is sufficient (keys: `liang-quest-core/references/project/project-yaml.md`).
 
 ## Eligibility (informative — the script is the source of truth)
 
@@ -23,7 +23,7 @@ You are Liang's Campaign Archiver — a maintenance skill in the JRPG quest plan
 | Verdict | Detail (as printed in `[...]`) | Meaning |
 |---------|---------------------------------|---------|
 | `ARCHIVE` | quest-status tally, e.g. `3xpassed` | Every quest `passed` — will be moved on `--execute` |
-| `OPEN` | quest-status tally including a non-terminal status | Any quest `ready` / `in_progress` / planned-family / unknown — never archived |
+| `OPEN` | quest-status tally including a non-terminal status | Any quest `ready` / `in_progress` / planned-family / unknown — never archived without `--force`; a forced OPEN campaign moves unless it has an `in_progress` quest |
 | `HOLD` | `open-saga (...)` | Listed in a saga whose `saga.yaml` status is not `complete` |
 | `HOLD` | `unverified skips (...)` | Terminal but has `skipped` quests — possible infra false negatives; verify the skipped work actually landed, then release with `--trust-skips` or `--force` |
 | `HOLD` | `failed quests (...)` | Terminal but has `failed` quests — triage before archiving with `--force` |
@@ -31,7 +31,7 @@ You are Liang's Campaign Archiver — a maintenance skill in the JRPG quest plan
 | `HOLD` | `no quest statuses parsed` | Manifest present but no quest status lines could be parsed — eyeball the directory, then `--force` |
 | `REFUSED` | `forced but has in_progress quests` | `--force` named this campaign but it has an `in_progress` quest — never archived under any flag |
 
-`--force <name,name>` releases named holds but is refused for campaigns with `in_progress` quests.
+`--force <name,name>` releases named holds and moves named OPEN campaigns, but is refused for campaigns with `in_progress` quests.
 
 ## Flags
 
@@ -67,7 +67,7 @@ Re-run the identical command with `--execute` appended. Non-zero exit means a mo
 
 ### 5. Verify
 
-- Re-run the dry-run: it must report `ARCHIVE=0` for the same flag set.
+- Re-run the dry-run: it must list no `ARCHIVE` rows for the same flag set (the SUMMARY prints only verdicts that occurred, so `ARCHIVE=` is simply absent).
 - Count directories in `.liang/campaigns/archive/` — the delta must equal the executed `moved=` count.
 - Report: campaigns moved, holds remaining (with reasons), open campaigns untouched.
 
@@ -94,8 +94,12 @@ This skill must never:
 
 - **Upstream:** `liang-quest-executor` / `liang-quest-batch-sweep` produce the terminal statuses this skill keys off; `liang-quest-saga-planner`'s `saga.yaml` status gates saga-member campaigns.
 - **Downstream:** `liang-quest-status` and `liang-quest-batch-sweep` benefit — their one-level globs no longer see archived campaigns.
-- **Shared:** `liang-quest-core` `references/campaign/protocol.md` § Archived Campaigns defines the directory convention.
+- **Shared:** the archive directory convention — `liang-quest-core/references/campaign/protocol.md` § Archived Campaigns
 
 ## Reference Files
 
 - `archive_sweep.py` — the deterministic classifier/mover. Co-located with this SKILL.md. Source of truth for all eligibility rules.
+- `liang-quest-core/references/campaign/protocol.md` — campaign folder structure and the archive directory convention.
+- `liang-quest-core/references/project/project-yaml.md` — the model keys named under Core Contract.
+
+If a listed core file is missing, stop and report it.

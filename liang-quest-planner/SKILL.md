@@ -9,7 +9,7 @@ Same-context, one-shot campaign planner. Consume decisions from the live convers
 
 ## Core Contract
 
-- **Same-context only.** Reads the live conversation (brainstorm Strategy Report, lite session output, or general chat). Does not accept file paths or read saved brainstorms. Downstream execution flows through `liang-quest-executor` (the planner-native single-context runner).
+- **Same-context only.** Reads the live conversation (brainstorm Strategy Report, lite session output, or general chat). Its input is the conversation, never a saved brainstorm file; an orchestrator's brief may still cite files to read from disk (a saga's `inventory.md`, recon docs, predecessor campaigns). Downstream execution flows through `liang-quest-executor` (the planner-native single-context runner).
 - **Four phases in order**: (1) decision extraction with optional gap-fill, (2) decomposition and plan files, (3) open discussion, (4) finalization.
 - **`.liang/project.yaml` is required.** A missing file triggers the shared first-run interview; `planner.html` decides the surface. See Surface: `planner.html`.
 - **`plan.md` is mandatory and holds the "why"**: Decision Summary, per-quest purpose, rationale, difficulty, dependencies, victory conditions, risks, open questions, decision table, and the visual recipe when one was planned. No steps, no code blocks. The executor ignores it.
@@ -18,15 +18,7 @@ Same-context, one-shot campaign planner. Consume decisions from the live convers
 - **HTML off** (`planner.html` false): **nothing lands until Phase 4.** Phase 2 decomposes in memory and shows a compact quest table in chat, there is no Phase 3, and Phase 4 writes `plan.md` + quest files + `manifest.yaml` in one atomic sequence.
 - **`plan.html` is an optional render**, never a source: it is regenerated whole from `plan.md` + the quest files on disk, and never edited in place.
 - **Discussion is user-led.** No forced walkthrough.
-- **Output layout** is fixed (downstream executors depend on it):
-  ```
-  .liang/campaigns/campaign-<YYYY-MM-DD>-<HHMM>-<slug>/
-    plan.md            # REQUIRED planner-authored dossier, the "why"; executor ignores it
-    plan.html          # OPTIONAL render of plan.md + quests; present only when planner.html is true
-    quest-001-<name>.md
-    quest-002-<name>.md
-    manifest.yaml      # lands last; its presence is what makes the folder visible to the pipeline
-  ```
+- **Output layout** is fixed (downstream executors depend on it): one flat folder per campaign holding `plan.md` (required), `plan.html` (optional render), the `quest-NNN-<name>.md` files, and `manifest.yaml`, written last — a folder without it is invisible to the pipeline. Canonical tree: `liang-quest-core/references/campaign/protocol.md` § Canonical: Planner → Executor.
   All flat. No subdirectories. The directory is prefixed with the local generation date and time (`YYYY-MM-DD-HHMM`, 24-hour clock) so same-day campaigns sort in generation order; the slug is lowercase-hyphenated from the Main Quest title.
 
 ## Terminology
@@ -58,10 +50,10 @@ Resolve it in this order:
 
 1. **Per-run flag.** `--html` or `--no-html` on the invocation (same convention as `--quick`) overrides the setting for this invocation only and is never written back.
 2. **`planner.html` in `.liang/project.yaml`.**
-3. **Key absent** — ask the one interview question ("Will you read plan pages in a browser for this project? yes = render plan.html and discuss on it; no = trust mode, markdown only"), then write the answer back as `planner.html: true|false` and proceed. Same ask-once write-back pattern as `vcs_artifacts`.
+3. **Key absent** — ask the single **Plan render surface** question exactly as worded in `liang-quest-core/references/project/project-yaml.md` § First-Run Interview, then write the answer back as `planner.html: true|false` and proceed (ask once, write back).
 4. **File absent** — run the shared first-run interview (`liang-quest-core/references/project/project-yaml.md` § First-Run Interview), which includes that question, then proceed.
 
-Steps 3 and 4 are the only `project.yaml` writes the planner makes.
+Steps 3 and 4 are the only `project.yaml` writes the planner makes, besides the `vcs_artifacts` ask-once write-back (Phase 4 VCS policy).
 
 **Headless hard stop.** Headless mode has no user to answer either question: a missing `project.yaml`, or a present file with no `planner.html` key and no `--html`/`--no-html` flag, stops the run. Report the missing file or key and exit without planning. Never guess the value.
 
@@ -137,7 +129,7 @@ For each quest: title, purpose, numbered steps, code blocks where applicable, de
 
 Include code blocks when a quest writes or modifies a file, specifies a structured data format (YAML/JSON), or has a concrete "write this content here" action. Skip them for purely organizational or subjective work. When in doubt, include — over-specifying beats under-specifying for downstream executors.
 
-**Code-block style.** When a code block is Unreal Engine C++ (UCLASS-family macros, `*.generated.h` includes, or paths under `Source/`), compose it per `liang-quest-core/references/code-style/ue-cpp.md` (canonical). The contract binds the planner's own drafting here, the quest files it writes, the body-drafter brief (2c), and Phase 3 markdown edits.
+**Code-block style.** When a code block is Unreal Engine C++ — the detection rule heads `liang-quest-core/references/code-style/ue-cpp.md` — compose it per that contract (canonical). The contract binds the planner's own drafting here, the quest files it writes, the body-drafter brief (2c), and Phase 3 markdown edits.
 
 **Manual-step isolation.** Manual-ness is step-level, but `manual: true` is quest-level and blocks every transitive dependent in a headless sweep. Before flagging a quest manual, check whether its automatable steps (file writes, scene duplication, config wiring) can split into their own auto quest so only the genuinely human steps (in-editor iteration, feel checks, visual judgment) carry the flag. A single manual step buried in an otherwise-auto quest turns the whole downstream chain into human-in-the-loop.
 
@@ -155,14 +147,14 @@ Criteria and tie-break rule: `liang-quest-core/references/campaign/difficulty-gu
 
 With `planner.html` false there is no page and no skin to pick — skip to 2c.
 
-Read `references/html-design-contract.md` for the catalog. Auto-pick based on the Planning Lens (e.g., *Skill Creation + Pipeline Architecture* → FF-gold or Xenoblade-cosmic; *Narrative + Dialogue* → Persona-blue or Octopath-watercolor; *Profiling + Observability* → NieR-monochrome). Default to FF-gold when ambiguous. Announce the choice in one sentence and proceed — no question round here. The user can request a different direction during Phase 3 discussion.
+Read `references/html-design-contract.md` for the catalog. Auto-pick based on the Planning Lens (e.g., *Skill Creation + Pipeline Architecture* → FF-gold or Xenoblade-cosmic; *Narrative + Dialogue* → Persona-blue or Octopath-watercolor; *Profiling + Observability* → NieR-monochrome). A direction supplied by the invoker (a saga's `skin`) wins over the auto-pick. Default to FF-gold when ambiguous. Announce the choice in one sentence and proceed — no question round here. The user can request a different direction during Phase 3 discussion.
 
 ### 2c — `planner.html` true: write the files, then render
 
 The files land first; the page is rendered from them. `plan.html` is assembled from three fixed layers — no per-run CSS regeneration, and no model re-types CSS as output in any standard path.
 
 1. **Write `plan.md` and the quest files.** Resolve/create the campaign folder, then write `plan.md` from `references/plan-template.md` and every quest file from `references/quest-template.md` (naming and content rules in Phase 4). `plan.md` carries the "why", the quest files carry the "how"; victory conditions are the only text that appears in both. `manifest.yaml` does **not** land here — it is Phase 4's only write.
-2. **Brief the body-drafter subagent to draft the body.** Resolve the drafter model from `.liang/project.yaml`: `models.body_drafter` → `models.execution_by_difficulty.medium` → harness default. A step that resolves to a model the current harness cannot spawn counts as unresolved — continue down the chain. Harnesses that spawn subagents by tier alias rather than raw model ID resolve through the harness-tier namespace instead: `models.claude_mode.body_drafter` → `models.claude_mode.medium` → that namespace's documented medium default (semantics in `liang-quest-core/references/project/project-yaml.md`). Announce the resolved drafter model in one line — naming any step skipped as unspawnable — before spawning. Spawn a general-purpose subagent with the resolved model whose prompt contains **file paths, not transcribed content**: the absolute paths of `plan.md` and every quest file, with the instruction to read them from disk and transcribe them — the Decision Summary is `plan.md`'s Decision Summary section, the quest content is its Quests section plus the quest files, and the visual recipe (when present) is `plan.md`'s Visual line, which the subagent renders and never designs. The prompt also carries the full text of `references/templates/class-contract.md`, plus the full text of `liang-quest-core/references/code-style/ue-cpp.md` whenever any planned code block is UE C++. The subagent writes **body-only HTML** — the content inside `<div class="page">`, masthead through page-footer; no document shell, no `<style>` block, no inline CSS beyond the `--mock-cols` exception — to `_body.html` inside the campaign folder. Code blocks wrap tokens in §9 span classes; all user-derived content is HTML-escaped.
+2. **Brief the body-drafter subagent to draft the body.** Resolve the drafter model from `.liang/project.yaml` by the `models.body_drafter` chain — model-ID harnesses and tier-alias harnesses each have their own, and an unspawnable step is skipped — exactly as defined in `liang-quest-core/references/project/project-yaml.md` § Model Routing Extensions. Announce the resolved drafter model in one line — naming any step skipped as unspawnable — before spawning. Spawn a general-purpose subagent with the resolved model whose prompt contains **file paths, not transcribed content**: the absolute paths of `plan.md` and every quest file, with the instruction to read them from disk and transcribe them — the Decision Summary is `plan.md`'s Decision Summary section, the quest content is its Quests section plus the quest files, and the visual recipe (when present) is `plan.md`'s Visual line, which the subagent renders and never designs. The prompt also carries the full text of `references/templates/class-contract.md`, plus the full text of `liang-quest-core/references/code-style/ue-cpp.md` whenever any planned code block is UE C++. The subagent writes **body-only HTML** — the content inside `<div class="page">`, masthead through page-footer; no document shell, no `<style>` block, no inline CSS beyond the whitelisted custom properties (step 3) — to `_body.html` inside the campaign folder. Code blocks wrap tokens in §9 span classes; all user-derived content is HTML-escaped.
 3. **Assemble + validate via script.** Run:
    `python references/templates/assemble_plan.py <campaign>/_body.html <skin-slug> <campaign>/plan.html --title "<Campaign Title>"`
    Resolve the skin slug from the direction name: lowercase-hyphenated, e.g. *NieR-monochrome* → `nier-monochrome`. The script structurally validates the body (TOC anchors ↔ section IDs bidirectionally, required skeleton classes, difficulty badges in TOC and quest headers, no `<style>`/`<script>`/`<link>`/document-shell tags, no inline styles beyond the whitelisted custom props (`--mock-cols`, `--tl-cols`, `--tl-start`, `--tl-span`), no external assets, at most one plan-visual section), then inlines `base.css` + `skin-<slug>.css` (+ the matching visual kit automatically — `mockup.css` for `ui-mock-section`, `diagram.css` for `diagram-section`, `timeline.css` for `timeline-section`) into one `<style>` block, in that order, and writes the single self-contained `plan.html`. The `.css` files never ship beside the output.
@@ -212,7 +204,7 @@ User leads. No forced walkthrough or section-by-section review. Proceed to Phase
 
 **The markdown is the source; the page is a render of it.** For each user turn that produces an agreed change to a quest, decision, victory condition, or any other plan element:
 
-1. **Edit the markdown.** Use the Edit tool on `plan.md` and/or the affected quest file(s). These are planner-authored markdown — no read-before-edit ceremony beyond the Edit tool's own rules. Keep the two consistent: difficulty, MANUAL flag, dependencies, and victory conditions must agree across `plan.md` and the quest file. UE C++ code blocks edited or added during discussion follow the same code-style contract as Phase 2a.
+1. **Edit the markdown.** Use the Edit tool on `plan.md` and/or the affected quest file(s). These are planner-authored markdown — no read-before-edit ceremony beyond the Edit tool's own rules. Keep the two consistent: dependencies and victory conditions must agree across `plan.md` and the quest file (difficulty and the MANUAL flag live in `plan.md` only until the manifest is written). UE C++ code blocks edited or added during discussion follow the same code-style contract as Phase 2a.
 2. **Re-render once**, whole, through 2c's body-drafter + `assemble_plan.py`. The drafter re-reads the changed files from disk. Never edit `plan.html` in place; every render is a full regeneration from what is on disk.
 3. **Announce in one line**: "updated `<files>`, plan.html re-rendered, refresh browser".
 
@@ -229,9 +221,9 @@ Reached when the user signals ready, or immediately from 2c when `planner.html` 
 
 `plan.md` follows `references/plan-template.md`. Quest files follow `references/quest-template.md` and the naming convention `quest-NNN-<name>.md` (3-digit zero-padded number, lowercase-hyphenated slug from quest title, ~40 char max at word boundary).
 
-Manifest follows `references/manifest-example.yaml` — includes `schema_version: 4` (campaign manifest schema; distinct from `.liang/project.yaml`'s `schema_version: 1`), `q001`, `q002`, ... IDs, `status: "ready"` at creation, `depends_on` is a list of quest IDs, **`difficulty` is `"easy"`, `"medium"`, or `"hard"`** (per the classification in Phase 2a). Downstream executors consume `difficulty` to route the quest to the right model per `.liang/project.yaml`'s `execution_by_difficulty` mapping — do not omit the field.
+Manifest follows the canonical schema in `liang-quest-core/references/campaign/manifest-schema.md` (worked example: `references/manifest-example.yaml`) — includes `schema_version: 4` (campaign manifest schema; distinct from `.liang/project.yaml`'s `schema_version: 1`), `q001`, `q002`, ... IDs, `status: "ready"` at creation, `depends_on` is a list of quest IDs, **`difficulty` is `"easy"`, `"medium"`, or `"hard"`** (per the classification in Phase 2a). Downstream executors consume `difficulty` to route the quest to the right model per `.liang/project.yaml`'s `execution_by_difficulty` mapping — do not omit the field.
 
-For every human-in-editor quest (the ones labeled MANUAL in `plan.md` and the quest markdown), also write **`manual: true`** on the quest entry. The batch sweep orchestrator uses it to hold the quest out of headless dispatch instead of failing the campaign; omitting it means an unattended sweep hands editor work to a headless child. Automated quests omit the field entirely. Before writing the flag, re-check Phase 2a's manual-step isolation rule: if a manual quest still contains automatable steps, split it now rather than block its dependents.
+For every human-in-editor quest (the ones labeled MANUAL in `plan.md`), also write **`manual: true`** on the quest entry. The batch sweep orchestrator uses it to hold the quest out of headless dispatch instead of failing the campaign; omitting it means an unattended sweep hands editor work to a headless child. Automated quests omit the field entirely. Before writing the flag, re-check Phase 2a's manual-step isolation rule: if a manual quest still contains automatable steps, split it now rather than block its dependents.
 
 Quest markdown rules:
 - Include only Purpose, Steps/code blocks, Dependencies, and Victory Conditions.
@@ -241,7 +233,7 @@ Quest markdown rules:
 `plan.md` rules:
 - Include the Decision Summary, one block per quest (purpose, rationale, difficulty, MANUAL flag, depends-on, victory conditions, file name), and Campaign Notes.
 - No steps and no code blocks — those live only in the quest files.
-- Difficulty and MANUAL labels appear in both `plan.md` and the quest file header; the two must agree.
+- Difficulty and the MANUAL flag live in `plan.md` and `manifest.yaml`, and the two must agree; the quest file carries neither (see `references/quest-template.md`).
 - Victory conditions are repeated verbatim from the quest file so the dossier reads on its own. That overlap is deliberate and is the only one.
 
 ### Finalization sequence
@@ -266,7 +258,7 @@ After writing, suggest the compatible executor as a copy-pasteable command using
 skill:liang-quest-executor .liang/campaigns/campaign-<YYYY-MM-DD>-<HHMM>-<slug>
 ```
 
-Suggestion only. Do not invoke. This is the final interaction of the session.
+Suggestion only. Do not invoke. This is the planner's final action; when an orchestrator invoked the planner, control returns to it.
 
 ## Boundaries
 
@@ -280,8 +272,8 @@ The non-obvious hard stops:
 
 ## Relationship to Other Skills
 
-- **Upstream**: `liang-brainstorm-relentless` (Strategy Report → Next Move); in-session conversation via explicit invocation
-- **Body-drafting subagent** (`planner.html` true only): 2c and every Phase 3 re-render delegate body-only HTML drafting to a general-purpose body-drafter child, which reads `plan.md` and the quest files **from disk** and transcribes them. Its model resolves from `.liang/project.yaml` (`models.body_drafter` → `execution_by_difficulty.medium` → harness default, skipping unspawnable steps, with the `models.claude_mode` namespace for tier-alias harnesses — see 2c); `references/templates/assemble_plan.py` validates the body and assembles the CSS layers. The planner falls back to drafting the body itself if subagent spawning is unavailable
+- **Upstream**: `liang-brainstorm-relentless` (Strategy Report → Next Move); in-session conversation via explicit invocation; `liang-quest-saga-planner` — one handoff per campaign, `--quick` in its same-context loop or `--headless` in a batch subagent, with the Decision Summary arriving in the conversation or the brief
+- **Body-drafting subagent** (`planner.html` true only): 2c and every Phase 3 re-render delegate body-only HTML drafting to a general-purpose body-drafter child, which reads `plan.md` and the quest files **from disk** and transcribes them. Its model resolves per `liang-quest-core/references/project/project-yaml.md` § Model Routing Extensions; `references/templates/assemble_plan.py` validates the body and assembles the CSS layers. The planner falls back to drafting the body itself if subagent spawning is unavailable
 - **Downstream**: `liang-quest-executor` — the planner-native single-context runner. Sole supported executor for planner output.
 - **Shared foundation**: `liang-quest-core` — shared protocol, manifest schema, status transitions, run report.
 - **Opt-in from**: `liang-brainstorm-quick` — one of the two same-session downstreams lite offers at finalization (the other is a delegated executor for direct execution). Lite emits no files; this planner reads decisions directly from the live conversation.
@@ -293,6 +285,12 @@ Read before generating, in every run:
 - `references/quest-template.md` — quest markdown skeleton
 - `references/manifest-example.yaml` — manifest schema example
 - `liang-quest-core/references/code-style/ue-cpp.md` — UE C++ code-block style contract; applies whenever planned code is UE C++ (any project, no opt-in)
+- `liang-quest-core/references/campaign/difficulty-guide.md` — difficulty criteria and tie-break rule (Phase 2)
+- `liang-quest-core/references/campaign/protocol.md` — canonical campaign folder tree and lifecycle
+- `liang-quest-core/references/campaign/manifest-schema.md` — canonical manifest schema, including `manual` and the validation rules
+- `liang-quest-core/references/project/project-yaml.md` — first-run interview, `planner.html`, body-drafter model chain, VCS artifact policy
+
+If a listed core file is missing, stop and report it.
 
 `planner.html` true only — the render contract:
 - `references/html-design-contract.md` — quality contract, eight-direction catalog, CSS guardrails, assembly protocol. **Read before every render.**

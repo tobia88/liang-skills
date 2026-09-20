@@ -1,6 +1,6 @@
 # Recon Stage Briefs
 
-Canonical worker instructions for every recon role, harness-neutral. `{PLACEHOLDERS}` are supplied by the orchestrator at dispatch time. The bundled workflow scripts (`wf-map-breakdown.js`, `wf-compare-verify.js`) embed this same text — when editing a brief here, mirror the change in the scripts.
+Canonical worker instructions for every recon role, harness-neutral. `{PLACEHOLDERS}` are supplied by the orchestrator at dispatch time. The bundled workflow scripts (`wf-map-breakdown.js`, `wf-compare-verify.js`) embed this same text for briefs 1–9 — when editing one of those here, mirror the change in the scripts. Brief 10 (lite profile) lives only here.
 
 Placeholders used throughout: `{PROTO}` prototype path · `{PREV}` prior-version path · `{OUT}` output folder · `{PROJECT_CONTEXT}` 1–2 paragraphs describing the project and what the prototype is · `{SOURCE_CONTEXT}` source roots, module layout, naming conventions · `{SCOPE_RULE}` what is in/out of comparison scope and when `oos-native` applies · `{LOCKED_DECISIONS}` authoritative decisions with the divergent-never-missing rule · `{HINTS}` prior-knowledge hints, always framed as unverified claims · `{RANGES}` a system's line ranges · `{FEATURES}` a system's numbered checklist · `{ERRORS}` a skeptic's error list.
 
@@ -24,7 +24,7 @@ You produce the definitive CHUNK MAP of `{PROTO}`. Every downstream worker reads
 
 ## 2. Delta scanner (stage 1, optional)
 
-Structural delta `{PREV}` → `{PROTO}`. `{DELTA_CONTEXT}` — material existing only in the current version is the likeliest unported work; spotlight it. Method: banner-scan both files, align sections by title, use banner positions for size estimates, sample-read only new/grown sections (a few hundred lines total). Write `{OUT}/_delta-<prev>.md` per the artifact contract (≤ ~120 lines). Return: new_systems, grown, unchanged, md_path.
+Structural delta `{PREV}` → `{PROTO}`. `{DELTA_CONTEXT}` — material existing only in the current version is the likeliest unported work; spotlight it. Method: banner-scan both files, align sections by title, use banner positions for size estimates, sample-read only new/grown sections (a few hundred lines total). Write `{OUT}/_delta-prev.md` per the artifact contract (≤ ~120 lines). Return: new_systems, grown, unchanged, md_path.
 
 ## 3. Breakdown worker (stage 2, one per system)
 
@@ -72,4 +72,12 @@ Read all system docs plus `_features.json`, `_chunkmap.json`, and the delta doc.
 
 ## 9. Synthesizer (stage 5, last)
 
-Inputs: every system doc, `_consistency.md`, the delta doc, plus the orchestrator-supplied verify summary `{VERIFY_SUMMARY}` and consistency findings `{CONSISTENCY_ISSUES}`. Write `{OUT}/00-index.md` exactly per the artifact contract's six-section structure — information-dense, ≤ ~250 lines, no filler, no campaign decomposition (downstream owns that). The counts in your status table come from the docs' current tables (post-fix), which are authoritative over any earlier in-band numbers. Return: md_path, headline (one sentence — the single most important fact about the gap), per_system (one status line each).
+Inputs: every system doc, `_consistency.md`, the delta doc, plus the orchestrator-supplied verify summary `{VERIFY_SUMMARY}` and consistency findings `{CONSISTENCY_ISSUES}`. Write `{OUT}/00-index.md` exactly per the artifact contract's six-section structure, with frontmatter `source_prototype: {PROTO}` and `profile: full` (overwrite a lite index if one is there); its consume section states the planner contract from the artifact contract, including that the folder is a frozen snapshot. Information-dense, ≤ ~250 lines, no filler, no campaign decomposition (downstream owns that). The counts in your status table come from the docs' current tables (post-fix), which are authoritative over any earlier in-band numbers. Return: md_path, headline (one sentence — the single most important fact about the gap), per_system (one status line each).
+
+## 10. Lite synthesizer (lite profile only, replaces stages 3–5)
+
+No workflow script embeds this brief — the orchestrator dispatches it as one worker after the stage-2 duties are done.
+
+Inputs: every system doc in `{OUT}` (all at `status: breakdown`), `_features.json`, `_chunkmap.json`, and the delta doc if present. `{PROJECT_CONTEXT}` No codebase comparison was run and you run none: do not open the target source, do not use the status vocabulary (done/partial/missing/divergent/prototype-only/oos-native), and make no claim about what the codebase already contains. Edit no system doc; you write exactly one file.
+
+Write `{OUT}/00-index.md` exactly per the artifact contract's lite index: frontmatter with `source_prototype: {PROTO}` and `profile: lite`, then the four lite sections — information-dense, ≤ ~150 lines, no filler, no campaign decomposition (downstream owns that). The system table's feature counts come from `_features.json`. In "Seams and open questions", resolve an open question yourself when another doc's content answers it, and say which doc. Return: md_path, headline (one sentence — the single most important fact about what the prototype contains), per_system (one line each).

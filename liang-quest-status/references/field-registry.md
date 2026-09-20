@@ -62,15 +62,7 @@ Cross-version notes: `v4` is the planner-native (canonical) schema produced by `
 
 ## Status Vocabulary
 
-Complete set of quest status values for the canonical pipeline (`liang-quest-planner` → `liang-quest-executor`): `ready / in_progress / passed / failed / skipped`.
-
-| Status | Source Skill | Meaning |
-|--------|-------------|---------|
-| `ready` | Planner (canonical) | Quest is ready to execute |
-| `in_progress` | Executor | Currently being executed |
-| `passed` | Executor | Completed successfully |
-| `failed` | Executor | Execution failed |
-| `skipped` | Executor | Cascade-skipped due to dependency failure |
+Canonical-pipeline quest statuses are `ready / in_progress / passed / failed / skipped`. Their meanings, owners, and allowed transitions are canonical in `liang-quest-core/references/execution/status-transitions.md` — note that `skipped` covers a dependency cascade **and** a manual hold (`skip_reason` tells them apart). The v4 column above follows `liang-quest-core/references/campaign/manifest-schema.md`, which wins on any disagreement (it also defines `manual` and `campaign_depends_on`).
 
 
 ## Version-Aware Parsing

@@ -31,21 +31,33 @@ created_at: string           # ISO 8601
 models:
   body_drafter: string       # model ID for the planner's body-drafting subagent (planner 2c and Phase 3 re-renders)
   apply_brief: string        # model ID for liang-brainstorm-quick's Option A (apply-immediately) delegation
-  saga_intake: string        # model ID for liang-quest-saga-planner's Phase 1 intake subagent
   saga_planner: string       # model ID for the saga planner's batch-mode per-campaign planner subagent
   saga_align: string         # model ID for the saga planner's Phase 4.5 alignment-verify subagent
   saga_uat: string           # model ID for the saga planner's Phase 5/6 executor-artifact workers (§8b UAT backfill, §8c walkthrough)
+  recon_map: string          # model ID for liang-quest-recon's stage-1 mapper (and the optional delta scanner)
+  recon_breakdown: string    # model ID for recon's stage-2 breakdown workers
+  recon_compare: string      # model ID for recon's stage-3 compare workers
+  recon_verify: string       # model ID for recon's stage-4 skeptics
+  recon_fix: string          # model ID for recon's stage-4 fixer and re-verifier
+  recon_cross: string        # model ID for recon's stage-5 consistency checker
+  recon_synthesis: string    # model ID for recon's stage-5 synthesizer and the lite-profile synthesizer
   claude_mode:               # Claude-harness tier overrides — Claude tier aliases ONLY
-    easy: string             # "haiku" | "sonnet" | "opus"
-    medium: string
-    hard: string
+    easy: string             # "haiku" | "sonnet" | "opus" (default: haiku)
+    medium: string           # (default: sonnet)
+    hard: string             # (default: opus)
     verify: string            # tier alias for Tier-1 verify-children in --claude mode (default: haiku)
     planning: string          # tier alias for re-plan-children in --claude mode (default: sonnet)
     body_drafter: string     # tier alias for the planner's body-drafter when running under Claude Code
-    saga_intake: string      # tier alias for the saga planner's intake subagent (default: medium)
     saga_planner: string     # tier alias for the saga planner's batch campaign-planner subagent (default: hard)
     saga_align: string       # tier alias for the saga planner's alignment verifier (default: medium)
     saga_uat: string         # tier alias for the saga planner's Phase 5/6 executor-artifact workers (default: medium)
+    recon_map: string        # tier aliases for liang-quest-recon's stage workers, same suffixes as the models.recon_* keys
+    recon_breakdown: string  #   (recon_map, recon_breakdown, recon_compare, recon_verify, recon_fix, recon_cross: default medium;
+    recon_compare: string    #    recon_synthesis: default hard — it writes the one document everyone reads)
+    recon_verify: string
+    recon_fix: string
+    recon_cross: string
+    recon_synthesis: string
 ```
 
 Both keys are additive-optional: safe defaults when absent, no `schema_version` bump.
@@ -63,9 +75,11 @@ A step that resolves to a model the current harness cannot spawn is treated as *
 
 **`models.apply_brief`** — Model used by liang-brainstorm-quick's Option A (apply-immediately) delegation. Resolution chain: `models.apply_brief` → `models.execution_by_difficulty.medium` → harness default. Additive optional key; absence does not bump schema_version.
 
-**`models.saga_intake` / `models.saga_planner` / `models.saga_align` / `models.saga_uat`** — consumed read-only by `liang-quest-saga-planner`. Resolution chains: `saga_intake` → `models.planning` → harness default; `saga_planner` → `models.planning` → harness default; `saga_align` → `models.verify` → harness default; `saga_uat` → `models.verify` → harness default (backfill is extraction/formatting against a fixed §8b contract — a medium-grade profile, same character as verify work). The same unresolved-step rule applies as for `body_drafter` (a model the harness cannot spawn continues the chain), and tier-alias harnesses (or an explicit `--claude` invocation) resolve through `claude_mode.saga_intake` (default `medium` tier), `claude_mode.saga_planner` (default `hard`), `claude_mode.saga_align` (default `medium`), and `claude_mode.saga_uat` (default `medium`) instead. All additive-optional; no schema_version bump.
+**`models.saga_planner` / `models.saga_align` / `models.saga_uat`** — consumed read-only by `liang-quest-saga-planner`. (`saga_intake` is retired — the saga planner no longer has an intake subagent; prototype breakdown belongs to `liang-quest-recon`. A leftover key is ignored.) Resolution chains: `saga_planner` → `models.planning` → harness default; `saga_align` → `models.verify` → harness default; `saga_uat` → `models.verify` → harness default (backfill is extraction/formatting against a fixed §8b contract — a medium-grade profile, same character as verify work). The same unresolved-step rule applies as for `body_drafter` (a model the harness cannot spawn continues the chain), and tier-alias harnesses (or an explicit `--claude` invocation) resolve through `claude_mode.saga_planner` (default `hard`), `claude_mode.saga_align` (default `medium`), and `claude_mode.saga_uat` (default `medium`) instead. All additive-optional; no schema_version bump.
 
-**`models.claude_mode`** — the Claude-harness tier namespace. Consumed by `liang-quest-executor` in `--claude` mode (`easy` / `medium` / `hard` for execute-children, `verify` for Tier-1 verify-children, `planning` for re-plan-children), by `liang-quest-planner` for the body-drafter when running under Claude Code (`body_drafter`, falling back to `medium`), and by `liang-quest-saga-planner` for its intake / batch campaign-planner / alignment-verify / UAT-backfill subagents (`saga_intake` / `saga_planner` / `saga_align` / `saga_uat`, defaults `medium` / `hard` / `medium` / `medium`). Values are **Claude Code subagent tier aliases** (`haiku` / `sonnet` / `opus`), not pi model IDs — Claude Code cannot spawn non-Claude children, which is why this is a separate namespace from `execution_by_difficulty`. When the block (or any key in it) is absent, the defaults apply: easy → `haiku`, medium → `sonnet`, hard → `opus`, verify → `haiku`, planning → `sonnet`; `body_drafter` defaults to the `medium` tier.
+**`models.recon_map` / `recon_breakdown` / `recon_compare` / `recon_verify` / `recon_fix` / `recon_cross` / `recon_synthesis`** — consumed read-only by `liang-quest-recon`, one key per stage role. Resolution chain for each: the specific key → `models.planning` (map, breakdown, compare, cross, synthesis) or `models.verify` (verify, fix) → harness default. Unlike the planner and saga planner, recon never blocks on a missing `project.yaml` and never writes it: with no file, every role falls to the end of its chain (the harness default, or the `claude_mode` default tier on a tier-alias harness). Tier-alias harnesses resolve through `claude_mode.recon_*` with the same suffixes (defaults: the `medium` tier, except `recon_synthesis` → the `hard` tier). Only a role that resolves to nothing at all is spawned with **no** model override — recon's Workflow scripts carry no default of their own, so the orchestrator passes each role's resolved model (tier alias under Claude Code). The delta scanner shares `recon_map`; the re-verifier shares `recon_fix`. All additive-optional; no schema_version bump.
+
+**`models.claude_mode`** — the Claude-harness tier namespace. Consumed by `liang-quest-executor` in `--claude` mode (`easy` / `medium` / `hard` for execute-children, `verify` for Tier-1 verify-children, `planning` for re-plan-children), by `liang-quest-planner` for the body-drafter when running under Claude Code (`body_drafter`, falling back to `medium`), by `liang-quest-recon` for its stage workers (`recon_*`), and by `liang-quest-saga-planner` for its batch campaign-planner / alignment-verify / UAT-backfill subagents (`saga_planner` / `saga_align` / `saga_uat`, defaults `hard` / `medium` / `medium`). Values are **Claude Code subagent tier aliases** (`haiku` / `sonnet` / `opus`), not pi model IDs — Claude Code cannot spawn non-Claude children, which is why this is a separate namespace from `execution_by_difficulty`. When the block (or any key in it) is absent, the defaults apply: easy → `haiku`, medium → `sonnet`, hard → `opus`, verify → `haiku`, planning → `sonnet`; `body_drafter` defaults to the `medium` tier.
 
 ### Planner Extensions (optional)
 
@@ -182,7 +196,7 @@ The `models.verify` field is required by both executors. If absent when an execu
 ## Rules
 
 - The canonical `liang-quest-executor` creates `project.yaml` when absent and reads it on every run.
-- `liang-quest-planner` and `liang-quest-saga-planner` require `project.yaml` and read it on every run (`models.body_drafter`, `planner.visual`, `planner.html`, and the saga `models.saga_*` chains). Both may bootstrap the file via the shared first-run interview when it is missing, and both may write back `planner.html` after asking question 8. They write no other key.
+- `liang-quest-planner` and `liang-quest-saga-planner` require `project.yaml` and read it on every run (`models.body_drafter`, `planner.visual`, `planner.html`, and the saga `models.saga_*` chains). Both may bootstrap the file via the shared first-run interview when it is missing, and both may write back `planner.html` after asking question 8. The only other write is the planner's ask-once `vcs_artifacts` write-back (§ VCS Artifact Policy).
 - The executor may add the `executor` block if absent (extension, not core change).
 - The executor may add `models.verify` via interactive prompt if absent.
 - No skill may extend the schema beyond defined fields without a version bump.

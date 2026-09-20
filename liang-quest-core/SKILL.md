@@ -1,6 +1,6 @@
 ---
 name: liang-quest-core
-description: Shared reference foundation for the JRPG quest planning family. Contains campaign protocol, manifest schema, plan schemas, status transitions, child process contracts, run report format, and project.yaml contract. The canonical pipeline skills (liang-quest-planner, liang-quest-executor) plus liang-quest-status read from this skill's references/ at activation time. This skill has no behavioral logic — it is a pure reference library.
+description: Shared reference foundation for the JRPG quest planning family. Contains campaign protocol, manifest schema, status transitions, child process contracts, run report format, the project.yaml contract, and the family's own rules (registry, topology, audit criteria, decision log). Every liang-quest-* skill reads the references it needs from here. This skill has no behavioral logic — it is a pure reference library.
 ---
 
 # Liang Quest Core
@@ -13,10 +13,11 @@ This skill contains **no behavioral logic**. It exists solely as a structured li
 
 | Subdirectory | Contents | Primary Consumers |
 |---|---|---|
-| `references/campaign/`  | Campaign protocol, manifest schema | planner, executor, status |
-| `references/execution/` | Status transitions, child process contracts, run report format | executor |
-| `references/project/`   | `project.yaml` contract | executor |
+| `references/campaign/`  | Campaign protocol, manifest schema, difficulty guide | planner, executor, batch-sweep, status, saga planner, archiver |
+| `references/execution/` | Status transitions, child process contracts, run report format | executor, batch-sweep, status |
+| `references/project/`   | `project.yaml` contract | planner, executor, batch-sweep, saga planner, recon, archiver |
 | `references/code-style/` | UE C++ code-block style contract | planner, executor |
+| `references/family/` | Family rules: audit criteria, canonical topology, decision log, drift ledger | maintainers and the family audit only — **never read at activation** |
 
 ## Schema Version
 
@@ -39,19 +40,27 @@ The declaration must be prominent and unambiguous — any skill reading quest-co
 | Skill | Role | Reads From Core |
 |---|---|---|
 | **liang-quest-core** | Shared references (this skill) | — |
-| **liang-quest-planner** | Same-context campaign planner — extracts decisions from in-session conversation, writes `plan.md` (+ optional `plan.html`) + flat `quest-NNN-*.md` files + `manifest.yaml` | `campaign/` (manifest schema, protocol), `code-style/` (UE C++ code blocks) |
+| **liang-quest-planner** | Same-context campaign planner — extracts decisions from in-session conversation, writes `plan.md` (+ optional `plan.html`) + flat `quest-NNN-*.md` files + `manifest.yaml` | `campaign/` (protocol, manifest schema, difficulty guide), `project/`, `code-style/` (UE C++ code blocks) |
 | **liang-quest-executor** | Planner-native executor — spawns child processes per step (Pi CLI / Claude subagents / batch), tiered retry, quest-level VC verification with Tier 1 inline + Tier 2 deferred UAT | `campaign/`, `execution/`, `project/`, `code-style/` |
-| **liang-quest-batch-sweep** | Multi-campaign sweep launcher/orchestrator — wraps `sweep.py`, dispatches executor per eligible campaign, writes sweep reports | `campaign/`, `project/` |
-| **liang-quest-status** | Read-only campaign status dashboard. Scans all manifests across all formats and renders an adaptive markdown view. | `campaign/` (protocol) |
+| **liang-quest-batch-sweep** | Multi-campaign sweep launcher/orchestrator — wraps `sweep.py`, dispatches executor per eligible campaign, writes sweep reports | `campaign/`, `execution/` (manual holds, retry-reset), `project/` |
+| **liang-quest-status** | Read-only campaign status dashboard. Scans all manifests across all formats and renders an adaptive markdown view. | `campaign/` (protocol, manifest schema), `execution/` (status vocabulary) |
+| **liang-quest-saga-planner** | Upper orchestrator — turns a discussion's decisions (plus optional recon folders) into 2–8 related campaigns via repeated planner handoffs; resumable state in `.liang/sagas/`; post-execution UAT / tour / handover rollups | `campaign/` (manifest schema — `campaign_depends_on`), `project/` |
+| **liang-quest-recon** | Side scout — the only skill that reads a raw prototype; writes a line-referenced breakdown folder (lite profile) plus verified gap analysis against the codebase (full profile) | `project/` (model routing keys) |
+| **liang-quest-archiver** | Moves finished campaigns under `.liang/campaigns/archive/`, out of every other skill's discovery glob | `campaign/` (protocol — § Archived Campaigns), `project/` (model keys) |
+
+How these fit together — the ladder and the feed graph — is defined once, in `references/family/topology.md`.
 
 ## Composition Mechanism
 
-Family skills consume core references via **reference inclusion** — they read the relevant subdirectories at activation time. This is not delegation or embedding; the core's documents become part of the consuming skill's context.
+Family skills consume core references via **reference inclusion** — each reads the core files its own `## Reference Files` section lists, upfront or at the phase that needs them, as that section says. This is not delegation or embedding; the core's documents become part of the consuming skill's context.
 
-- **Planner** reads `campaign/` (manifest schema, protocol), plus `code-style/` when planned code blocks are UE C++.
+- **Planner** reads `campaign/` (protocol, manifest schema, difficulty guide) and `project/`, plus `code-style/` when planned code blocks are UE C++.
 - **Executor** reads `campaign/`, `execution/`, `project/`, plus `code-style/` for UE C++ child briefs.
-- **Batch sweep** reads `campaign/`, `project/` (for manifest/project config conventions while orchestrating multiple executor runs).
-- **Status** reads `campaign/` (protocol — for the campaign directory convention).
+- **Batch sweep** reads `campaign/`, `execution/` (manual holds, sweep retry-reset), and `project/`.
+- **Status** reads `campaign/` (directory convention, manifest schema) and `execution/` (status vocabulary).
+- **Saga planner** reads `campaign/` (manifest schema, for the `campaign_depends_on` patch) and `project/` (first-run interview, model routing).
+- **Recon** reads `project/` (model routing keys); its own artifact contract lives in its own `references/`.
+- **Archiver** reads `campaign/` (protocol — the archive directory convention) and `project/` (model keys).
 
 ## Reference Index
 
@@ -70,6 +79,12 @@ Family skills consume core references via **reference inclusion** — they read 
 
 ### code-style/
 - `ue-cpp.md` — UE C++ code-block style contract (Allman braces and related rules), distilled from `liang-ue-cpp-style`.
+
+### family/ (maintainers and audit only)
+- `criteria.md` — what the family audit criteria mean for `liang-quest-*`; canonical homes, skeleton, registry rules. Generic rules and the audit script live in `_family-audit/` at the liang-skills root.
+- `topology.md` — the canonical ladder and feed graph.
+- `decisions.md` — log of behavioral changes to the family (`qdNNN`).
+- `drift-ledger.md` — intentional divergences inside the family (`dvNNN`).
 
 ## Boundaries
 

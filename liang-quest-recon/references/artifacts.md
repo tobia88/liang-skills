@@ -6,14 +6,17 @@ Canonical file formats, statuses, and per-stage gates for `liang-quest-recon`. W
 
 ```
 <prototype-stem>-breakdown/
-  00-index.md            # stage 5 — the entry point everyone reads first
+  00-index.md            # stage 5 (full) or brief 10 (lite) — the entry point everyone reads first
   NN-<system-id>.md      # stages 2–4 — one per system, NN = zero-padded order
+  _run.json              # written at the Pre-Flight go — profile + intake parameters; what Resume reads first
   _chunkmap.json         # stage 1 — line-range partition of the prototype
   _features.json         # after stage 2 — merged per-system feature checklists
   _features/<id>.json    # optional per-system fragments (child-parallel profile), merged then kept or deleted
-  _delta-<prev>.md       # stage 1, optional — structural delta vs a prior prototype version
-  _consistency.md        # stage 5 — cross-doc audit
+  _delta-prev.md         # stage 1, optional — structural delta vs a prior prototype version
+  _consistency.md        # stage 5 — cross-doc audit (full profile only)
 ```
+
+A **lite-profile** folder holds `_run.json`, `00-index.md` (`profile: lite`), the `NN-*.md` docs at `status: breakdown`, `_chunkmap.json`, `_features.json`, and the optional delta — nothing from stages 3–5.
 
 ## Status Vocabulary (per feature, exactly one)
 
@@ -37,14 +40,34 @@ title: <Title>
 prototype_lines: "<start-end, start-end, ...>"
 depends_on: [<system ids>]
 status: breakdown | compared | verified
+verify: residual            # optional — set by the orchestrator when the doc still fails after its one fix round
 ---
 ```
 
-`status` transitions strictly forward: `breakdown` (stage 2 wrote it) → `compared` (stage 3 appended) → `verified` (stage 4 passed, possibly after its one fix round). A doc flagged with residual errors stays `compared` and is listed in the index.
+`status` transitions strictly forward: `breakdown` (stage 2 wrote it) → `compared` (stage 3 appended) → `verified` (stage 4 passed, possibly after its one fix round). A doc flagged with residual errors stays `compared`, gains `verify: residual`, and is listed in the index; Resume treats it as settled. In a lite-profile folder `breakdown` is the terminal status until an upgrade runs stage 3.
 
 Stage-2 sections (in order): `## What the prototype does` · `## Data & formulas` · `## UI / presentation` · `## Dependencies & integration points` · `## Prototype-only` · `## Open questions`. Every claim carries a line ref like `(L4620)` or `(L4620-4655)`; constants/formulas verbatim; bulk content data (dialogue rows, item lists) documented as schema + row count + 2–3 representative rows, never transcribed wholesale.
 
 Stage-3 appended sections: `## Current state` (one orienting paragraph — which modules/classes cover this system, plus an "ahead of prototype" note where code exceeds it — then the full table `| # | Feature | Status | Evidence | Note |`, one row per checklist feature, same order and numbering as `_features.json`) · `## Missing` (missing features grouped into coherent gap clusters referencing row numbers) · `## Modify (divergent)` (one bullet per divergent row: prototype behavior with line ref vs code behavior with `path:line`, locked-decision flag).
+
+## `_run.json`
+
+Written by the orchestrator at the Pre-Flight go, before any worker runs; rewritten only by a lite-to-full upgrade.
+
+```json
+{
+  "profile": "lite",
+  "upgraded_from": null,
+  "prototype": "<absolute path>", "prototype_bytes": 0, "prototype_mtime": "<ISO 8601>",
+  "prior_version": null,
+  "output_dir": "<absolute path>",
+  "source_roots": [], "scope_rule": "", "locked_decisions": [], "hints": {},
+  "exclude_hints": "",
+  "started": "<ISO 8601>"
+}
+```
+
+The comparison fields (`source_roots`, `scope_rule`, `locked_decisions`, `hints`) stay empty in a lite run and are filled by the upgrade, which also sets `profile: "full"` and `upgraded_from: "lite"`. A folder without `_run.json` predates it: its profile is whatever its index says (`lite`, otherwise full).
 
 ## `_chunkmap.json`
 
@@ -75,7 +98,7 @@ Partition law: every line `1..total_lines` in exactly one bucket (a system range
 
 Features are atomic capabilities ("stamina ticks down per road segment"), not vague umbrellas ("travel works") — each is individually verdicted. Same id/order as the chunk map.
 
-## `_delta-<prev>.md`
+## `_delta-prev.md`
 
 Sections: `New in <current>` · `Substantially grown` (rough old→new size) · `Roughly unchanged` · `Notes for the compare stage` (which systems should be presumed to have existing counterparts vs fresh). Under ~120 lines.
 
@@ -85,14 +108,23 @@ Five sections mirroring the mandates: **1 Dependency symmetry** (frontmatter/pro
 
 ## `00-index.md`
 
-Frontmatter: `title`, `source_prototype` (absolute path — the saga planner matches on this), `generated` (date), `pipeline` (run identifiers). Sections, in order:
+Frontmatter: `title`, `source_prototype` (absolute path — consumers match on this), `profile` (`full` | `lite`; an index without the key is a pre-profile full run), `generated` (date), `pipeline` (run identifiers). Full-profile sections, in order:
 
 1. `# Executive summary` — the port gap in one page; what exists, the big holes, where the codebase is ahead. No campaign decomposition (that is the saga planner's job).
 2. `# System status table` — one row per system: feature count, per-status counts, verify outcome (`pass` / `fail(+n residual)` / `unverified`), plus a totals row.
 3. `# Locked-decision divergences` — every divergent row attributable to a locked decision, gathered in one place, with "respect, don't re-litigate" framing.
 4. `# Cross-cutting seams` — shared-state ownership map in target-codebase terms, ownership resolutions worth a planner's attention, unresolved warn/error consistency issues.
 5. `# Open questions rollup` — deduplicated, cross-resolution applied, each tagged `[design]` vs `[code]`.
-6. `# How to consume this folder` — reading order, what the support files are, and the planner contract: treat this folder (not the raw prototype) as intake; `divergent`/`prototype-only`/`oos-native` rows are not work; scope campaigns from Missing and Modify sections; build on code that is ahead of the prototype.
+6. `# How to consume this folder` — reading order, what the support files are, and the planner contract: treat this folder (not the raw prototype) as the source; work is the Missing sections, the Modify sections minus rows flagged as locked decisions, and the absent behavior each `partial` row's note names; `divergent` rows that follow a locked decision, `prototype-only`, and `oos-native` rows are not work; build on code that is ahead of the prototype; the folder is a frozen snapshot consumers never edit.
+
+### Lite index (`profile: lite`)
+
+Same frontmatter, four sections, ≤ ~150 lines:
+
+1. `# Executive summary` — what the prototype contains, in one page. First sentence states the profile: "Lite recon — no codebase comparison was run; every feature below is unassessed." No claims about what exists in the target code.
+2. `# System table` — one row per system: doc, line ranges, feature count, depends_on. No status columns.
+3. `# Seams and open questions` — cross-system dependencies and shared state in prototype terms, plus the docs' open questions, deduplicated, each tagged `[design]` vs `[code]`.
+4. `# How to consume this folder` — reading order, the support files, and the lite contract: this folder is the source, not the raw prototype; features are **unassessed, not missing** — the discussion decides what is work; the folder is frozen; upgrade path = run stages 3–5 on this folder.
 
 ## Stage Gates (orchestrator acceptance checklist)
 
@@ -100,4 +132,5 @@ Frontmatter: `title`, `source_prototype` (absolute path — the saga planner mat
 - **Stage 2**: one doc per system, template-complete, `status: breakdown`; 10–25 features each; smoke-test two line refs from different docs by grepping the prototype yourself.
 - **Stage 3**: every doc `status: compared`; table rows = checklist length; status counts sum correctly.
 - **Stage 4**: every doc verdicted; failed docs got exactly one fix round; residuals flagged, not hidden.
-- **Stage 5**: `_consistency.md` has all five sections; `00-index.md` has all six; read the index yourself before presenting it.
+- **Stage 5**: `_consistency.md` has all five sections; `00-index.md` has all six and `profile: full`; read the index yourself before presenting it.
+- **Lite index** (brief 10, replaces stages 3–5): stage 1 and 2 gates passed; `00-index.md` has `profile: lite` and all four lite sections; no status vocabulary appears anywhere in it; read it yourself before presenting it.

@@ -19,8 +19,8 @@ around a batch sweep:
                   deferred Tier-2 UAT items that need your eyes.
 
 This is the skill's documented UNATTENDED entry point. Invoking it is itself
-the explicit go-ahead — it deliberately runs sweep.py with --no-confirm, in
-place of the skill's interactive confirmation gate. For an attended run with a
+the explicit go-ahead — it deliberately runs sweep.py without the skill's
+interactive confirmation gate (sweep.py itself has no --no-confirm flag). For an attended run with a
 confirmation prompt, use the skill's interactive flow (see SKILL.md) instead.
 
 General: discovers campaigns + the sweep script dynamically, so it works for
@@ -42,7 +42,7 @@ Exit codes:
   0  sweep completed, all campaigns passed
   1  sweep ran but a campaign failed (see reports)
   2  preflight failed / config error — nothing was launched
-  3  harness could not locate sweep.py or the preflight script
+  3  harness could not locate sweep.py or the preflight script (sweep.py's own 3 = unexpected crash)
 
 Usage:
   python sweep-afk.py --workspace <project-root> [--dry-run]

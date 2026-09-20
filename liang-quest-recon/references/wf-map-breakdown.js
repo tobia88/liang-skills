@@ -9,7 +9,7 @@
 //   protoPrevPath  (optional) prior prototype version for the structural delta; null/absent skips the delta agent
 //   deltaContext   (optional) context for the delta agent: what the prior version fed, what is already executed
 //   excludeHints   (optional) known already-ported embedded subsystems to fence off (only their bridge stays in scope)
-//   models         (optional) { map, delta, breakdown } — default all 'sonnet'
+//   models         (optional) { map, delta, breakdown } — resolved by the orchestrator from project.yaml; an absent key means no model override (harness default)
 //   efforts        (optional) { map, delta, breakdown } — default high/medium/medium
 //
 // Returns: { systems, shared_core, excluded_spans, uncoveredLines, docs (with per-system feature
@@ -31,7 +31,9 @@ if (!args || !args.protoPath || !args.outDir || !args.projectContext) {
 
 const PROTO = args.protoPath
 const OUT = args.outDir
-const M = Object.assign({ map: 'sonnet', delta: 'sonnet', breakdown: 'sonnet' }, args.models || {})
+const M = args.models || {}
+// No default model lives here: an unresolved role is spawned without a model override (harness default).
+const opt = (o, m) => (m ? { ...o, model: m } : o)
 const E = Object.assign({ map: 'high', delta: 'medium', breakdown: 'medium' }, args.efforts || {})
 const EXCLUDE_HINTS = args.excludeHints || 'None known — but stay alert for embedded previously-ported subsystems and base64 asset blobs.'
 const BANNER_SCAN = args.bannerScan || '(none provided — do a full scan yourself)'
@@ -84,7 +86,7 @@ Method: scan both files for section banner comments (grab trailing context lines
 Write ${OUT}/_delta-prev.md with sections: "New in current", "Substantially grown" (rough old->new size), "Roughly unchanged", "Notes for the compare stage" (one paragraph: which systems should be presumed to have existing target-code counterparts vs fresh). Keep it under ~120 lines.
 
 Return JSON: new_systems (section titles new in current), grown, unchanged, md_path.`,
-    { label: 'delta:prev', phase: 'Map', schema: DELTA_SCHEMA, model: M.delta, effort: E.delta })
+    opt({ label: 'delta:prev', phase: 'Map', schema: DELTA_SCHEMA, effort: E.delta }, M.delta))
   : Promise.resolve(null)
 
 const chunkmap = await agent(`${CTX}
@@ -103,7 +105,7 @@ Steps:
 7. Partition discipline: system ranges must not overlap each other, shared_core, or excluded. Head/boilerplate and trivial glue go into excluded with reason "boilerplate". Every line 1..total_lines lands in exactly one bucket; list leftover gaps larger than 20 lines in "uncovered" (aim for zero). Verify the partition arithmetically before returning.
 8. Per system: kebab-case id, title, order (reading order: core/world first, then gameplay systems, then tooling, then boot), one-line purpose, ranges, depends_on best guesses.
 9. Write the complete map as pretty-printed JSON to ${OUT}/_chunkmap.json (writing the file creates the folder). Then return the exact same data per the output schema.`,
-  { label: 'map:chunk-map', phase: 'Map', schema: MAP_SCHEMA, model: M.map, effort: E.map })
+  opt({ label: 'map:chunk-map', phase: 'Map', schema: MAP_SCHEMA, effort: E.map }, M.map))
 
 if (!chunkmap.systems || chunkmap.systems.length < 6 || chunkmap.systems.length > 30) {
   throw new Error('Mapper returned implausible system count: ' + (chunkmap.systems ? chunkmap.systems.length : 'none'))
@@ -182,7 +184,7 @@ Return JSON: system (${s.id}), md_path, features (10-25 SHORT atomic capability 
 }
 
 const docs = await parallel(chunkmap.systems.map(s => () =>
-  agent(breakdownPrompt(s), { label: 'breakdown:' + s.id, phase: 'Breakdown', schema: DOC_SCHEMA, model: M.breakdown, effort: E.breakdown })))
+  agent(breakdownPrompt(s), opt({ label: 'breakdown:' + s.id, phase: 'Breakdown', schema: DOC_SCHEMA, effort: E.breakdown }, M.breakdown))))
 
 const okDocs = docs.filter(Boolean)
 const failed = chunkmap.systems.filter((s, i) => !docs[i]).map(s => s.id)

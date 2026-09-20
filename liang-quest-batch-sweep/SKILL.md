@@ -30,10 +30,10 @@ Per the crosscut decision in `camp-2026-05-24-batch-campaign-sweep` (constraint 
 
 - One invocation → at most one sweep. Never overlap two sweeps in the same workspace.
 - Always present a pre-flight report and require explicit user confirmation before launching the script. Do not skip the confirmation gate.
-- Sweep orchestration is entirely owned by `sweep.py`. This skill never modifies manifests, planner artifacts, run reports, or any other on-disk artifact; planner-authored `plan.md` (and `plan.html` when present) and `quest-NNN-*.md` files remain read-only.
+- Sweep orchestration is entirely owned by `sweep.py`, and so is every write (listed under Shared contracts). The skill itself — the wrapper around the script — never modifies manifests, planner artifacts, run reports, or any other on-disk artifact; planner-authored `plan.md` (and `plan.html` when present) and `quest-NNN-*.md` files remain read-only.
 - This skill never re-implements campaign discovery, toposort, dispatch, or report generation. All those live in sweep.py.
-- Campaigns archived by `liang-quest-archiver` (`.liang/campaigns/archive/<name>/`) are out of sweep scope by construction — sweep.py's one-level discovery glob never sees them (liang-quest-core protocol § Archived Campaigns). Archiving completed campaigns is the standing mitigation for the historical-campaign hazard below.
-- The sweep operates on `.liang/campaigns/` of the current workspace — either workspace-wide, or scoped via `--saga` / `--only` (see Scoped Sweeps). On a workspace with historical campaigns, **default to a scoped sweep**: an unscoped sweep re-dispatches every non-passed quest ever left behind (sweep.py resets `failed`/`skipped` quests to `ready` before dispatch). If the user asks for an unscoped sweep on a workspace where the pre-flight shows more campaigns than they plausibly intend, say so before the Confirmation Gate.
+- Campaigns archived by `liang-quest-archiver` (`.liang/campaigns/archive/<name>/`) are out of sweep scope by construction — sweep.py's one-level discovery glob never sees them (`liang-quest-core/references/campaign/protocol.md` § Archived Campaigns). Archiving completed campaigns is the standing mitigation for the historical-campaign hazard below.
+- The sweep operates on `.liang/campaigns/` of the current workspace — either workspace-wide, or scoped via `--saga` / `--only` (see Scoped Sweeps). On a workspace with historical campaigns, **default to a scoped sweep**: an unscoped sweep re-dispatches every non-passed quest ever left behind (sweep.py resets `failed`, `skipped`, and stale `in_progress` quests to `ready` before dispatch — `liang-quest-core/references/execution/status-transitions.md` § Sweep Retry-Reset). If the user asks for an unscoped sweep on a workspace where the pre-flight shows more campaigns than they plausibly intend, say so before the Confirmation Gate.
 
 ## Harness Support
 
@@ -53,7 +53,7 @@ Resolution and validation live in sweep.py, not here:
 
 ### Manual quests (`manual: true`)
 
-A quest flagged `manual: true` in the manifest is human-in-editor work that can never run headlessly. Before dispatching a campaign, sweep.py **holds** such quests — and, transitively, their un-passed in-campaign dependents — at `status: skipped` with `skip_reason: manual_deferred` / `manual_dependency`. The executor queues only `status: ready`, so held quests are invisible to it, and the retry-reset never releases a hold.
+Quests flagged `manual: true` never run headlessly: sweep.py holds them and their un-passed in-campaign dependents before dispatch, and the retry-reset never releases a hold. Hold algorithm, `skip_reason` values, and stale-hold release: `liang-quest-core/references/execution/status-transitions.md` § Manual Holds.
 
 Consequences you must surface to the user:
 
@@ -115,7 +115,7 @@ Present the pre-flight summary and ask: "Run the sweep? It will dispatch the exe
    - 0 → all campaigns passed.
    - 1 → at least one campaign failed.
    - 2 → configuration error; the sweep halted before completing.
-   - 3 → unexpected crash.
+   - 3 → unexpected crash. (`sweep-afk.py` also returns 3 when it cannot locate `sweep.py` or the preflight script.)
 
    Codes 0/1/2 are what sweep.py itself reports and are never retried. A bare 3 (or any other unexpected code) is first treated as an infra-level death by the built-in supervisor, which auto-resumes sweep.py up to twice before giving up and surfacing it as final — see Unattended Mode below.
 
@@ -203,10 +203,13 @@ This skill must never:
 
 - **Upstream:** `liang-quest-planner` produces the `manifest.yaml` files this skill's sweeps execute.
 - **Downstream (per campaign):** `liang-quest-executor` is what sweep.py invokes once per eligible campaign in non-interactive mode (no-confirm intent delivered as prompt text, not an argv flag).
+- **Upstream (scope):** `liang-quest-saga-planner` — `--saga` reads that saga's `saga.yaml` campaign list, read-only.
+- **Housekeeping:** `liang-quest-archiver` moves finished campaigns out of the discovery glob.
 - **Parallel:** None. This is the only multi-campaign orchestrator in the family.
 - **Shared contracts:**
   - `.liang/project.yaml` — workspace-wide config; sweep.py reads but does not write.
   - `.liang/campaigns/*/manifest.yaml` — sweep.py reads and atomically updates status fields.
+  - `.liang/sagas/*/saga.yaml` — sweep.py reads for `--saga` scoping; never writes.
   - `.liang/sweep-reports/*.html` — sweep.py writes; this skill reads.
   - `.liang/sweep.lock` — sweep.py writes (live mode only) before dispatching, removes on exit; single-instance guard. See Unattended Mode.
   - `.liang/sweep-logs/*.log` — sweep-afk.py writes when launched with `--detach`; this skill (and `--status`) reads.
@@ -217,5 +220,12 @@ This skill must never:
 - `sweep-preflight.py` — deep preflight (executor §2/§3 gates + pi runtime). Read-only; used in Phase 1 and by `sweep-afk.py`.
 - `sweep-afk.py` — unattended fire-and-AFK harness (preflight → sweep → p4 reconcile → report), with `--detach` (spawn detached + return), `--status` (read-only progress query), and a built-in supervisor that auto-resumes sweep.py on infra-level death. The skill's no-prompt entry point.
 - `requirements.txt` — Python dependencies (currently: `pyyaml>=6.0`).
+- `RUNBOOK-afk.md` — operator runbook for unattended sweeps.
+- `liang-quest-core/references/campaign/protocol.md` — campaign directory convention and § Archived Campaigns.
+- `liang-quest-core/references/campaign/manifest-schema.md` — `campaign_depends_on`, `manual`, and the status fields the sweep updates.
+- `liang-quest-core/references/execution/status-transitions.md` — § Manual Holds and § Sweep Retry-Reset.
+- `liang-quest-core/references/project/project-yaml.md` — `executor.campaign_timeout_seconds`, the one key the sweep reads.
+
+If a listed core file is missing, stop and report it.
 
 Always read the script when planning changes to this skill — the script's CLI and exit codes are the source of truth.

@@ -5,14 +5,14 @@
   - REQUIRED in every saga folder, whatever `planner.html` is set to.
   - NO STATUS ANYWHERE. saga.yaml owns status; the status table is shown in chat,
     and saga.html merges status in at render time.
-  - No schemas and no formulas — those stay in inventory.md.
+  - No schemas and no formulas — those stay in the recon docs that inventory.md cites.
   - Repeat the campaign block for each campaign, in topological order.
 -->
 
 # [SAGA_TITLE] — Saga
 
 - Saga: `saga-[YYYY-MM-DD]-[SLUG]`   Short name: [SHORT_NAME]   Skin: [SKIN_SLUG]
-- Source prototype: [PROTOTYPE_PATH]
+- Sources: [DISCUSSION_OR_REPORT_REF][, recon folder [RECON_FOLDER_PATH] ([full|lite])]
 
 ## Why this split
 [TWO_TO_FIVE_SENTENCES_ON_THE_SEAMS_CHOSEN]

@@ -1,13 +1,13 @@
 # Example manifest.yaml for liang-quest-planner campaigns.
 # This file is illustrative; the skill generates real values per campaign.
-# Schema defined by liang-quest-planner (independent of liang-quest-core per dc001).
+# Worked example only. Canonical schema: liang-quest-core/references/campaign/manifest-schema.md
 #
 # schema_version: 4 is the canonical campaign-manifest schema version.
 # It is distinct from .liang/project.yaml's schema_version: 1.
 #
 # `difficulty` is load-bearing: downstream executors route the quest to the
 # model named in .liang/project.yaml's `execution_by_difficulty` mapping.
-# Values: "easy" | "medium" | "hard". See SKILL.md Phase 2a for criteria.
+# Values: "easy" | "medium" | "hard". Criteria: liang-quest-core/references/campaign/difficulty-guide.md
 
 schema_version: 4
 campaign_id: "campaign-2026-05-26-1500-example-project"

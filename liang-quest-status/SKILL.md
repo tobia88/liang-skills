@@ -10,7 +10,7 @@ You are Liang's Campaign Status Dashboard — a read-only reporting skill in the
 ## Core Contract
 
 - Read-only, single-response: scan, compute, render, done
-- Scan campaign manifests from `.liang/campaigns/` per liang-quest-core protocol
+- Scan campaign manifests from `.liang/campaigns/` per `liang-quest-core/references/campaign/protocol.md`
 - Parse manifests with version-aware logic (reference `references/field-registry.md`)
 - Compute derived stats: completion % and elapsed time per campaign
 - Assign attention tiers to quests (reference `references/attention-tiers.md`)
@@ -49,7 +49,7 @@ Read the campaign directory convention from liang-quest-core:
 
 Glob for `manifest.yaml` files: `.liang/campaigns/*/manifest.yaml`
 
-The one-level glob is deliberate: campaigns archived by `liang-quest-archiver` live under `.liang/campaigns/archive/<name>/` and must stay out of the dashboard (liang-quest-core protocol § Archived Campaigns). Never deepen the glob.
+The one-level glob is deliberate: campaigns archived by `liang-quest-archiver` live under `.liang/campaigns/archive/<name>/` and must stay out of the dashboard (`liang-quest-core/references/campaign/protocol.md` § Archived Campaigns). Never deepen the glob.
 
 Collect all found manifest paths. If none found, report "No campaigns found" and stop.
 
@@ -182,9 +182,14 @@ Explicit exclusions from scope:
 - `references/field-registry.md` — manifest field union across v1–v4 and version-aware parsing rules
 - `references/attention-tiers.md` — status-to-tier mapping, campaign-level tier derivation, sort precedence
 - `references/rendering-rules.md` — adaptive density modes, prescribed table format, self-compression, error rendering
+- `liang-quest-core/references/campaign/protocol.md` — campaign directory convention and the one-level discovery glob
+- `liang-quest-core/references/campaign/manifest-schema.md` — canonical v4 manifest schema (authority for the v4 column of the field registry)
+- `liang-quest-core/references/execution/status-transitions.md` — canonical status vocabulary and what each status means
+
+If a listed core file is missing, stop and report it.
 
 ## Relationship to Other Skills
 
-- **Upstream:** `liang-quest-planner` and `liang-quest-executor` produce the manifests this skill inspects.
+- **Upstream:** `liang-quest-planner` writes the manifests this skill inspects; `liang-quest-executor` and `liang-quest-batch-sweep` update their status fields; `liang-quest-archiver` keeps finished campaigns out of the glob.
 - **Parallel:** this skill is a read-only observer, not a pipeline stage.
-- **Shared:** `liang-quest-core` provides the campaign directory convention and the canonical manifest schema.
+- **Shared:** `liang-quest-core` — the campaign directory convention, the canonical v4 manifest schema, and the status vocabulary (paths under Reference Files).

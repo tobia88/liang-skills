@@ -22,11 +22,11 @@ You are Liang's planner-native quest executor — the canonical execution skill 
 - **Status path:** `ready → in_progress → passed | failed | skipped` — canonical definition and allowed transitions: `liang-quest-core/references/execution/status-transitions.md`.
 - **Step decomposition:** Each `### Step N: <title>` in a quest's `## Steps` is one atomic step, synthetic IDs `s01`, `s02`, ... Code blocks within a step are file writes (`// file: <path>` or `# file: <path>` on the first line).
 - **Per-step execution via child processes.** The executor never edits files directly.
-- **Model selection:** Pi CLI and batch modes use `models.execution_by_difficulty[<difficulty>]`; `--claude` uses `models.claude_mode[<difficulty>]` (Claude tier aliases only; defaults easy→Haiku, medium→Sonnet, hard→Opus when absent).
+- **Model selection:** Pi CLI and batch modes use `models.execution_by_difficulty[<difficulty>]`; `--claude` uses `models.claude_mode[<difficulty>]` (Claude tier aliases only; defaults for absent keys per `liang-quest-core/references/project/project-yaml.md` § Model Routing Extensions).
 - **Three modes:** default Pi CLI (spawned `pi --model ...` with file I/O via step envelopes), `--claude` (Claude Code Agent subagents, in-memory I/O), `--batch` (background script + polling).
 - **Quest-level VC verification** after all steps pass: auto-classify each VC — mechanical → Tier 1 (inline, or verify-child for complex cases); judgmental → Tier 2 deferred UAT queue; the quest passes provisionally until §8a.
 - **Tiered retry per step:** Retry 1 lesson-only; retry 2+ re-plan-child for revised instructions; bounded by `max_step_retries` (default 3). Re-plan revisions never touch the quest `.md` on disk.
-- **Plan contradictions:** a child that finds the step's stated facts false against the workspace (a count, a path, a pattern, a measured value) reports them in `plan_contradictions`. A non-empty list is a step failure with `failure_type: "plan_contradiction"` that enters §7c **directly at the re-plan tier** — the planning model decides, never the user. Contradictions the re-plan-child cannot resolve fail the quest and land in the run report's `## Decisions needed`.
+- **Plan contradictions:** a child that finds the step's stated facts false against the workspace (a count, a path, a pattern, a measured value) reports them in `plan_contradictions`. An entry with `blocks_step: true` is a step failure with `failure_type: "plan_contradiction"` that enters §7c **directly at the re-plan tier** — the planning model decides, never the user. Contradictions the re-plan-child cannot resolve fail the quest and land in the run report's `## Decisions needed`.
 - **Unattended by default when configured:** `executor.unattended: true` in `project.yaml` implies `--no-confirm` on every run; `--confirm` restores the interactive gates for one run. Between the intake confirm (or launch, when unattended) and §8a the executor never puts a question to the user — see Boundaries 18.
 - **Step envelope I/O:** Each step gets one executor-generated `step-<sid>.md` envelope in `.run/<quest-id>/` — transport/ledger with fenced YAML blocks, full parity across modes (`references/step-envelope.md`).
 - **Usage tracking:** Every Pi CLI / batch child runs with its session pinned under `.run/<quest-id>/sessions/`; after each child exits the executor harvests token + cost records from the session file into the envelope's `usage` section, rolls quest totals into `complete.yaml` and the manifest's `usage` field, and reports campaign spend in the run report (`references/step-envelope.md § Usage Harvest`). `--claude` mode is untracked — subagent dispatch exposes no usage data.
@@ -53,7 +53,7 @@ Bypasses all interactive gates with documented defaults, for parent-process invo
 
 **Implied by config.** When `.liang/project.yaml` has `executor.unattended: true`, every run behaves as if `--no-confirm` were passed. `--confirm` on the invocation overrides the setting for that run; `--no-confirm` on the invocation is redundant but harmless. Announce which source resolved the mode in one line at startup ("unattended: project.yaml" / "unattended: --no-confirm" / "interactive").
 
-**Bypasses:** §1 confirm (proceed), §4 crash recovery (Resume), §5 intake confirm (proceed), §8a UAT (skip; Tier 2 VCs stay `tier_2_deferred` — §8b still writes `uat-checklist.md`), §9 cleanup (preserve all), §10 VCS policy (`"ask"`/absent → treat as `"ignore"` silently, no write-back), §11 commit suggestion (skip).
+**Bypasses:** §1 confirm (proceed), §4 crash recovery (Resume), §5 intake confirm (proceed), §8a UAT (skip; Tier 2 VCs stay `tier_2_deferred` — §8b still writes `uat-checklist.md`), §9 cleanup (preserve all), §10 VCS policy (`"ask"`/absent → treat as `"ignore"` silently, no write-back), §11 commit suggestion (skip), §12 open prompt (skip).
 
 **Does NOT bypass:** §2 config check (missing `project.yaml` or `models.verify` → exit 2, no prompts), §3 pre-flight gate (malformed campaign → exit 2, no partial execution), §6 host check (no `pi` CLI in default mode → exit 2, no silent mode fallback), or any Boundaries hard stop.
 
@@ -84,7 +84,7 @@ State what the run will do (queue `ready` quests in dependency order; per quest 
 
 ### 2. Project Config Check
 
-Read `.liang/project.yaml`. If absent: offer to bootstrap a minimal one interactively, or stop. If present: validate `schema_version`, `vcs`, `models.planning`, `models.execution_by_difficulty.{easy,medium,hard}`; read optional `executor.max_step_retries` (default 3), `executor.child_timeout_seconds` (default 300), `executor.unattended` (default false; `true` implies `--no-confirm` unless `--confirm` was passed — resolve this **before** §1 runs), and in `--claude` mode `models.claude_mode.{easy,medium,hard,verify,planning}` (all optional with documented defaults).
+Read `.liang/project.yaml`. If absent: bootstrap it through `liang-quest-core/references/project/project-yaml.md` § First-Run Interview; under `--no-confirm`, stop with exit code 2. If present: validate `schema_version`, `vcs`, `models.planning`, `models.execution_by_difficulty.{easy,medium,hard}`; read optional `executor.max_step_retries` (default 3), `executor.child_timeout_seconds` (default 300), `executor.unattended` (default false; `true` implies `--no-confirm` unless `--confirm` was passed — resolve this **before** §1 runs), and in `--claude` mode `models.claude_mode.{easy,medium,hard,verify,planning}` (all optional; defaults per `liang-quest-core/references/project/project-yaml.md` § Model Routing Extensions).
 
 **Hard block — `models.verify` must be configured.** If absent: explain why the verify model is needed, present an interactive model selection prompt, write the choice to `project.yaml`. Never silently default.
 
@@ -129,11 +129,11 @@ Show the queue (ID, title, difficulty, step count, dependencies, eligibility) an
 For each step in order: set manifest `current_cycle` (1-based), then spawn the execute-child:
 
 - **Pi CLI mode:** write the Input fenced YAML block to `.run/<quest-id>/step-<sid>.md` (step content, target files, quest context, retry context if applicable), then spawn:
-  `pi --model <execute-model> --session .run/<quest-id>/sessions/step-<sid>-a<attempt>.jsonl -p "Read the Input fenced YAML block in .run/<quest-id>/step-<sid>.md. Treat the quest Markdown step embedded there as the source-of-truth. When done, write files_changed, implementation_summary, status, and error_message into the Output fenced YAML block of the same Markdown envelope."`
+  `pi --model <execute-model> --session .run/<quest-id>/sessions/step-<sid>-a<attempt>.jsonl -p "Read the Input fenced YAML block in .run/<quest-id>/step-<sid>.md. Treat the quest Markdown step embedded there as the source-of-truth. When done, write files_changed, implementation_summary, status, error_message, and plan_contradictions into the Output fenced YAML block of the same Markdown envelope."`
   Wait for exit (timeout `executor.child_timeout_seconds`), read the envelope's Output block, then harvest usage from the pinned session into the envelope's `usage` section (`references/step-envelope.md § Usage Harvest` — applies to every child this skill spawns, including §7c re-plan and §7d verify children).
 - **Claude mode:** dispatch a Claude Code Agent subagent (tier per difficulty) with step content + target files + quest context in-memory; the subagent returns a structured result and the executor back-fills the envelope afterward. No timeout — subagent dispatch has no kill mechanism; wait for the return.
 
-Expected output: `files_changed` (list), `implementation_summary` (string), `status` (`"success"`/`"error"`), `error_message` (when error), `plan_contradictions` (list, may be empty). On success with an empty `plan_contradictions`: finalize the envelope's Output block, VCS-neutral checkpoint, next step. On error or timeout: enter §7c. On a non-empty `plan_contradictions` (whatever `status` says): treat as a failure with `failure_type: "plan_contradiction"` and enter §7c at the re-plan tier.
+Expected output: `files_changed` (list), `implementation_summary` (string), `status` (`"success"`/`"error"`), `error_message` (when error), `plan_contradictions` (list, may be empty). On success with no blocking contradiction: finalize the envelope's Output block, VCS-neutral checkpoint, next step — entries with `blocks_step: false` are carried into the run report as plan drift, never failed. On error or timeout: enter §7c. On any `plan_contradictions` entry with `blocks_step: true` (whatever `status` says): treat as a failure with `failure_type: "plan_contradiction"` and enter §7c at the re-plan tier. Semantics: `liang-quest-core/references/execution/child-contracts.md`.
 
 #### 7c. Tiered Retry Loop
 
@@ -173,12 +173,12 @@ The parent never edits project source files; all code changes flow through child
 | Child Type | Pi CLI (default) | Claude (`--claude`) | Batch (`--batch`) |
 |-----------|------------------|---------------------|-------------------|
 | Execute-child | `pi --model <execution_by_difficulty[difficulty]>` | `claude_mode[difficulty]` subagent | Pi CLI + same model |
-| Verify-child (Tier 1 complex) | `pi --model <models.verify>` | claude_mode.verify subagent (default haiku) | Pi CLI + verify model |
-| Re-plan-child (retry 2+) | `pi --model <models.planning>` | claude_mode.planning subagent (default sonnet) | Pi CLI + planning model |
+| Verify-child (Tier 1 complex) | `pi --model <models.verify>` | `claude_mode.verify` subagent | Pi CLI + verify model |
+| Re-plan-child (retry 2+) | `pi --model <models.planning>` | `claude_mode.planning` subagent | Pi CLI + planning model |
 
 Every Pi CLI / batch child is spawned with `--session .run/<quest-id>/sessions/<label>.jsonl` (labels: `step-<sid>-a<n>`, `replan-<sid>-a<n>`, `verify-vc<n>`) so usage harvest is deterministic and child transcripts stay with the run ledger.
 
-**UE C++ code style.** When a quest's code blocks are Unreal Engine C++ (UCLASS-family macros, `*.generated.h` includes, or paths under `Source/`), include the full text of `liang-quest-core/references/code-style/ue-cpp.md` in the child brief; generated code must follow it.
+**UE C++ code style.** When a quest's code blocks are Unreal Engine C++ — the detection rule heads `liang-quest-core/references/code-style/ue-cpp.md` — include that file's full text in the child brief; generated code must follow it.
 
 Full child I/O YAML schemas: `liang-quest-core/references/execution/child-contracts.md` (Planner-Native sections).
 
@@ -224,6 +224,8 @@ Native Markdown only — no HTML, CSS, JavaScript, images, or external dependenc
 
 - **Upstream:** `liang-quest-planner` produces the campaigns this skill consumes — the canonical planner/executor pair.
 - **Shared foundation:** `liang-quest-core` — protocol, manifest schema, status transitions, child contracts, run report.
+- **Dispatched by:** `liang-quest-batch-sweep` — one executor run per eligible campaign.
+- **Downstream:** `liang-quest-saga-planner` rollups collect the §8b `uat-checklist.md` and §8c `walkthrough.md` artifacts; `liang-quest-archiver` keys off terminal statuses; `liang-quest-status` reads the manifest.
 - **Shared contracts:** `.liang/project.yaml` — workspace-wide config. Required.
 
 ## Reference Files
@@ -232,7 +234,7 @@ Native Markdown only — no HTML, CSS, JavaScript, images, or external dependenc
 
 `liang-quest-core` is a **sibling of this skill's directory** — resolve core paths as `<skills-root>/liang-quest-core/...`, where `<skills-root>` is the parent of the directory containing this SKILL.md (`{baseDir}/..`). When running outside Pi (e.g. via the Claude `liang-pi` proxy) the session CWD is the user's project, NOT the skills root — never resolve these paths against the project CWD. `references/...` paths resolve inside this skill's own directory (`{baseDir}/references/...`).
 
-### Core References (read first — source of truth for shared schemas)
+### Core References (read before executing — source of truth for shared schemas)
 
 - `liang-quest-core/references/campaign/protocol.md` — campaign protocol, lifecycle, routing.
 - `liang-quest-core/references/campaign/manifest-schema.md` — manifest schema (planner-format canonical).
@@ -240,7 +242,9 @@ Native Markdown only — no HTML, CSS, JavaScript, images, or external dependenc
 - `liang-quest-core/references/execution/child-contracts.md` — child I/O contracts (Planner-Native sections).
 - `liang-quest-core/references/execution/run-report.md` — run report and lesson schemas.
 - `liang-quest-core/references/project/project-yaml.md` — project.yaml contract (incl. `models.claude_mode`).
-- `liang-quest-core/references/code-style/ue-cpp.md` — UE C++ code-block style contract for child-generated code (any UE project, no opt-in)
+- `liang-quest-core/references/code-style/ue-cpp.md` — UE C++ code-block style contract for child-generated code (any UE project, no opt-in; read only when a quest has UE C++ blocks)
+
+If a listed core file is missing, stop and report it.
 
 ### Local References (load at the point indicated)
 

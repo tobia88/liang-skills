@@ -32,7 +32,7 @@
 [STEP_DESCRIPTION]
 
 ## Dependencies
-- [DEPENDENCY_QUEST_FILE_OR_NONE]
+- [q00N, ... | none]
 
 ## Victory Conditions
 - [ ] [VICTORY_CONDITION_1]

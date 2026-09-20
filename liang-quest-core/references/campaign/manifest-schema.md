@@ -24,7 +24,7 @@ quests:
     status: "ready"          # see Status Vocabulary; planner writes "ready"
 ```
 
-`manual: true` marks a quest as human-in-editor work (UMG assembly, asset authoring, playtest UAT) that must never be dispatched to a headless child. The planner writes it for every quest whose title/purpose is labeled MANUAL. Consumed by both the executor (at §5 campaign intake) and the batch sweep orchestrator (sweep.py), which apply the same hold algorithm: such quests — and, transitively, their un-passed in-campaign dependents — are held at `status: skipped` with `skip_reason: manual_deferred` / `manual_dependency` instead of being dispatched; the campaign then counts as passed-with-manual-backlog. Hold semantics: `liang-quest-core/references/execution/status-transitions.md § Manual Holds`.
+`manual: true` marks a quest as human-in-editor work (UMG assembly, asset authoring, playtest UAT) that must never be dispatched to a headless child. The planner writes it for every quest whose title/purpose is labeled MANUAL in `plan.md`. Consumed by both the executor (at §5 campaign intake) and the batch sweep orchestrator (sweep.py), which apply the same hold algorithm: such quests — and, transitively, their un-passed in-campaign dependents — are held at `status: skipped` with `skip_reason: manual_deferred` / `manual_dependency` instead of being dispatched; the campaign then counts as passed-with-manual-backlog. Hold semantics: `liang-quest-core/references/execution/status-transitions.md § Manual Holds`.
 
 No `workflow` field. The planner-native pipeline has a single executor, so no workflow discriminator is needed.
 

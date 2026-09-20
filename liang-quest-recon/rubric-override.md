@@ -1,6 +1,6 @@
 # Rubric Override
 
-liang-quest-recon is a pipeline/protocol skill with an intentional non-workflow shape: its H2 sections mirror the five-stage pipeline (Stages, Invocation, Pre-Flight, Model Routing, Execution Profiles, Reliability Invariants, Resume, Downstream Handoff) rather than the canonical workflow layout. The canonical-section checks are disabled per the rubric's own guidance for intentionally-shaped skills.
+liang-quest-recon is a pipeline/protocol skill with an intentional non-workflow shape: between the quest family's five skeleton sections (Core Contract, Activation, Boundaries, Relationship to Other Skills, Reference Files) its H2 sections mirror the five-stage pipeline (Profiles, Stages, Invocation, Pre-Flight, Model Routing, Execution Profiles, Reliability Invariants, Resume) rather than the canonical workflow layout. The canonical-section checks are disabled per the rubric's own guidance for intentionally-shaped skills.
 
 ## Disable
 - L1-02

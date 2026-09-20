@@ -18,8 +18,8 @@ Full protocol for the step-failure retry loop. SKILL.md §7c holds the summary; 
 
 1. **Extract lesson** — Append to `<campaign-root>/lessons.yaml` with `retry_tier: "replan"`.
 2. **Spawn re-plan-child** — Provide: original step content, failure context, ALL accumulated lessons.
-   - **Pi CLI mode:** `pi --model <planning-model> -p "Read the failed step envelope at .run/<quest-id>/step-<sid>.md and lessons.yaml. Produce revised instructions for the failed quest .md step. Write them to the step envelope's Re-plan fenced YAML block."`
-   - **Claude mode:** Dispatch re-plan subagent (tier from `models.claude_mode.planning`, default `sonnet`) with same context. Returns in-memory.
+   - **Pi CLI mode:** `pi --model <planning-model> --session .run/<quest-id>/sessions/replan-<sid>-a<n>.jsonl -p "Read the failed step envelope at .run/<quest-id>/step-<sid>.md and lessons.yaml. Produce revised instructions for the failed quest .md step. Write them to the step envelope's Re-plan fenced YAML block."`
+   - **Claude mode:** Dispatch re-plan subagent (tier from `models.claude_mode.planning`; default per `liang-quest-core/references/project/project-yaml.md` § Model Routing Extensions) with same context. Returns in-memory.
 3. **Read re-plan output** — Expect: `revised_instructions`, `revised_code_block` (optional), `reasoning`, `confidence`.
 4. **Re-execute** — Spawn execute-child with `revised_instructions` replacing the original step description (and `revised_code_block` replacing the original code block if present), plus all accumulated lessons.
 5. **Pass:** Exit loop. Mark step passed. Checkpoint. Next step.
@@ -28,7 +28,7 @@ Full protocol for the step-failure retry loop. SKILL.md §7c holds the summary; 
 
 ## Plan Contradiction — Straight to Re-Plan
 
-Triggered when an execute-child returns a non-empty `plan_contradictions` list, regardless of its `status`. The step's stated facts (counts, paths, regexes, measured values, file layout) do not match the workspace; re-running the unchanged step is pointless, so the lesson-only tier is skipped.
+Triggered when an execute-child returns any `plan_contradictions` entry with `blocks_step: true`, regardless of its `status` (entries with `blocks_step: false` on a successful step are recorded as drift and do not trigger this). The step's stated facts (counts, paths, regexes, measured values, file layout) do not match the workspace; re-running the unchanged step is pointless, so the lesson-only tier is skipped.
 
 1. **Extract lesson** — Append with `retry_tier: "replan"`, `failure_type: "plan_contradiction"`, `error_summary` = the contradiction list rendered one per line (`claimed` vs `observed` with `evidence`). This attempt counts toward `max_step_retries`.
 2. **Spawn re-plan-child** exactly as in Retry 2+, with `failure_context.failure_type: "plan_contradiction"` and `failure_context.plan_contradictions` carrying the list verbatim. The child's brief: decide each contradiction from the quest's `## Purpose`, the campaign `plan.md` decision summary, and the evidence; produce `revised_instructions` that replace the false facts with the observed ones.
