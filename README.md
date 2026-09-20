@@ -12,6 +12,7 @@ in Claude Code via links (see [Install](#install)).
 | Skill | What it does |
 | --- | --- |
 | `liang-quest-core` | Shared protocol library: campaign protocol, manifest/plan schemas, status transitions, child-process contracts, run-report format. Not invocable. |
+| `liang-quest-recon` | Scouting stage above the saga planner: breaks one large prototype into adversarially-verified breakdown + gap-analysis docs, each verdict citing code `file:line` evidence. |
 | `liang-quest-planner` | Turns brainstorm output and/or conversation into a campaign: locked decisions → HTML plan → quest markdown files. |
 | `liang-quest-saga-planner` | Decomposes a large prototype into multiple related campaigns with cross-campaign dependencies; resumable state in `.liang/sagas/`. |
 | `liang-quest-executor` | Runs planner campaigns quest-by-quest via child processes; models routed from `project.yaml` `execution_by_difficulty`. |
@@ -33,6 +34,7 @@ in Claude Code via links (see [Install](#install)).
 | --- | --- |
 | `liang-code-cleanup` | Behavior-preserving readability pass (renames, dead code, why-comments) with recon and a no-logic-change attestation. |
 | `liang-game-prototyper` | Small playable HTML game prototypes in `.liang/prototypes/`, reusing a shared asset pool. |
+| `liang-replica-forge` | Research → synthesis → clean-context verify loop that turns an existing game or app into one anonymized, paste-ready replication prompt for benchmarking models. |
 | `liang-skill-blacksmith` | Rubric-driven quality refinement for SKILL.md files: mechanical checker script + judged fixes, inspect/verify modes. |
 | `liang-video-sampler` | Timestamped screenshots from local videos/GIFs so the agent can visually analyze clips. |
 | `liang-ue-cpp-style` | UE5.5+ C++ coding conventions reference. |
