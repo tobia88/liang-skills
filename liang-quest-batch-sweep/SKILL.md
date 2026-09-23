@@ -37,8 +37,14 @@ Per the crosscut decision in `camp-2026-05-24-batch-campaign-sweep` (constraint 
 
 ## Harness Support
 
-- This skill is pi-only: `sweep.py` dispatches campaigns as pi CLI children and `sweep-preflight.py` hard-fails when pi is not spawnable. There is no `--claude` sweep mode.
-- On a Claude-only environment, the equivalent is running campaigns individually: `liang-quest-executor <campaign-path> --claude`, in `campaign_depends_on` topological order. The executor holds `manual: true` quests at intake; the sweep-only features you lose are cross-campaign toposort, retry-reset, and sweep reports.
+Both scripts take `--harness pi|claude` (default `pi`). Everything except the per-campaign spawn — discovery, toposort, retry-reset, manual holds, outcome assessment, sweep reports, `sweep-afk.py`'s supervisor/detach/status — is identical across harnesses.
+
+- **`pi` (default):** each campaign is a `pi --print --skill liang-quest-executor --exclude-tools ask_question <msg>` child. `sweep-preflight.py` checks pi model resolvability, the API key, and that `pi` is spawnable.
+- **`claude`:** each campaign is a headless `claude -p --permission-mode <mode> "/liang-quest-executor <dir> --claude --no-confirm -- <msg>"` session, i.e. the executor's Claude-subagent mode in a fresh context per campaign. `claude -p` auto-loads the workspace `CLAUDE.md`, so governance matches the pi path. Per-step children are Claude tiers routed via `project.yaml` `models.claude_mode`; usage is untracked in this mode (the executor's run report sets `usage_tracked: false`, and the sweep report's spend column stays empty).
+  - `<mode>` comes from `project.yaml` → `executor.claude_permission_mode` (default `acceptEdits`). A headless session cannot answer permission prompts, so the mode decides what the child may do without asking: `acceptEdits` lets it edit files but **denies shell commands**, which fails any campaign that builds, tests, or touches p4. Those need `bypassPermissions` — set it explicitly in `project.yaml`; the script never assumes it. `sweep-preflight.py --harness claude` WARNs on the default and FAILs on an invalid value.
+  - `claude -p` text output arrives only when the session ends, so the live sweep log is quiet per campaign until its `EXEC_EXIT_CODE` line appears. Progress is visible in the campaign's `.run/` envelopes and `manifest.yaml` (`sweep-afk.py --status`).
+  - Same dispatch contract otherwise: no-confirm intent is prompt text, stdin closed, `EXEC_EXIT_CODE` marker parsed from the last line, campaign timeout + hung-process reap unchanged.
+- Choose the harness once per sweep and carry the same `--harness` into preflight, dry-run, and launch — the three must agree.
 
 ## Scoped Sweeps (`--saga` / `--only`)
 
@@ -85,8 +91,8 @@ Run these four phases in order. Do not skip ahead.
 
 1. Verify `sweep.py` exists alongside this SKILL.md. If not, abort with: "sweep.py is missing in this skill folder. Has it been built? See q003 of camp-2026-05-24-batch-campaign-sweep."
 2. Verify the workspace contains `.liang/project.yaml`. If absent, abort with: "No `.liang/project.yaml` found. Run `liang-quest-planner` first to bootstrap the project."
-3. Invoke `python sweep-preflight.py --workspace <root>` (co-located deep preflight). This catches the config/environment errors `sweep.py --dry-run` cannot — executor §2/§3 hard-block gates, model resolvability, the model API key, pi being spawnable from subprocess (the Windows `pi.cmd` trap), and that a governance context file (`CLAUDE.md`/`AGENTS.md`) is present and un-shadowed. If it exits non-zero (any FAIL), surface the failures and STOP — do not proceed.
-4. Invoke `python sweep.py --dry-run` from the workspace root, carrying the user's scope: append `--saga <token>` / `--only <ids>` when they asked for a saga or a subset. Reuse the exact same scope flags in the live Launch later.
+3. Invoke `python sweep-preflight.py --workspace <root> --harness <pi|claude>` (co-located deep preflight). Pick the harness from the user's ask (default `pi`; "sweep with Claude" / "claude mode" → `claude`; when running inside Claude Code with no pi on PATH, default to `claude` and say so). This catches the config/environment errors `sweep.py --dry-run` cannot — executor §2/§3 hard-block gates; for `pi`: model resolvability, the model API key, pi being spawnable from subprocess (the Windows `pi.cmd` trap); for `claude`: `claude` spawnable, `-p`/`--permission-mode` supported, and `executor.claude_permission_mode` sane; and for both, that a governance context file (`CLAUDE.md`/`AGENTS.md`) is present and un-shadowed. If it exits non-zero (any FAIL), surface the failures and STOP — do not proceed.
+4. Invoke `python sweep.py --dry-run --harness <same>` from the workspace root, carrying the user's scope: append `--saga <token>` / `--only <ids>` when they asked for a saga or a subset. Reuse the exact same harness and scope flags in the live Launch later.
 5. Parse the scripts' stdout/stderr and surface a human-readable preview:
    - The deep-preflight PASS/WARN/FAIL summary.
    - Total campaigns discovered, and — if scoped — the scope line (`N of M campaign(s) in scope`).
@@ -141,7 +147,7 @@ For fire-and-AFK runs across **any** liang-quest-planner workspace, the skill sh
 It chains four phases and returns sweep.py's exit code:
 
 1. **Preflight** — runs `sweep-preflight.py`; aborts before launch on any FAIL.
-2. **Sweep** — runs `sweep.py` live (campaigns dispatched in non-interactive mode; no-confirm intent is delivered as prompt text, not an argv flag). Per-step pi children run in fresh contexts; pi auto-injects the workspace `CLAUDE.md` governance.
+2. **Sweep** — runs `sweep.py` live (campaigns dispatched in non-interactive mode; no-confirm intent is delivered as prompt text, not an argv flag). Each campaign runs in a fresh child context — `pi --print` or `claude -p` per `--harness` — and both auto-inject the workspace `CLAUDE.md` governance.
 3. **Reconcile** — runs `p4 reconcile` on **only the source files this run touched** (read from `.run/*/step-*.md`, mtime-scoped). This makes VCS correctness independent of whether an execute-child remembered `p4 edit`/`p4 add`. It never submits. Skipped on non-Perforce projects (p4 absent → prints the file list for manual handling).
 4. **Report** — surfaces the sweep report, every run report, and any deferred Tier-2 UAT items the user must still judge (non-interactive mode defers, never auto-accepts, Tier-2 VCs).
 
@@ -152,10 +158,11 @@ python <this-skill-dir>/sweep-afk.py --workspace <root> --dry-run   # validate; 
 python <this-skill-dir>/sweep-afk.py --workspace <root>             # fire and walk away (foreground)
 python <this-skill-dir>/sweep-afk.py --workspace <root> --detach    # fire, detach, return instantly
 python <this-skill-dir>/sweep-afk.py --workspace <root> --saga <id> # scoped: one saga only
+python <this-skill-dir>/sweep-afk.py --workspace <root> --harness claude --saga <id>  # Claude harness
 python <this-skill-dir>/sweep-afk.py --workspace <root> --status    # read-only progress check
 ```
 
-Flags: `--dry-run` (preflight + `sweep.py --dry-run`, no execution), `--no-reconcile` (print the touched-file list instead of opening), `--probe` (one live model call in preflight to confirm the key round-trips), `--saga` / `--only` (forwarded verbatim to sweep.py — see Scoped Sweeps), `--detach` (below), `--status` (below). Always run `--dry-run --probe` once before the first unattended run on a new machine. On a workspace with historical campaigns, prefer the scoped form for AFK runs.
+Flags: `--dry-run` (preflight + `sweep.py --dry-run`, no execution), `--no-reconcile` (print the touched-file list instead of opening), `--probe` (one live model call in preflight to confirm the key round-trips), `--harness pi|claude` (forwarded to both preflight and sweep.py — see Harness Support), `--saga` / `--only` (forwarded verbatim to sweep.py — see Scoped Sweeps), `--detach` (below), `--status` (below). Always run `--dry-run --probe` once before the first unattended run on a new machine. On a workspace with historical campaigns, prefer the scoped form for AFK runs.
 
 **`--detach`** re-launches `sweep-afk.py` itself as a detached background process and returns almost immediately with a PID and a log path — this is the flag an agent harness must use (see Launch step 2); it is also convenient from a real terminal when you don't want to hold the shell open. The detached child runs with a hidden `--detached-child` flag that puts it on the supervisor path described below; its combined stdout/stderr goes to a new file under `.liang/sweep-logs/` (named like `2026-07-17T0330Z-afk.log`), unbuffered so `tail -f` shows live progress.
 
@@ -169,7 +176,7 @@ Flags: `--dry-run` (preflight + `sweep.py --dry-run`, no execution), `--no-recon
 
 `sweep-afk.py` is designed to be run from a **real terminal** the user owns. If it is ever launched from inside an agent instead, the same rule as Launch step 1 applies: use `--detach`, never a foreground tool call subject to a harness timeout.
 
-**Cross-platform note:** both `sweep.py` and `sweep-preflight.py` resolve the `pi` launcher via `shutil.which("pi")` before spawning — on Windows the npm shim is `pi.cmd` and bare `["pi", ...]` under `subprocess(shell=False)` raises `FileNotFoundError`. Keep that resolution if editing the spawn sites.
+**Cross-platform note:** both `sweep.py` and `sweep-preflight.py` resolve the harness launcher via `shutil.which(<harness>)` before spawning — on Windows the pi npm shim is `pi.cmd` and bare `["pi", ...]` under `subprocess(shell=False)` raises `FileNotFoundError` (`claude` is a native `.exe` today, but is resolved the same way). Keep that resolution if editing the spawn sites, and keep the dispatch message single-line — a `.cmd` shim truncates argv at the first newline.
 
 ## Boundaries — Hard Stops
 

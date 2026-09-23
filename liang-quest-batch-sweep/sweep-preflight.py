@@ -5,9 +5,17 @@ Shipped inside the liang-quest-batch-sweep skill so every project shares it.
 sweep.py --dry-run only validates *structure* (files present, no dependency
 cycles). It never contacts a model, so it cannot catch the config/environment
 errors that make liang-quest-executor exit-2 mid-sweep. This script mirrors the
-executor's hard-block gates (SKILL.md §2/§3) PLUS the pi runtime environment,
-and — only when asked with --probe — fires a single cheap pi call to confirm
-the configured model key actually round-trips before you commit a full sweep.
+executor's hard-block gates (SKILL.md §2/§3) PLUS the child-harness runtime
+environment, and — only when asked with --probe — fires a single cheap model
+call through that harness to confirm it actually round-trips before you commit
+a full sweep.
+
+--harness pi (default): pi model resolvability + API key + `pi` spawnable +
+  `pi --help` lists the flags sweep.py's dispatch relies on.
+--harness claude: `claude` spawnable + `claude --help` lists `-p` and
+  `--permission-mode`, plus a sanity check of project.yaml
+  executor.claude_permission_mode. The pi model/key checks are skipped —
+  Claude mode routes per-step children by tier via models.claude_mode.
 
 Read-only by default. Touches no manifest, plan, or source file. With --probe
 it makes exactly one trivial model call.
@@ -17,7 +25,7 @@ Exit codes:
   2  at least one hard check FAILED — do not launch the sweep until fixed
 
 Usage:
-  python sweep-preflight.py --workspace <project-root> [--probe]
+  python sweep-preflight.py --workspace <project-root> [--harness pi|claude] [--probe]
 """
 
 from __future__ import annotations
@@ -182,21 +190,82 @@ def check_api_key(cfg: dict[str, Any], agent_dir: Path) -> None:
             record(FAIL, f"env {var} set", "no env var and no auth.json — children cannot authenticate")
 
 
+HARNESS_PI = "pi"
+HARNESS_CLAUDE = "claude"
+HARNESSES = (HARNESS_PI, HARNESS_CLAUDE)
+
+# Mirror of sweep.py's contract — keep in sync.
+DEFAULT_CLAUDE_PERMISSION_MODE = "acceptEdits"
+CLAUDE_PERMISSION_MODES = ("acceptEdits", "bypassPermissions", "default", "plan")
+
+
+def resolve_launcher(harness: str) -> str | None:
+    """Full path to the harness launcher, honoring PATHEXT (pi.cmd on Windows;
+    claude is a native .exe today but resolved the same way)."""
+    return shutil.which(harness)
+
+
 def resolve_pi() -> str | None:
     """Full path to the pi launcher, honoring PATHEXT (pi.cmd on Windows)."""
-    return shutil.which("pi")
+    return resolve_launcher(HARNESS_PI)
 
 
-def check_pi_spawnable() -> None:
-    """sweep.py spawns pi via subprocess(shell=False). On Windows that path
-    needs the resolved pi.cmd — bare 'pi' raises FileNotFoundError. Catch it
-    here (cheap, no API call) so a live sweep never crashes on dispatch."""
-    p = resolve_pi()
+def check_launcher_spawnable(harness: str) -> None:
+    """sweep.py spawns the harness via subprocess(shell=False). On Windows that
+    path needs the resolved .cmd/.exe — bare 'pi' raises FileNotFoundError.
+    Catch it here (cheap, no API call) so a live sweep never crashes on dispatch."""
+    p = resolve_launcher(harness)
     if p:
-        record(PASS, "pi executable spawnable", p)
+        record(PASS, f"{harness} executable spawnable", p)
     else:
-        record(FAIL, "pi executable spawnable",
-               "shutil.which('pi') is None — subprocess cannot launch the executor")
+        record(FAIL, f"{harness} executable spawnable",
+               f"shutil.which('{harness}') is None — subprocess cannot launch the executor")
+
+
+def check_claude_permission_mode(cfg: dict[str, Any]) -> None:
+    """Claude harness only: the headless session can't answer permission
+    prompts, so the mode sweep.py passes decides what the child may do. Surface
+    an invalid value as FAIL (sweep.py would exit 2) and the acceptEdits default
+    as WARN (shell commands get denied — builds/p4/tests will fail)."""
+    executor_cfg = cfg.get("executor") or {}
+    if not isinstance(executor_cfg, dict):
+        executor_cfg = {}
+    mode = executor_cfg.get("claude_permission_mode", DEFAULT_CLAUDE_PERMISSION_MODE)
+    if mode is None:
+        mode = DEFAULT_CLAUDE_PERMISSION_MODE
+    if mode not in CLAUDE_PERMISSION_MODES:
+        record(FAIL, "claude: executor.claude_permission_mode valid",
+               f"{mode!r} — must be one of {CLAUDE_PERMISSION_MODES}")
+    elif mode == DEFAULT_CLAUDE_PERMISSION_MODE:
+        record(WARN, "claude: executor.claude_permission_mode",
+               f"{mode} (default) denies shell commands headlessly — campaigns that "
+               "build/test/p4 need bypassPermissions set explicitly in project.yaml")
+    else:
+        record(PASS, "claude: executor.claude_permission_mode", mode)
+
+
+def check_claude_dispatch_capability() -> None:
+    """Confirm THIS claude build understands the flags sweep.py's claude
+    dispatch relies on (`-p`, `--permission-mode`)."""
+    exe = resolve_launcher(HARNESS_CLAUDE)
+    if not exe:
+        record(WARN, "dispatch: claude supports required flags",
+               "claude not resolvable — cannot verify -p/--permission-mode support")
+        return
+    try:
+        cp = subprocess.run([exe, "--help"], stdin=subprocess.DEVNULL,
+                            capture_output=True, text=True, encoding="utf-8",
+                            errors="replace", timeout=60, check=False)
+    except Exception as e:  # noqa: BLE001 — help must never hard-fail the preflight
+        record(WARN, "dispatch: claude supports required flags", f"`claude --help` failed: {e}")
+        return
+    help_blob = (cp.stdout or "") + (cp.stderr or "")
+    missing = [f for f in ("--print", "--permission-mode") if f not in help_blob]
+    if missing:
+        record(FAIL, "dispatch: claude supports required flags",
+               f"this claude build is missing {missing} — dispatch form would break")
+    else:
+        record(PASS, "dispatch: claude supports required flags", "-p, --permission-mode")
 
 
 def check_dispatch_contract() -> None:
@@ -395,6 +464,33 @@ def probe_pi(cfg: dict[str, Any]) -> None:
                f"{model} exit {cp.returncode}; tail: {blob.strip()[-200:]!r}")
 
 
+def probe_claude() -> None:
+    """One trivial headless `claude -p` call. Confirms the launcher spawns from
+    subprocess, the session model is authenticated, and print mode returns —
+    the three things a green static preflight cannot prove."""
+    exe = resolve_launcher(HARNESS_CLAUDE)
+    if not exe:
+        record(FAIL, "claude live probe", "shutil.which('claude') is None — cannot locate launcher")
+        return
+    cmd = [exe, "-p", "Reply with exactly: OK"]
+    try:
+        cp = subprocess.run(cmd, stdin=subprocess.DEVNULL,
+                            capture_output=True, text=True, encoding="utf-8",
+                            errors="replace", timeout=120, check=False)
+    except FileNotFoundError:
+        record(FAIL, "claude live probe", f"could not spawn {exe}")
+        return
+    except subprocess.TimeoutExpired:
+        record(FAIL, "claude live probe", "timed out (120s)")
+        return
+    blob = (cp.stdout or "") + (cp.stderr or "")
+    if cp.returncode == 0 and "OK" in blob.upper():
+        record(PASS, "claude live probe", "session model responded")
+    else:
+        record(FAIL, "claude live probe",
+               f"exit {cp.returncode}; tail: {blob.strip()[-200:]!r}")
+
+
 # ---- main ----------------------------------------------------------------
 
 def main(argv: list[str] | None = None) -> int:
@@ -407,22 +503,36 @@ def main(argv: list[str] | None = None) -> int:
             pass
     ap = argparse.ArgumentParser(description="Deep preflight for liang-quest-batch-sweep.")
     ap.add_argument("--workspace", type=Path, default=Path.cwd())
+    ap.add_argument("--harness", choices=HARNESSES, default=HARNESS_PI,
+                    help="child harness sweep.py will dispatch with (default: pi)")
     ap.add_argument("--probe", action="store_true",
-                    help="make one live pi call to confirm the model key works")
+                    help="make one live model call through the harness to confirm it round-trips")
     args = ap.parse_args(argv)
     ws = args.workspace.resolve()
     agent_dir = pi_agent_dir()
 
     cfg = check_project_yaml(ws)
-    if cfg:
-        check_models_resolvable(cfg, agent_dir)
-        check_api_key(cfg, agent_dir)
-    check_pi_spawnable()
-    check_dispatch_contract()
+    if args.harness == HARNESS_PI:
+        if cfg:
+            check_models_resolvable(cfg, agent_dir)
+            check_api_key(cfg, agent_dir)
+        check_launcher_spawnable(HARNESS_PI)
+        check_dispatch_contract()
+    else:
+        # Claude mode routes per-step children by tier (models.claude_mode),
+        # so pi's model.json / API-key checks do not apply.
+        if cfg:
+            check_claude_permission_mode(cfg)
+        check_launcher_spawnable(HARNESS_CLAUDE)
+        check_claude_dispatch_capability()
     check_governance_context(ws)
     check_campaigns(ws)
-    if args.probe and cfg:
-        probe_pi(cfg)
+    if args.probe:
+        if args.harness == HARNESS_PI:
+            if cfg:
+                probe_pi(cfg)
+        else:
+            probe_claude()
 
     # ---- report ----
     icon = {PASS: "[ OK ]", WARN: "[WARN]", FAIL: "[FAIL]"}

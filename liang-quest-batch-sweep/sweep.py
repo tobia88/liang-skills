@@ -45,7 +45,7 @@ Exit codes (matching the executor's contract from q001):
   2 — configuration error (no campaigns eligible, etc.)
   3 — unexpected crash
 
-Usage: python sweep.py [--dry-run] [--workspace <path>]
+Usage: python sweep.py [--dry-run] [--workspace <path>] [--harness pi|claude]
                        [--saga <id|path>] [--only <campaign_id,...>]
 """
 
@@ -73,6 +73,24 @@ SAGAS_DIR_NAME = ".liang/sagas"
 PROJECT_YAML_PATH = ".liang/project.yaml"
 SWEEP_REPORTS_DIR_NAME = ".liang/sweep-reports"
 EXECUTOR_SKILL_NAME = "liang-quest-executor"
+
+# Child harness that runs the executor for each campaign. `pi` spawns
+# `pi --print --skill liang-quest-executor ...`; `claude` spawns a headless
+# `claude -p` session that invokes the executor's `--claude` mode (Agent
+# subagents per step). Everything above the spawn site — discovery, toposort,
+# retry-reset, manual holds, outcome assessment, reports — is harness-agnostic.
+HARNESS_PI = "pi"
+HARNESS_CLAUDE = "claude"
+HARNESSES = (HARNESS_PI, HARNESS_CLAUDE)
+
+# `claude -p` permission mode for the headless executor session. Read from
+# project.yaml -> executor.claude_permission_mode. The default lets the child
+# edit files without prompting but still stops on shell commands, which in a
+# TTY-less session means the call is denied — so a campaign that needs Bash
+# (builds, p4, tests) requires the user to opt in to "bypassPermissions" in
+# project.yaml. That choice is deliberately the user's, not the script's.
+DEFAULT_CLAUDE_PERMISSION_MODE = "acceptEdits"
+CLAUDE_PERMISSION_MODES = ("acceptEdits", "bypassPermissions", "default", "plan")
 
 # skip_reason values the sweep itself writes to hold manual quests out of the
 # dispatch queue. Holds are released and recomputed on every sweep.
@@ -664,12 +682,28 @@ def _kill_process_tree(process: subprocess.Popen[Any]) -> None:
 
 
 def dispatch_campaign(
-    campaign: dict[str, Any], workspace: Path, timeout: float | None, dry_run: bool = False
+    campaign: dict[str, Any],
+    workspace: Path,
+    timeout: float | None,
+    dry_run: bool = False,
+    harness: str = HARNESS_PI,
+    claude_permission_mode: str = DEFAULT_CLAUDE_PERMISSION_MODE,
 ) -> int:
     """
-    Invoke the general executor for one campaign via Pi CLI in non-interactive
-    mode (`--print`), delivering the no-confirm intent as message text (NOT as
-    an argv flag — pi has no `--no-confirm` flag and rejects it).
+    Invoke the general executor for one campaign in non-interactive mode,
+    delivering the no-confirm intent as message text (NOT as an argv flag —
+    neither pi nor claude has a `--no-confirm` flag; it is a convention the
+    executor skill reads from its prompt).
+
+    harness == "pi":     `pi --print --skill liang-quest-executor ... <msg>`
+    harness == "claude": `claude -p --permission-mode <mode> <msg>`, where the
+                         message opens with `/liang-quest-executor <dir>
+                         --claude` so the headless session invokes the executor
+                         in its Claude-subagent mode. `claude -p` (text output)
+                         prints only the final response, so the live stream is
+                         quiet until the campaign ends; the EXEC_EXIT_CODE
+                         marker is still the last line and is parsed the same way.
+
     Returns the subprocess exit code:
       0 — all quests passed
       1 — at least one quest failed (planned failure path)
@@ -688,11 +722,16 @@ def dispatch_campaign(
     campaign_dir = campaign["campaign_dir"]
     cid = campaign.get("campaign_id", "<unknown>")
 
-    # Resolve the pi launcher to its full path. On Windows the npm shim is
+    if harness not in HARNESSES:
+        raise ValueError(f"unknown harness {harness!r}; expected one of {HARNESSES}")
+
+    # Resolve the launcher to its full path. On Windows the pi npm shim is
     # `pi.cmd`, and subprocess (shell=False) uses CreateProcess, which does NOT
     # apply PATHEXT — so bare "pi" raises FileNotFoundError. shutil.which honors
-    # PATHEXT and is a no-op (returns the resolved path) on POSIX.
-    pi_exe = shutil.which("pi") or "pi"
+    # PATHEXT and is a no-op (returns the resolved path) on POSIX. `claude` is
+    # a native .exe on Windows today, but resolve it the same way so an npm-shim
+    # install of it behaves identically.
+    launcher_exe = shutil.which(harness) or harness
 
     # `--no-confirm` is NOT a pi CLI flag. pi rejects unknown options
     # ("Unknown option: --no-confirm") — it is only a *convention the executor
@@ -723,20 +762,46 @@ def dispatch_campaign(
         "if every quest passed, 1 if any quest failed, 2 on a configuration "
         "error, or 3 on an unexpected crash."
     )
+    if harness == HARNESS_CLAUDE:
+        # Under Claude Code the skill is invoked by its slash command inside the
+        # prompt (there is no `--skill` flag). `--claude` selects the executor's
+        # Agent-subagent mode so per-step children are Claude tiers routed via
+        # project.yaml models.claude_mode, not pi model IDs.
+        no_confirm_msg = (
+            f"/{EXECUTOR_SKILL_NAME} {campaign_dir} --claude --no-confirm -- "
+            + no_confirm_msg
+        )
     # Batch-shim newline guard (see comment above) — collapse any whitespace
     # run to a single space so an edit to the prose can never reintroduce one.
     no_confirm_msg = " ".join(no_confirm_msg.split())
-    cmd = [
-        pi_exe,
-        "--print",                          # non-interactive: process and exit
-        "--skill", EXECUTOR_SKILL_NAME,
-        "--exclude-tools", "ask_question",  # never block on an interactive prompt
-        no_confirm_msg,                     # no-confirm intent + campaign dir as the message
-    ]
-    cmd_display = (
-        f"{pi_exe} --print --skill {EXECUTOR_SKILL_NAME} "
-        f"--exclude-tools ask_question <no-confirm msg for {cid}>"
-    )
+    if harness == HARNESS_PI:
+        cmd = [
+            launcher_exe,
+            "--print",                          # non-interactive: process and exit
+            "--skill", EXECUTOR_SKILL_NAME,
+            "--exclude-tools", "ask_question",  # never block on an interactive prompt
+            no_confirm_msg,                     # no-confirm intent + campaign dir as the message
+        ]
+        cmd_display = (
+            f"{launcher_exe} --print --skill {EXECUTOR_SKILL_NAME} "
+            f"--exclude-tools ask_question <no-confirm msg for {cid}>"
+        )
+    else:
+        # `-p` = headless print mode (process and exit). A permission prompt
+        # cannot be answered on a TTY-less stdin, so the mode decides what the
+        # child may do without asking; see DEFAULT_CLAUDE_PERMISSION_MODE for
+        # why bypassing is a project.yaml opt-in. `claude -p` auto-loads the
+        # workspace CLAUDE.md, so governance matches the pi path.
+        cmd = [
+            launcher_exe,
+            "-p",                                       # non-interactive: process and exit
+            "--permission-mode", claude_permission_mode,
+            no_confirm_msg,                             # /executor <dir> --claude + no-confirm intent
+        ]
+        cmd_display = (
+            f"{launcher_exe} -p --permission-mode {claude_permission_mode} "
+            f"</{EXECUTOR_SKILL_NAME} --claude no-confirm msg for {cid}>"
+        )
 
     if dry_run:
         print(f"[sweep] would RUN: {cmd_display}")
@@ -796,7 +861,7 @@ def dispatch_campaign(
                     marker_grace_deadline = now + 60
                 if marker_grace_deadline is not None and now >= marker_grace_deadline:
                     print(
-                        f"[sweep] {cid} printed EXEC_EXIT_CODE but the pi process "
+                        f"[sweep] {cid} printed EXEC_EXIT_CODE but the {harness} process "
                         f"did not exit — reaping the hung process tree and "
                         f"continuing with the marker code",
                         file=sys.stderr,
@@ -824,7 +889,7 @@ def dispatch_campaign(
         print(f"[sweep] {cid} dispatch timed out after {timeout_label}", file=sys.stderr)
         return EXIT_TIMEOUT
     except FileNotFoundError as e:
-        print(f"[sweep] pi CLI not found: {e}", file=sys.stderr)
+        print(f"[sweep] {harness} CLI not found: {e}", file=sys.stderr)
         return EXIT_CRASH
     except Exception as e:
         if process is not None and process.poll() is None:
@@ -832,9 +897,9 @@ def dispatch_campaign(
         print(f"[sweep] dispatch failed for {cid}: {e}", file=sys.stderr)
         return EXIT_CRASH
 
-    # Honor native exit code first. If Pi returns 0 (normal for pi --print even
-    # when skill logic failed), fall back to EXEC_EXIT_CODE on the final line of
-    # combined stdout/stderr.
+    # Honor native exit code first. If the harness returns 0 (normal for
+    # `pi --print` / `claude -p` even when skill logic failed), fall back to
+    # EXEC_EXIT_CODE on the final line of combined stdout/stderr.
     marker_code = _extract_exec_exit_code("".join(output_chunks))
     if exit_code == 0 and marker_code is not None:
         exit_code = marker_code
@@ -1054,6 +1119,17 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--dry-run",
         action="store_true",
         help="Show what would be dispatched without invoking the executor",
+    )
+    parser.add_argument(
+        "--harness",
+        choices=HARNESSES,
+        default=HARNESS_PI,
+        help=(
+            "Child harness per campaign: 'pi' (default) spawns "
+            "`pi --print --skill liang-quest-executor`; 'claude' spawns a "
+            "headless `claude -p` session running the executor's --claude mode "
+            "(permission mode from project.yaml executor.claude_permission_mode)"
+        ),
     )
     parser.add_argument(
         "--saga",
@@ -1310,6 +1386,32 @@ def main(argv: list[str] | None = None) -> int:
     if campaign_timeout == 0:
         campaign_timeout = None
 
+    # Claude-harness permission mode for the headless executor session.
+    claude_permission_mode = executor_cfg.get(
+        "claude_permission_mode", DEFAULT_CLAUDE_PERMISSION_MODE
+    )
+    if claude_permission_mode is None:
+        claude_permission_mode = DEFAULT_CLAUDE_PERMISSION_MODE
+    if claude_permission_mode not in CLAUDE_PERMISSION_MODES:
+        print(
+            "[sweep] project config error: executor.claude_permission_mode must be one of "
+            f"{CLAUDE_PERMISSION_MODES}, got {claude_permission_mode!r}",
+            file=sys.stderr,
+        )
+        return EXIT_CONFIG_ERROR
+    if args.harness == HARNESS_CLAUDE:
+        print(
+            f"[sweep] harness: claude (claude -p --permission-mode {claude_permission_mode})",
+            file=sys.stderr,
+        )
+        if claude_permission_mode == DEFAULT_CLAUDE_PERMISSION_MODE:
+            print(
+                "[sweep] note: acceptEdits denies shell commands in a headless session — "
+                "campaigns that build/test/p4 need executor.claude_permission_mode: "
+                "bypassPermissions in project.yaml",
+                file=sys.stderr,
+            )
+
     # Toposort (raises ValueError on cycle). In scoped mode, deps outside the
     # scope were validated as fully-done above and are ignored by the sort.
     try:
@@ -1441,7 +1543,12 @@ def _dispatch_loop(
         # Dispatch
         dispatch_start = time.time()
         exit_code = dispatch_campaign(
-            campaign, workspace=workspace, timeout=campaign_timeout, dry_run=args.dry_run
+            campaign,
+            workspace=workspace,
+            timeout=campaign_timeout,
+            dry_run=args.dry_run,
+            harness=args.harness,
+            claude_permission_mode=claude_permission_mode,
         )
 
         if args.dry_run:

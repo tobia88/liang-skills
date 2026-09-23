@@ -46,7 +46,7 @@ Exit codes:
 
 Usage:
   python sweep-afk.py --workspace <project-root> [--dry-run]
-                      [--no-reconcile] [--probe]
+                      [--no-reconcile] [--probe] [--harness pi|claude]
                       [--saga <id|path>] [--only <campaign_id,...>]
   python sweep-afk.py --workspace <project-root> --detach [...same scope flags]
   python sweep-afk.py --workspace <project-root> --status
@@ -54,6 +54,8 @@ Usage:
 --saga / --only are forwarded verbatim to sweep.py to scope the sweep (e.g. to
 one saga's campaigns instead of every campaign in the workspace). See
 sweep.py's docstring for resolution rules and manual-quest hold semantics.
+--harness is forwarded to both sweep-preflight.py and sweep.py (default pi;
+`claude` dispatches each campaign as a headless `claude -p` executor session).
 """
 
 from __future__ import annotations
@@ -205,9 +207,9 @@ def collect_deferred_uat(ws: Path) -> list[tuple[str, str]]:
 
 # ---- phases --------------------------------------------------------------
 
-def run_preflight(preflight: Path, ws: Path, probe: bool) -> int:
+def run_preflight(preflight: Path, ws: Path, probe: bool, harness: str = "pi") -> int:
     print("\n=== [1/4] PREFLIGHT " + "=" * 44)
-    cmd = [sys.executable, str(preflight), "--workspace", str(ws)]
+    cmd = [sys.executable, str(preflight), "--workspace", str(ws), "--harness", harness]
     if probe:
         cmd.append("--probe")
     return subprocess.run(cmd, check=False).returncode
@@ -216,10 +218,11 @@ def run_preflight(preflight: Path, ws: Path, probe: bool) -> int:
 def run_sweep(
     sweep: Path, ws: Path, dry_run: bool,
     saga: str | None = None, only: str | None = None,
+    harness: str = "pi",
 ) -> int:
     label = "DRY-RUN" if dry_run else "LIVE"
-    print(f"\n=== [2/4] SWEEP ({label}) " + "=" * (40 - len(label)))
-    cmd = [sys.executable, str(sweep), "--workspace", str(ws)]
+    print(f"\n=== [2/4] SWEEP ({label}, {harness}) " + "=" * (38 - len(label) - len(harness)))
+    cmd = [sys.executable, str(sweep), "--workspace", str(ws), "--harness", harness]
     if dry_run:
         cmd.append("--dry-run")
     if saga:
@@ -403,6 +406,7 @@ def _keep_awake_disable() -> None:
 def run_supervised(
     sweep: Path, ws: Path, dry_run: bool,
     saga: str | None, only: str | None,
+    harness: str = "pi",
 ) -> tuple[int, int]:
     """
     Run sweep.py under a bounded-retry supervisor.
@@ -425,7 +429,7 @@ def run_supervised(
     rc = 3
     attempt = 0
     for attempt in range(1, max_attempts + 1):
-        rc = run_sweep(sweep, ws, dry_run, saga=saga, only=only)
+        rc = run_sweep(sweep, ws, dry_run, saga=saga, only=only, harness=harness)
         if rc in terminal:
             _log(f"attempt {attempt} exited rc={rc} (terminal)")
             break
@@ -584,7 +588,10 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--no-reconcile", action="store_true",
                     help="skip p4 reconcile; just print the touched-file list")
     ap.add_argument("--probe", action="store_true",
-                    help="have the preflight make one live pi model call")
+                    help="have the preflight make one live model call through the harness")
+    ap.add_argument("--harness", choices=("pi", "claude"), default="pi",
+                    help="child harness per campaign (forwarded to sweep-preflight.py and "
+                         "sweep.py): pi (default) or claude (headless `claude -p` executor)")
     ap.add_argument("--saga", type=str, default=None,
                     help="scope the sweep to one saga's campaigns (forwarded to sweep.py)")
     ap.add_argument("--only", type=str, default=None,
@@ -628,7 +635,7 @@ def main(argv: list[str] | None = None) -> int:
         # have already run it — cheap re-validation beats trusting stale
         # state across a process boundary, especially for a detached child
         # that could start minutes after it was queued.
-        if run_preflight(preflight, ws, args.probe) != 0:
+        if run_preflight(preflight, ws, args.probe, harness=args.harness) != 0:
             print("\n[afk] preflight FAILED — aborting before launch. Fix the FAILs and re-run.",
                   file=sys.stderr)
             return 2
@@ -637,7 +644,7 @@ def main(argv: list[str] | None = None) -> int:
         # In dry-run nothing is written, so include all (illustrative) with since=0.
         sweep_start = 0.0 if args.dry_run else time.time()
         sweep_rc, attempts = run_supervised(
-            sweep, ws, args.dry_run, saga=args.saga, only=args.only
+            sweep, ws, args.dry_run, saga=args.saga, only=args.only, harness=args.harness
         )
         run_reconcile(ws, args.dry_run, enabled=not args.no_reconcile, since=sweep_start)
         report(ws)
