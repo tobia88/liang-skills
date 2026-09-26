@@ -1462,7 +1462,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         return _dispatch_loop(
             args, workspace, ordered, campaigns, results, skipped_by_cascade,
-            campaign_timeout,
+            campaign_timeout, claude_permission_mode,
         )
     finally:
         _release_sweep_lock(lock_path)
@@ -1476,6 +1476,7 @@ def _dispatch_loop(
     results: list[dict[str, Any]],
     skipped_by_cascade: set[str],
     campaign_timeout: float | None,
+    claude_permission_mode: str,
 ) -> int:
     """The dispatch loop body, split out of main() so the lock acquired right
     before it can be released in a finally block regardless of which of the
