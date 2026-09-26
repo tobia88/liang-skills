@@ -50,6 +50,8 @@ Retry tier does not affect status transitions — both tiers stay in `in_progres
 
 Owned by `liang-quest-batch-sweep`'s `sweep.py`, never by the executor. Before dispatching a campaign, the sweep returns that campaign's `failed`, `skipped`, and stale `in_progress` quests to `ready` so the executor's intake queues them again, and clears their `skip_reason`, `started_at`, `completed_at`, `current_cycle` and `total_cycles`. Manual holds (§ Manual Holds) are applied first and the reset skips every held quest, so it never releases a hold. It runs only for campaigns the sweep actually dispatches. This is why an unscoped sweep re-dispatches every non-passed quest a workspace has ever left behind.
 
+**Recovery re-dispatch.** When a dispatch ends for an infra-shaped reason — the stall watchdog killed it, it hit the campaign timeout, the executor stopped mid-quest, every failure has an infra `failure_type`, or the failure playbook calls it transient — the sweep re-dispatches the same campaign up to `executor.sweep_recovery_attempts` times (default 1). That reset returns `failed` and `skipped` quests to `ready` but leaves an interrupted `in_progress` quest alone, so the executor's crash recovery resumes it from its last completed step instead of restarting it.
+
 ## Executor-Owned Manifest Fields
 
 The canonical executor manages these additional fields on quest entries:
@@ -99,4 +101,4 @@ The canonical executor supports crash recovery:
 3. Offer the user: **Resume** from last checkpoint, or **Restart** (reset to ready, clean .run/).
 4. Never silently resume when invoked interactively — always ask. Documented exception: under the executor's `--no-confirm` flag, default to **Resume** without prompting (non-interactive behavior per the executor's `--no-confirm` contract).
 
-Under a sweep, steps 1–4 never trigger for a dispatched campaign: § Sweep Retry-Reset has already returned a stale `in_progress` quest to `ready` before the executor starts, so the quest restarts from its first step. The reset changes manifest fields only and leaves `.run/<quest-id>/` as it found it.
+Under a sweep's first dispatch of a campaign, steps 1–4 never trigger: § Sweep Retry-Reset has already returned a stale `in_progress` quest to `ready` before the executor starts, so the quest restarts from its first step. A recovery re-dispatch is the exception — it keeps `in_progress`, so step 4's `--no-confirm` Resume applies. The reset changes manifest fields only and leaves `.run/<quest-id>/` as it found it.

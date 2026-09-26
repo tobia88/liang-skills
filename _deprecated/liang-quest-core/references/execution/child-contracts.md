@@ -229,7 +229,11 @@ quest_context:
   dependencies: [string]         # quest IDs this quest depends on
 failure_context:
   attempt: integer
-  failure_type: string           # error | timeout | malformed_output | plan_contradiction | unexpected
+  failure_type: string           # error | timeout | malformed_output | plan_contradiction | vc_failed | unexpected
+  failed_vcs:                    # present when failure_type is vc_failed (a §7d repair round)
+    - vc_text: string
+      evidence: string           # the verifier's evidence, file:line where it has one
+  playbook_hints: [string]       # notes of matched failure-playbook hint rules; [] when none
   error_summary: string
   stdout_tail: string
   stderr_tail: string

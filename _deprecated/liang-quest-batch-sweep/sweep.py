@@ -67,6 +67,17 @@ from typing import Any
 
 import yaml  # pyyaml; see requirements.txt
 
+from sweep_health import (
+    DEFAULT_RECOVERY_ATTEMPTS,
+    DEFAULT_STALL_SECONDS,
+    CampaignWatcher,
+    Diagnosis,
+    EventLog,
+    diagnose_failure,
+    read_events,
+    toast,
+)
+
 # Constants
 CAMPAIGNS_DIR_NAME = ".liang/campaigns"
 SAGAS_DIR_NAME = ".liang/sagas"
@@ -101,6 +112,8 @@ EXIT_QUEST_FAILED = 1
 EXIT_CONFIG_ERROR = 2
 EXIT_CRASH = 3
 EXIT_TIMEOUT = 124  # internal sentinel: a dispatch exceeded its wall-clock budget
+EXIT_STALLED = 125  # internal sentinel: the stall watchdog killed a silent dispatch
+WATCH_POLL_SECONDS = 15
 
 # Per-campaign wall-clock budget for a single executor dispatch. Overridable via
 # project.yaml -> executor.campaign_timeout_seconds; set 0 to disable. Guards
@@ -305,11 +318,13 @@ def set_quest_status(
     return False
 
 
-def reset_for_retry(campaign: dict[str, Any]) -> int:
+def reset_for_retry(campaign: dict[str, Any], keep_in_progress: bool = False) -> int:
     """Reset non-passed quests to "ready" so the executor re-queues them on the
     next dispatch, clearing executor-owned bookkeeping fields. Returns the count
     of quests reset. `passed` quests are left untouched (their dependents stay
     satisfied). In-memory only — the caller persists via write_manifest_atomic.
+    keep_in_progress leaves an interrupted quest for the executor's crash
+    recovery, which resumes it from its last completed step.
 
     Why this is load-bearing: liang-quest-executor builds its run queue solely
     from status: ready (SKILL.md §5.2). Without this reset, re-dispatching a
@@ -321,7 +336,8 @@ def reset_for_retry(campaign: dict[str, Any]) -> int:
         if _is_manual_hold(quest):
             # Sweep-owned hold: awaiting a human, never re-queued headlessly.
             continue
-        if quest.get("status") in ("failed", "skipped", "in_progress"):
+        resettable = ("failed", "skipped") if keep_in_progress else ("failed", "skipped", "in_progress")
+        if quest.get("status") in resettable:
             quest["status"] = "ready"
             for field in (
                 "skip_reason", "started_at", "completed_at",
@@ -688,7 +704,9 @@ def dispatch_campaign(
     dry_run: bool = False,
     harness: str = HARNESS_PI,
     claude_permission_mode: str = DEFAULT_CLAUDE_PERMISSION_MODE,
-) -> int:
+    watcher: CampaignWatcher | None = None,
+    extra_note: str = "",
+) -> tuple[int, str]:
     """
     Invoke the general executor for one campaign in non-interactive mode,
     delivering the no-confirm intent as message text (NOT as an argv flag —
@@ -704,11 +722,17 @@ def dispatch_campaign(
                          quiet until the campaign ends; the EXEC_EXIT_CODE
                          marker is still the last line and is parsed the same way.
 
-    Returns the subprocess exit code:
+    Returns (exit code, combined child output). Exit codes:
       0 — all quests passed
       1 — at least one quest failed (planned failure path)
       2 — configuration error
       3 — unexpected crash
+      EXIT_TIMEOUT / EXIT_STALLED — killed by the wall-clock budget / the
+      stall watchdog (sweep-internal sentinels)
+
+    `watcher` is polled every WATCH_POLL_SECONDS to emit progress events and
+    to kill a dispatch that has gone silent. `extra_note` is appended to the
+    executor message (a recovery re-dispatch uses it to say why it retries).
 
     In dry-run mode, prints the command and returns 0 without invoking.
 
@@ -762,6 +786,8 @@ def dispatch_campaign(
         "if every quest passed, 1 if any quest failed, 2 on a configuration "
         "error, or 3 on an unexpected crash."
     )
+    if extra_note:
+        no_confirm_msg += f" Note from the batch sweep: {extra_note}"
     if harness == HARNESS_CLAUDE:
         # Under Claude Code the skill is invoked by its slash command inside the
         # prompt (there is no `--skill` flag). `--claude` selects the executor's
@@ -805,7 +831,7 @@ def dispatch_campaign(
 
     if dry_run:
         print(f"[sweep] would RUN: {cmd_display}")
-        return EXIT_OK
+        return EXIT_OK, ""
 
     print(f"[sweep] dispatching {cid} via {cmd_display}")
     output_chunks: list[str] = []
@@ -838,6 +864,8 @@ def dispatch_campaign(
             daemon=True,
         )
         reader.start()
+        if watcher is not None:
+            watcher.root_pid = process.pid
         # pi (node) can finish its agent loop yet never exit: observed
         # 2026-07-09 on c01 of the battle-simulator saga — the child printed
         # its final EXEC_EXIT_CODE line at 01:30, then the process sat idle
@@ -850,10 +878,22 @@ def dispatch_campaign(
         marker_grace_deadline: float | None = None
         while True:
             try:
-                exit_code = process.wait(timeout=15)
+                exit_code = process.wait(timeout=WATCH_POLL_SECONDS)
                 break
             except subprocess.TimeoutExpired:
                 now = time.monotonic()
+                if watcher is not None:
+                    watcher.poll()
+                    if marker_grace_deadline is None and watcher.stalled():
+                        print(
+                            f"[sweep] {cid} has been silent for "
+                            f"{watcher.quiet_seconds() / 60:.0f} min with no build or test "
+                            f"running — killing the stalled dispatch",
+                            file=sys.stderr,
+                        )
+                        _kill_process_tree(process)
+                        reader.join(timeout=5)
+                        return EXIT_STALLED, "".join(output_chunks)
                 if (
                     marker_grace_deadline is None
                     and _extract_exec_exit_code("".join(output_chunks)) is not None
@@ -887,24 +927,27 @@ def dispatch_campaign(
             reader.join(timeout=5)
         timeout_label = f"{timeout:.0f}s" if timeout is not None else "unbounded"
         print(f"[sweep] {cid} dispatch timed out after {timeout_label}", file=sys.stderr)
-        return EXIT_TIMEOUT
+        return EXIT_TIMEOUT, "".join(output_chunks)
     except FileNotFoundError as e:
         print(f"[sweep] {harness} CLI not found: {e}", file=sys.stderr)
-        return EXIT_CRASH
+        return EXIT_CRASH, ""
     except Exception as e:
         if process is not None and process.poll() is None:
             _kill_process_tree(process)
         print(f"[sweep] dispatch failed for {cid}: {e}", file=sys.stderr)
-        return EXIT_CRASH
+        return EXIT_CRASH, "".join(output_chunks)
 
     # Honor native exit code first. If the harness returns 0 (normal for
     # `pi --print` / `claude -p` even when skill logic failed), fall back to
     # EXEC_EXIT_CODE on the final line of combined stdout/stderr.
-    marker_code = _extract_exec_exit_code("".join(output_chunks))
+    if watcher is not None:
+        watcher.poll()
+    output = "".join(output_chunks)
+    marker_code = _extract_exec_exit_code(output)
     if exit_code == 0 and marker_code is not None:
         exit_code = marker_code
 
-    return exit_code
+    return exit_code, output
 
 
 def cascade_skip_dependents(
@@ -982,6 +1025,16 @@ SWEEP_REPORT_TEMPLATE = """<!doctype html>
       letter-spacing:0.05em;
       background:rgba(184,135,44,0.20); color:#805d1d; }}
     .uat-none {{ color:var(--muted); font-size:0.8rem; }}
+    .overnight {{ display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; margin-top:22px; }}
+    .overnight section {{ background:var(--paper); border-radius:14px; padding:16px 18px;
+      box-shadow:0 8px 22px rgba(31,27,49,0.07); }}
+    .overnight h2 {{ margin:0 0 8px; font-size:1rem; }}
+    .overnight ul {{ margin:0; padding-left:18px; }}
+    .overnight li {{ margin:4px 0; }}
+    .overnight .none {{ color:var(--muted); }}
+    .needs h2 {{ color:var(--danger); }}
+    .healed h2 {{ color:var(--ok); }}
+    @media (max-width:720px) {{ .overnight {{ grid-template-columns:1fr; }} .meta-grid {{ grid-template-columns:repeat(2,minmax(0,1fr)); }} }}
     .footer {{ margin-top:28px; padding-top:18px; color:var(--muted);
       font-size:0.85rem; text-align:center; }}
   </style>
@@ -998,6 +1051,8 @@ SWEEP_REPORT_TEMPLATE = """<!doctype html>
         <div class="meta-card"><span class="meta-label">Skipped</span><span class="meta-value">{skipped}</span></div>
       </section>
     </header>
+
+    {overnight}
 
     <table>
       <thead>
@@ -1037,8 +1092,60 @@ def _html_escape(s: str) -> str:
     )
 
 
+def _overnight_items(events: list[dict[str, Any]]) -> tuple[list[str], list[str]]:
+    """Split the sweep's events into what needs the user and what healed
+    itself. Items are pre-escaped HTML."""
+    needs: list[str] = []
+    healed: list[str] = []
+    passed_after_recovery = {
+        e["campaign"] for e in events
+        if e.get("kind") == "campaign_result" and e.get("status") == "passed" and e.get("attempt", 1) > 1
+    }
+    final_status = {
+        (e.get("campaign"), e.get("quest")): e.get("status") for e in events if e.get("kind") == "quest_status"
+    }
+    for e in events:
+        kind = e.get("kind")
+        where = _html_escape(f"{e.get('campaign', '')} {e.get('quest', '')}".strip())
+        still_failed = final_status.get((e.get("campaign"), e.get("quest"))) == "failed"
+        if kind == "quest_status" and e.get("status") == "failed" and still_failed:
+            vcs = e.get("failed_vcs") or []
+            why = "; ".join(map(str, vcs)) or str(e.get("failure_type") or "see run report")
+            needs.append(f"<b>Failed</b> {where}: {_html_escape(why)}")
+        elif kind == "quest_status" and e.get("status") == "passed":
+            if e.get("needs_review"):
+                reasons = e["needs_review"] if isinstance(e["needs_review"], list) else [e["needs_review"]]
+                needs.append(f"<b>Flagged for review</b> {where}: {_html_escape('; '.join(map(str, reasons)))}")
+            if e.get("vc_repair_rounds"):
+                healed.append(f"{where} passed after {e['vc_repair_rounds']} repair round(s)")
+            if e.get("playbook"):
+                healed.append(f"{where}: known failure(s) handled ({_html_escape(', '.join(map(str, e['playbook'])))})")
+        elif kind == "diagnosis" and e.get("reason") == "blocker":
+            needs.append(f"<b>Blocked</b> {where}: {_html_escape(str(e.get('detail', '')))}")
+        elif kind == "diagnosis" and e.get("retry") and e.get("campaign") in passed_after_recovery:
+            healed.append(f"{where} re-dispatched after '{_html_escape(str(e.get('reason')))}' and then passed")
+    return needs, healed
+
+
+def _overnight_html(events_path: Path | None) -> str:
+    if events_path is None:
+        return ""
+    needs, healed = _overnight_items(read_events(events_path))
+
+    def column(css: str, title: str, items: list[str], empty: str) -> str:
+        body = "".join(f"<li>{i}</li>" for i in items) if items else f'<li class="none">{empty}</li>'
+        return f'<section class="{css}"><h2>{title}</h2><ul>{body}</ul></section>'
+
+    return (
+        '<div class="overnight">'
+        + column("needs", "Needs you", needs, "Nothing — every automated quest settled on its own.")
+        + column("healed", "Healed on its own", healed, "No repairs or re-dispatches were needed.")
+        + "</div>"
+    )
+
+
 def write_sweep_report(
-    workspace: Path, results: list[dict[str, Any]]
+    workspace: Path, results: list[dict[str, Any]], events_path: Path | None = None
 ) -> Path:
     """
     Write the multi-campaign sweep report. Per dc006, the report's footer
@@ -1093,6 +1200,7 @@ def write_sweep_report(
         )
 
     html = SWEEP_REPORT_TEMPLATE.format(
+        overnight=_overnight_html(events_path),
         timestamp=timestamp,
         total=len(results),
         passed=counts["passed"],
@@ -1412,6 +1520,15 @@ def main(argv: list[str] | None = None) -> int:
                 file=sys.stderr,
             )
 
+    try:
+        stall_seconds = _non_negative_setting(executor_cfg, "stall_timeout_seconds", DEFAULT_STALL_SECONDS)
+        recovery_attempts = int(_non_negative_setting(
+            executor_cfg, "sweep_recovery_attempts", DEFAULT_RECOVERY_ATTEMPTS
+        ))
+    except ValueError as e:
+        print(f"[sweep] project config error: {e}", file=sys.stderr)
+        return EXIT_CONFIG_ERROR
+
     # Toposort (raises ValueError on cycle). In scoped mode, deps outside the
     # scope were validated as fully-done above and are ignored by the sort.
     try:
@@ -1459,13 +1576,139 @@ def main(argv: list[str] | None = None) -> int:
         if lock_path is None:
             return EXIT_CONFIG_ERROR
 
+    health = SweepHealth(
+        events=EventLog(None) if args.dry_run else EventLog.for_new_sweep(workspace),
+        campaign_timeout=campaign_timeout,
+        claude_permission_mode=claude_permission_mode,
+        stall_seconds=stall_seconds or None,
+        recovery_attempts=recovery_attempts,
+    )
+    if health.events.path:
+        print(f"[sweep] events: {health.events.path}", file=sys.stderr)
+    health.events.emit(
+        "sweep_start", harness=args.harness, scope=scope_label,
+        campaigns=[c["campaign_id"] for c in ordered],
+    )
     try:
-        return _dispatch_loop(
-            args, workspace, ordered, campaigns, results, skipped_by_cascade,
-            campaign_timeout, claude_permission_mode,
+        code = _dispatch_loop(
+            args, workspace, ordered, campaigns, results, skipped_by_cascade, health,
         )
+        health.events.emit("sweep_end", exit_code=code)
+        return code
     finally:
         _release_sweep_lock(lock_path)
+
+
+def _non_negative_setting(executor_cfg: dict[str, Any], key: str, default: float) -> float:
+    raw = executor_cfg.get(key, default)
+    if raw is None:
+        return default
+    try:
+        value = float(raw)
+    except (TypeError, ValueError):
+        raise ValueError(f"executor.{key} must be numeric") from None
+    if value < 0:
+        raise ValueError(f"executor.{key} cannot be negative")
+    return value
+
+
+class SweepHealth:
+    """Settings and the event stream shared by every dispatch in one sweep."""
+
+    def __init__(
+        self, events: EventLog, campaign_timeout: float | None, claude_permission_mode: str,
+        stall_seconds: float | None, recovery_attempts: int,
+    ):
+        self.events = events
+        self.campaign_timeout = campaign_timeout
+        self.claude_permission_mode = claude_permission_mode
+        self.stall_seconds = stall_seconds
+        self.recovery_attempts = recovery_attempts
+
+
+def _run_with_recovery(
+    args: argparse.Namespace, workspace: Path, campaign: dict[str, Any], health: SweepHealth,
+) -> tuple[str, str | None]:
+    """Dispatch a campaign, and when it fails for an infra-shaped reason
+    (stall, timeout, interrupted executor, transient playbook match),
+    re-dispatch it up to health.recovery_attempts more times. Returns the
+    final (status, run_report_relpath)."""
+    cid = campaign["campaign_id"]
+    campaign_dir = campaign["campaign_dir"]
+    note = ""
+    for attempt in range(1, health.recovery_attempts + 2):
+        dispatch_start = time.time()
+        watcher = CampaignWatcher(
+            cid, campaign_dir, workspace, health.events, health.stall_seconds,
+            dispatch_start=dispatch_start, last_activity=dispatch_start,
+        )
+        health.events.emit("campaign_dispatch", campaign=cid, attempt=attempt, note=note or None)
+        exit_code, output = dispatch_campaign(
+            campaign, workspace=workspace, timeout=health.campaign_timeout,
+            dry_run=args.dry_run, harness=args.harness,
+            claude_permission_mode=health.claude_permission_mode,
+            watcher=None if args.dry_run else watcher, extra_note=note,
+        )
+        if args.dry_run:
+            return "passed", None
+
+        status, run_report_relpath = _dispatch_outcome(campaign_dir, workspace, dispatch_start, exit_code)
+        health.events.emit("campaign_result", campaign=cid, attempt=attempt, status=status, exit_code=exit_code)
+        if status != "failed":
+            return status, run_report_relpath
+
+        diagnosis = _diagnose_dispatch(campaign_dir, dispatch_start, exit_code, output)
+        health.events.emit(
+            "diagnosis", campaign=cid, attempt=attempt, retry=diagnosis.retry,
+            reason=diagnosis.reason, detail=diagnosis.detail, playbook=diagnosis.playbook_ids,
+        )
+        if diagnosis.blocker:
+            toast("Sweep blocked", f"{cid}: {diagnosis.detail}")
+        if not diagnosis.retry or attempt > health.recovery_attempts:
+            return status, run_report_relpath
+
+        print(
+            f"[sweep] {cid} — {diagnosis.reason}: {diagnosis.detail} — automatic "
+            f"re-dispatch {attempt}/{health.recovery_attempts}",
+            file=sys.stderr,
+        )
+        _prepare_redispatch(campaign)
+        note = (
+            f"This is automatic recovery attempt {attempt}. The previous dispatch ended as "
+            f"'{diagnosis.reason}' ({diagnosis.detail}). Resume the campaign."
+        )
+    return "failed", None
+
+
+def _dispatch_outcome(
+    campaign_dir: Path, workspace: Path, dispatch_start: float, exit_code: int
+) -> tuple[str, str | None]:
+    if exit_code in (EXIT_TIMEOUT, EXIT_STALLED):
+        return "failed", None
+    return assess_campaign_outcome(campaign_dir, workspace, dispatch_start, exit_code)
+
+
+def _diagnose_dispatch(campaign_dir: Path, dispatch_start: float, exit_code: int, output: str) -> Diagnosis:
+    if exit_code == EXIT_STALLED:
+        return Diagnosis(True, "stalled", "no activity and no build or test running; killed by the watchdog")
+    if exit_code == EXIT_TIMEOUT:
+        return Diagnosis(True, "timeout", "hit executor.campaign_timeout_seconds")
+    return diagnose_failure(campaign_dir, dispatch_start, output)
+
+
+def _prepare_redispatch(campaign: dict[str, Any]) -> None:
+    """Reload the manifest the executor just mutated, re-queue its failed and
+    dependency-skipped quests, and leave an interrupted quest in_progress so
+    the executor resumes it from its last completed step."""
+    campaign_dir = campaign["campaign_dir"]
+    manifest_path = campaign_dir / "manifest.yaml"
+    on_disk = _safe_load_yaml(manifest_path)
+    if isinstance(on_disk, dict):
+        campaign.clear()
+        campaign.update(on_disk)
+        campaign["campaign_dir"] = campaign_dir
+    reset_for_retry(campaign, keep_in_progress=True)
+    write_manifest_atomic(manifest_path, campaign)
 
 
 def _dispatch_loop(
@@ -1475,8 +1718,7 @@ def _dispatch_loop(
     campaigns: list[dict[str, Any]],
     results: list[dict[str, Any]],
     skipped_by_cascade: set[str],
-    campaign_timeout: float | None,
-    claude_permission_mode: str,
+    health: SweepHealth,
 ) -> int:
     """The dispatch loop body, split out of main() so the lock acquired right
     before it can be released in a finally block regardless of which of the
@@ -1502,6 +1744,7 @@ def _dispatch_loop(
                 "manual_pending": 0,
             })
             action = "CASCADE-SKIP"
+            health.events.emit("campaign_skipped", campaign=cid, reason="depends on a failed campaign")
             print(f"[sweep] {order_idx}. {cid} — {action} (depends on failed campaign)", file=sys.stderr)
             continue
 
@@ -1541,16 +1784,7 @@ def _dispatch_loop(
                   f"quest(s) out of the queue (manual_deferred/manual_dependency)",
                   file=sys.stderr)
 
-        # Dispatch
-        dispatch_start = time.time()
-        exit_code = dispatch_campaign(
-            campaign,
-            workspace=workspace,
-            timeout=campaign_timeout,
-            dry_run=args.dry_run,
-            harness=args.harness,
-            claude_permission_mode=claude_permission_mode,
-        )
+        status, run_report_relpath = _run_with_recovery(args, workspace, campaign, health)
 
         if args.dry_run:
             results.append({
@@ -1559,31 +1793,6 @@ def _dispatch_loop(
                 "manual_pending": manual_pending,
             })
             continue
-
-        # Timeout is a soft failure: mark failed, cascade, and keep going so one
-        # hung campaign doesn't abort the whole sweep.
-        if exit_code == EXIT_TIMEOUT:
-            timeout_label = (
-                f"{campaign_timeout:.0f}s" if campaign_timeout is not None else "configured"
-            )
-            print(f"[sweep] {cid} exceeded the {timeout_label} campaign "
-                  f"timeout — marking FAILED and continuing.", file=sys.stderr)
-            for dep_cid in cascade_skip_dependents(cid, campaigns):
-                skipped_by_cascade.add(dep_cid)
-            results.append({
-                "campaign_id": cid, "order": order_idx, "status": "failed",
-                "run_report_relpath": None, "has_uat_pending": False,
-                "manual_pending": manual_pending,
-            })
-            continue
-
-        # Pass/fail is read from the post-run manifest gated by fresh execution
-        # evidence — NOT from the child exit code (`pi --print` returns 0 whatever
-        # the quests did). Exit 2/3 (native or via EXEC_EXIT_CODE) is honored only
-        # as an explicit halt signal.
-        status, run_report_relpath = assess_campaign_outcome(
-            campaign_dir, workspace, dispatch_start, exit_code
-        )
 
         uat_pending = _check_uat_pending(run_report_relpath, workspace)
 
@@ -1594,23 +1803,31 @@ def _dispatch_loop(
                 "run_report_relpath": run_report_relpath,
                 "has_uat_pending": False, "manual_pending": manual_pending,
             })
-            write_sweep_report(workspace, results)
+            health.events.emit("sweep_halted", campaign=cid, reason="config_error")
+            toast("Sweep halted", f"{cid} reported a configuration error.")
+            write_sweep_report(workspace, results, health.events.path)
             return EXIT_CONFIG_ERROR
 
         if status == "crash":
-            print(f"[sweep] {cid} crashed (exit {exit_code}) — halting sweep", file=sys.stderr)
+            print(f"[sweep] {cid} crashed — halting sweep", file=sys.stderr)
             results.append({
                 "campaign_id": cid, "order": order_idx, "status": "crash",
                 "run_report_relpath": run_report_relpath,
                 "has_uat_pending": False, "manual_pending": manual_pending,
             })
-            write_sweep_report(workspace, results)
+            health.events.emit("sweep_halted", campaign=cid, reason="crash")
+            toast("Sweep halted", f"{cid} crashed.")
+            write_sweep_report(workspace, results, health.events.path)
             return EXIT_CRASH
 
-        # Cascade-skip dependents on failure
         if status == "failed":
-            for dep_cid in cascade_skip_dependents(cid, campaigns):
-                skipped_by_cascade.add(dep_cid)
+            cascaded = cascade_skip_dependents(cid, campaigns)
+            skipped_by_cascade.update(cascaded)
+            health.events.emit("campaign_failed", campaign=cid, cascade=cascaded)
+            toast(
+                "Sweep: campaign failed",
+                f"{cid} failed" + (f"; skipping {len(cascaded)} dependent campaign(s)" if cascaded else ""),
+            )
 
         results.append({
             "campaign_id": cid, "order": order_idx, "status": status,
@@ -1620,7 +1837,7 @@ def _dispatch_loop(
 
     # Write sweep report (live mode only; dry-run writes nothing)
     if not args.dry_run:
-        report_path = write_sweep_report(workspace, results)
+        report_path = write_sweep_report(workspace, results, health.events.path)
         print(f"[sweep] sweep report written to {report_path}")
     else:
         print(f"[sweep] dry-run complete — no reports written, no manifests mutated")

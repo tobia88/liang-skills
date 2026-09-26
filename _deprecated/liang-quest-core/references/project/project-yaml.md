@@ -107,8 +107,12 @@ When the key is absent, the next planner or saga-planner run asks interview ques
 ```yaml
 executor:
   max_step_retries: integer          # default: 3; max retry attempts per step. Read by liang-quest-executor.
+  max_vc_repair_rounds: integer      # default: 2; fix rounds after a failed Tier 1 victory condition; 0 fails at once
   child_timeout_seconds: integer     # default: 300; max time per child invocation
   campaign_timeout_seconds: number   # default: 3600; max time per campaign dispatch in liang-quest-batch-sweep; 0 disables
+  stall_timeout_seconds: number      # default: 1200; batch sweep kills a dispatch this long without activity and no build/test running; 0 disables
+  sweep_recovery_attempts: integer   # default: 1; batch sweep re-dispatches after a stall, timeout or transient failure
+  claude_permission_mode: string     # default: "acceptEdits"; `claude -p` permission mode for --harness claude sweeps
   unattended: boolean                # default: false; true makes every liang-quest-executor run behave as --no-confirm
 ```
 

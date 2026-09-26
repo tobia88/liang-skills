@@ -1,9 +1,11 @@
 ---
 name: liang-video-sampler
-description: DEPRECATED, retired skill. Extract timestamped screenshots from local video files and GIFs so the agent can visually understand and summarize gameplay clips, UI recordings, animations, trailers, or other local videos. Use when the user provides an mp4, mov, webm, mkv, avi, or gif and asks for visual analysis, video understanding, frame summaries, or "watch this video" on a local file.
+description: DEPRECATED — do not use or auto-trigger. Fixed-interval sampling misses fast events and motion; for video review run ffmpeg directly (scene-change select, tiled contact sheets, full-rate bursts around flagged moments, frame-diff hitch detection). Direct invocation only.
 ---
 
 # Liang Video Sampler
+
+> **Deprecated (2026-09-26).** Fixed-interval sampling is too sparse for gameplay review: fast events fall between samples and motion problems (jitter, stutter, bad blends) never show up in frames seconds apart. Run ffmpeg directly instead: `select='gt(scene,0.3)'` for change-driven frames, `tile=4x4` contact sheets to scan a session cheaply, full-rate bursts around a flagged timestamp, and `signalstats`/`mpdecimate` for hitches and frozen frames.
 
 Turn a local video/GIF into timestamped screenshots plus a manifest the agent can inspect.
 

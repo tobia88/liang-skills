@@ -2,6 +2,18 @@
 
 Full protocol for the step-failure retry loop. SKILL.md §7c holds the summary; this file is the source of truth for retry payloads and lesson fields. Load on first step failure. Bounded by `max_step_retries` (default: 3).
 
+## Known-Failure Playbook (before every retry)
+
+Run `python <skills-root>/liang-quest-core/scripts/failure_playbook.py <logs>` on the build/test logs the failed attempt wrote under `.run/<quest-id>/`. It prints `{verdict, matches, unexplained}`:
+
+| Verdict | Action | Counts toward `max_step_retries` |
+|---|---|---|
+| `false_failure` | Step succeeded; record `playbook: [rule ids]` in the envelope Output | — |
+| `retry` | Re-run the unchanged step (at most 2 free re-runs per step) | No |
+| `blocker` | Fail the quest, `failure_type: "blocker"`, rule note in the lesson and run report | — |
+| `hint` | Add the rule notes to `accumulated_lessons`, continue below | Yes |
+| `unknown` / `clean` | Continue below | Yes |
+
 ## Retry 1 — Lesson-Only
 
 1. **Extract lesson** — Create entry: `quest_id`, `step_id`, `attempt: 1`, `retry_tier: "lesson-only"`, `failure_type`, `error_summary`, `stdout_tail`, `stderr_tail`, `timestamp`. Append to `<campaign-root>/lessons.yaml`.

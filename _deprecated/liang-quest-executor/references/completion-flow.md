@@ -10,6 +10,8 @@ Generate a Markdown run report at campaign root: `run-report-<timestamp>.md`, wh
 
 **Plan drift.** When any passed step reported `plan_contradictions` entries with `blocks_step: false`, count them into `totals.plan_drift` and render `## Plan drift` after `## Decisions needed`: one row per entry — quest id, step id, `claimed`, `observed`, `evidence`. Informational: it fails nothing, and it tells the planner's author which stated facts to correct.
 
+**Repairs.** When any quest needed VC repair rounds or a playbook rule, render `## Repairs` after `## Plan drift`: one row per quest — rounds used, the VCs each round fixed, matched playbook rule ids, and any `needs_review` reasons in bold. Set `totals.vc_repairs` to the number of repaired quests and `totals.needs_review` to the number of flagged ones; omit the section and keys when both are zero.
+
 **Decisions needed.** When any step failed with `outcome: "needs_decision"`, render `## Decisions needed` after `## Quest Results`: one entry per unresolved contradiction — quest id + title, step id, `claimed` (what the plan said, quoting the step), `observed` (what the workspace shows, with the child's evidence), the re-plan-child's `reasoning`, and the quests cascade-skipped behind it. Set front-matter `totals.decisions_needed` to the entry count. This section is the executor's only channel for questions it could not settle; the user answers them by re-planning, then re-runs. Omit the section and the key when there are none.
 
 ## 8a. UAT Batch Prompt

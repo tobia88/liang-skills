@@ -1,0 +1,297 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sweep Watch</title>
+<style>
+:root {
+  --bg: #f6f5f1; --card: #ffffff; --ink: #1d1d1b; --muted: #6f6c64; --line: #e4e1d8;
+  --pass: #2f8f5b; --run: #d08a1c; --fail: #c4412f; --wait: #c9c5ba; --manual: #6b5fb5;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #17181a; --card: #212226; --ink: #ecebe6; --muted: #9a978f; --line: #33343a;
+    --pass: #4fbf82; --run: #f0a93a; --fail: #ea6a55; --wait: #4a4b52; --manual: #9b8ff0;
+    color-scheme: dark;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink);
+  font: 14px/1.45 "Segoe UI", system-ui, sans-serif; padding: 24px 16px 48px; }
+main { max-width: 920px; margin: 0 auto; }
+header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 16px; margin-bottom: 20px; }
+h1 { font-size: 22px; margin: 0; letter-spacing: -0.01em; }
+.pill { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--muted);
+  border: 1px solid var(--line); border-radius: 999px; padding: 2px 10px; background: var(--card); }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--wait); }
+.dot.live { background: var(--pass); animation: pulse 1.6s ease-in-out infinite; }
+@keyframes pulse { 50% { opacity: .35; } }
+.overall { margin: 0 0 24px; }
+.overall .nums { display: flex; justify-content: space-between; font-size: 13px; color: var(--muted); margin-bottom: 6px; }
+.overall .nums b { color: var(--ink); font-size: 15px; }
+.bar { height: 10px; border-radius: 6px; background: var(--line); overflow: hidden; display: flex; gap: 2px; }
+.bar i { display: block; height: 100%; flex: 1; background: var(--wait); }
+.bar i.passed { background: var(--pass); }
+.bar i.in_progress { background: var(--run); animation: pulse 1.6s ease-in-out infinite; }
+.bar i.failed { background: var(--fail); }
+.bar i.manual { background: repeating-linear-gradient(45deg, var(--manual) 0 4px, transparent 4px 8px); opacity: .7; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; margin-bottom: 16px; }
+.card h2 { font-size: 16px; margin: 0 0 2px; }
+.card .sub { color: var(--muted); font-size: 12px; margin-bottom: 12px; word-break: break-all; }
+.card .bar { margin-bottom: 14px; }
+.quest { display: grid; grid-template-columns: 26px 1fr auto; gap: 2px 10px; padding: 10px 0; border-top: 1px solid var(--line); }
+.icon { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; font-weight: 700;
+  color: #fff; background: var(--wait); margin-top: 1px; }
+.passed .icon { background: var(--pass); }
+.failed .icon { background: var(--fail); }
+.in_progress .icon { background: var(--run); }
+.manual .icon { background: var(--manual); }
+.qtitle { font-weight: 600; }
+.qtitle small { color: var(--muted); font-weight: 400; margin-right: 6px; }
+.tag { font-size: 11px; color: var(--muted); border: 1px solid var(--line); border-radius: 4px; padding: 0 5px; margin-left: 6px; font-weight: 400; }
+.time { color: var(--muted); font-size: 12.5px; font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+.detail { grid-column: 2 / 4; font-size: 12.5px; color: var(--muted); }
+.cycles { display: flex; gap: 3px; margin: 6px 0 4px; max-width: 320px; }
+.cycles i { flex: 1; height: 6px; border-radius: 3px; background: var(--line); }
+.cycles i.done { background: var(--pass); }
+.cycles i.now { background: var(--run); animation: pulse 1.6s ease-in-out infinite; }
+.ready, .manual { opacity: .72; }
+.warn { color: var(--run); }
+details { margin-top: 24px; }
+summary { cursor: pointer; color: var(--muted); font-size: 13px; }
+pre { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 12px; overflow-x: auto;
+  font: 12px/1.5 Consolas, ui-monospace, monospace; white-space: pre; }
+.err { color: var(--fail); }
+.tag.flag { color: var(--run); border-color: var(--run); }
+.tag.fixed { color: var(--pass); border-color: var(--pass); }
+.evidence { margin: 6px 0 0; padding: 8px 10px; border-left: 3px solid var(--fail); background: var(--bg);
+  border-radius: 4px; font: 12px/1.45 Consolas, ui-monospace, monospace; color: var(--ink); white-space: pre-wrap; }
+.timeline { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 12px 16px; margin: 0 0 16px; }
+.timeline h2 { font-size: 14px; margin: 0 0 8px; }
+.timeline ol { list-style: none; margin: 0; padding: 0; max-height: 280px; overflow-y: auto; }
+.timeline li { display: grid; grid-template-columns: 52px 18px 1fr; gap: 6px; padding: 3px 0; font-size: 12.5px; border-top: 1px solid var(--line); }
+.timeline li:first-child { border-top: 0; }
+.timeline .when { color: var(--muted); font-variant-numeric: tabular-nums; }
+.timeline .good { color: var(--pass); }
+.timeline .bad { color: var(--fail); }
+.timeline .warn { color: var(--run); }
+.timeline li.empty { display: block; color: var(--muted); }
+[hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1 id="title">Sweep Watch</h1>
+    <span class="pill"><span class="dot" id="dot"></span><span id="state">connecting…</span></span>
+    <span class="pill" id="elapsed" hidden></span>
+  </header>
+  <section class="overall">
+    <div class="nums"><span><b id="done">0</b> of <span id="total">0</span> automated quests passed</span><span id="eta"></span></div>
+    <div class="bar" id="overallBar"></div>
+  </section>
+  <section class="timeline">
+    <h2>What just happened</h2>
+    <ol id="timeline"></ol>
+  </section>
+  <div id="campaigns"></div>
+  <details>
+    <summary>Sweep log tail</summary>
+    <pre id="log"></pre>
+  </details>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+let data = null;
+
+function duration(fromIso, toIso) {
+  if (!fromIso) return "";
+  const ms = (toIso ? new Date(toIso) : new Date()) - new Date(fromIso);
+  const s = Math.max(0, Math.floor(ms / 1000));
+  const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), sec = s % 60;
+  return h ? `${h}h ${String(m).padStart(2, "0")}m` : `${m}m ${String(sec).padStart(2, "0")}s`;
+}
+
+function esc(text) {
+  return String(text ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+}
+
+function questClass(q) {
+  return q.manual && q.status !== "passed" ? "manual" : q.status;
+}
+
+function icon(q) {
+  if (q.status === "passed") return "✓";
+  if (q.status === "failed") return "✕";
+  if (q.manual) return "✋";
+  if (q.status === "in_progress") return "…";
+  return q.id.replace(/\D/g, "").replace(/^0+/, "");
+}
+
+function cycleBar(q) {
+  if (q.status !== "in_progress" || !q.cycles) return "";
+  const cells = Array.from({ length: q.cycles }, (_, i) =>
+    `<i class="${i + 1 < q.cycle ? "done" : i + 1 === q.cycle ? "now" : ""}"></i>`).join("");
+  return `<div class="cycles" title="cycle ${q.cycle} of ${q.cycles}">${cells}</div>`;
+}
+
+function runningLabel(q) {
+  if (!q.step) return "";
+  const running = q.step.outcome ? "" : " — running";
+  if (q.step.repair) return `<span class="warn">Repair round ${q.repair_rounds}</span> · <b>${esc(q.step.title)}</b>${running}`;
+  return `Step ${q.cycle ?? "?"}/${q.cycles ?? "?"} · <b>${esc(q.step.title)}</b>${running}`;
+}
+
+function failureBlock(q) {
+  const why = q.evidence.length
+    ? q.evidence.map(e => `VC ${e.vc}: ${e.evidence}`).join("\n")
+    : (q.failed_vcs.map(v => typeof v === "string" ? v : (v.vc_text || JSON.stringify(v))).join("\n") || q.failure_type || "");
+  const head = `<span class="err">Failed${q.failure_type ? ` (${esc(q.failure_type)})` : ""}${q.step ? ` after ${esc(q.step.title)}` : ""}</span>`;
+  return head + (why ? `<div class="evidence">${esc(why)}</div>` : "");
+}
+
+function detail(q) {
+  const parts = [];
+  if (q.status === "in_progress") {
+    parts.push(cycleBar(q));
+    parts.push(runningLabel(q));
+  } else if (q.status === "passed" && q.step) {
+    parts.push(`${q.step.count} steps`);
+    if (q.retries) parts.push(`<span class="warn">${q.retries} retr${q.retries === 1 ? "y" : "ies"}</span>`);
+    if (q.drift.length) parts.push(`<span title="${esc(q.drift.join("\n"))}">${q.drift.length} plan drift note${q.drift.length > 1 ? "s" : ""}</span>`);
+    if (q.needs_review.length) parts.push(`<span class="warn" title="${esc([].concat(q.needs_review).join("\n"))}">review: ${esc([].concat(q.needs_review)[0])}</span>`);
+  } else if (q.status === "failed") {
+    parts.push(failureBlock(q));
+  } else if (q.manual) {
+    parts.push("Held for you — manual step after the sweep");
+  } else if (q.status === "skipped" && q.skip_reason) {
+    parts.push(`Skipped — ${esc(q.skip_reason)}`);
+  }
+  const joined = parts.filter(Boolean).join(q.status === "in_progress" ? "" : " · ");
+  return joined ? `<div class="detail">${joined}</div>` : "";
+}
+
+function badges(q) {
+  let out = "";
+  if (q.repair_rounds && q.status === "passed") out += `<span class="tag fixed">fixed in ${q.repair_rounds} repair${q.repair_rounds > 1 ? "s" : ""}</span>`;
+  if (q.needs_review.length) out += `<span class="tag flag">flagged for review</span>`;
+  if (q.playbook.length) out += `<span class="tag" title="${esc(q.playbook.join(", "))}">known failure handled</span>`;
+  return out;
+}
+
+const EVENT_TEXT = {
+  sweep_start: e => ["▶", "", `Sweep started (${e.campaigns?.length ?? 0} campaigns)`],
+  sweep_end: e => [e.exit_code === 0 ? "✓" : "✕", e.exit_code === 0 ? "good" : "bad", `Sweep finished (exit ${e.exit_code})`],
+  sweep_halted: e => ["✕", "bad", `Sweep halted at ${e.campaign}: ${e.reason}`],
+  campaign_dispatch: e => ["▶", e.attempt > 1 ? "warn" : "", e.attempt > 1 ? `${e.campaign}: recovery dispatch #${e.attempt}` : `${e.campaign}: dispatched`],
+  campaign_result: e => [e.status === "passed" ? "✓" : "✕", e.status === "passed" ? "good" : "bad", `${e.campaign}: ${e.status}`],
+  campaign_failed: e => ["✕", "bad", `${e.campaign} failed${e.cascade?.length ? `; skipping ${e.cascade.join(", ")}` : ""}`],
+  campaign_skipped: e => ["–", "warn", `${e.campaign} skipped (${e.reason})`],
+  diagnosis: e => [e.retry ? "↻" : "!", e.retry ? "warn" : "bad", `${e.campaign}: ${e.reason} — ${e.detail}${e.retry ? " → retrying" : ""}`],
+  quest_status: e => {
+    const tone = { passed: "good", failed: "bad", skipped: "warn" }[e.status] || "";
+    const icon = { passed: "✓", failed: "✕", skipped: "–", in_progress: "▶" }[e.status] || "·";
+    const extra = e.vc_repair_rounds ? ` after ${e.vc_repair_rounds} repair round(s)` : "";
+    return [icon, tone, `${e.quest} ${e.status.replace("_", " ")}${extra}`];
+  },
+  quest_cycle: e => ["·", "", `${e.quest} step ${e.cycle}`],
+  step: e => ["·", e.outcome === "error" ? "bad" : "", `${e.quest} ${e.step}: ${e.title}${e.outcome ? ` (${e.outcome})` : " (running)"}`],
+  repair_round: e => ["🔧", "warn", `${e.quest} ${e.title}${e.outcome ? ` (${e.outcome})` : " (running)"}`],
+};
+
+function timelineRow(e) {
+  const describe = EVENT_TEXT[e.kind] || (x => ["·", "", x.kind]);
+  const [icon, tone, text] = describe(e);
+  const when = new Date(e.ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  return `<li><span class="when">${when}</span><span class="${tone}">${icon}</span><span class="${tone}">${esc(text)}</span></li>`;
+}
+
+function renderTimeline(t) {
+  const events = (t?.events || []).slice().reverse();
+  $("timeline").innerHTML = events.length
+    ? events.map(timelineRow).join("")
+    : `<li class="empty">No events yet — the event stream starts with the next sweep.</li>`;
+}
+
+function questRow(q) {
+  const time = q.status === "in_progress" ? duration(q.started)
+    : q.completed ? duration(q.started, q.completed) : "";
+  return `<div class="quest ${questClass(q)}">
+    <div class="icon">${icon(q)}</div>
+    <div class="qtitle"><small>${esc(q.id)}</small>${esc(q.title)}${q.difficulty ? `<span class="tag">${esc(q.difficulty)}</span>` : ""}${q.manual ? `<span class="tag">manual</span>` : ""}${badges(q)}</div>
+    <div class="time" data-start="${q.status === "in_progress" ? esc(q.started) : ""}">${time}</div>
+    ${detail(q)}
+  </div>`;
+}
+
+function barCells(quests) {
+  return quests.map(q => `<i class="${questClass(q)}" title="${esc(q.id)} ${esc(q.status)}"></i>`).join("");
+}
+
+function campaignCard(c) {
+  const auto = c.quests.filter(q => !q.manual);
+  const passed = auto.filter(q => q.status === "passed").length;
+  return `<section class="card">
+    <h2>${esc(c.title)} <span class="tag">${passed}/${auto.length}</span></h2>
+    <div class="sub">${esc(c.id)}</div>
+    <div class="bar">${barCells(c.quests)}</div>
+    ${c.quests.map(questRow).join("")}
+  </section>`;
+}
+
+function estimate(quests) {
+  const finished = quests.filter(q => q.status === "passed" && q.started && q.completed);
+  const left = quests.filter(q => !q.manual && q.status !== "passed").length;
+  if (!finished.length || !left) return "";
+  const avg = finished.reduce((sum, q) => sum + (new Date(q.completed) - new Date(q.started)), 0) / finished.length;
+  return `~${Math.round(avg / 60000)} min per quest · ~${duration(new Date(Date.now() - avg * left).toISOString())} left`;
+}
+
+function render() {
+  if (!data) return;
+  $("title").textContent = data.title;
+  document.title = `Sweep · ${data.title}`;
+  const s = data.sweep;
+  $("dot").className = "dot" + (s.alive ? " live" : "");
+  $("state").textContent = s.alive ? `sweep running · pid ${s.pid}` : "no sweep running";
+  $("elapsed").hidden = !(s.alive && s.started);
+  $("elapsed").dataset.start = s.started || "";
+  const quests = data.campaigns.flatMap(c => c.quests);
+  const auto = quests.filter(q => !q.manual);
+  $("done").textContent = auto.filter(q => q.status === "passed").length;
+  $("total").textContent = auto.length;
+  $("eta").textContent = s.alive ? estimate(quests) : "";
+  $("overallBar").innerHTML = barCells(quests);
+  $("campaigns").innerHTML = data.campaigns.map(campaignCard).join("");
+  $("log").textContent = (s.log ? s.log + "\n\n" : "") + s.log_tail.join("\n");
+  renderTimeline(data.timeline);
+  tick();
+}
+
+function tick() {
+  const el = $("elapsed");
+  if (!el.hidden) el.textContent = "elapsed " + duration(el.dataset.start);
+  document.querySelectorAll(".time[data-start]").forEach(t => {
+    if (t.dataset.start) t.textContent = duration(t.dataset.start);
+  });
+}
+
+async function poll() {
+  try {
+    const res = await fetch("/data", { cache: "no-store" });
+    data = await res.json();
+    render();
+  } catch {
+    $("dot").className = "dot";
+    $("state").textContent = "watch server stopped";
+  }
+}
+
+poll();
+setInterval(poll, 3000);
+setInterval(tick, 1000);
+</script>
+</body>
+</html>

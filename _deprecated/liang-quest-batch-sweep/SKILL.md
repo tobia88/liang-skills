@@ -135,6 +135,7 @@ Do NOT attempt to retry, re-plan, or interpret failures yourself. The script's e
    - Counts: total / passed / failed / skipped.
    - For each non-passed campaign, the campaign_id and status.
    - The deferred manual backlog: every quest held as `manual_deferred` / `manual_dependency`, grouped by campaign — this is the user's in-editor to-do list, followed by "mark them passed and re-sweep".
+   - The sweep report's **Needs you** items (failed quests with their failing VC, blockers, repairs flagged for review) and a one-line count of **Healed on its own** (repair rounds, recovery re-dispatches, known failures handled).
    - The path to the sweep report HTML.
    - Paths to per-campaign run reports if surfaced in the sweep report's links.
 3. If no sweep report was generated (script crashed before s06 of q003's plan), say so explicitly and point at the script's stderr.
@@ -173,6 +174,10 @@ Flags: `--dry-run` (preflight + `sweep.py --dry-run`, no execution), `--no-recon
 **Single-instance lockfile.** Before sweep.py dispatches anything in live mode, it takes `.liang/sweep.lock` (pid + start time). A second live sweep started in the same workspace while that lock's pid is still alive exits immediately with configuration-error (2) instead of racing the first sweep's manifest writes. A lock left behind by a pid that is no longer alive (stale — e.g. the machine was rebooted) is detected and silently replaced. `--dry-run` never touches the lock. Note: sweeps started before this hardening pass hold no lock file, so the guard only protects runs launched with the upgraded script.
 
 **`--status`** is a read-only query — safe to run at any time, including while a sweep is in progress, and it always exits 0. It reports: whether `.liang/sweep.lock` is held and by a pid that's alive or dead; the newest log under `.liang/sweep-logs/` with its last ~20 lines; the newest file under `.liang/sweep-reports/` with its modification time; and a one-line quest-status summary per campaign read straight from each `manifest.yaml` (e.g. `5 passed / 1 ready / 1 skipped`). Use it instead of holding a long-running tool call open to watch a sweep.
+
+**Self-healing (sweep.py + `sweep_health.py`).** Every live sweep writes an event stream to `.liang/sweep-logs/<stamp>-sweep.events.jsonl` (quest status changes, steps, repair rounds, dispatches, diagnoses). While a campaign runs, a watcher polls its manifest and `.run/` every 15 s; when nothing has moved for `executor.stall_timeout_seconds` (default 1200; the claude harness's live transcripts count as movement) and no build or test process is running under the dispatch, it kills the dispatch. A dispatch that ends stalled, timed out, interrupted mid-quest, with only infra `failure_type`s, or with a transient match in the shared failure playbook (`liang-quest-core/scripts/failure-playbook.yaml`) is re-dispatched up to `executor.sweep_recovery_attempts` times (default 1), keeping an interrupted quest `in_progress` so the executor resumes it. A real code or plan failure is not re-dispatched — the executor already spent its step retries and VC repair rounds — and a playbook blocker (e.g. Live Coding on) fails fast. A desktop toast fires when a campaign fails, a blocker is hit, or the AFK run finishes. The sweep report opens with **Needs you** / **Healed on its own**.
+
+**Live dashboard:** `sweep-watch.py --workspace <root> [--saga <token>] [--port 8799]` serves a read-only, self-refreshing page on `http://127.0.0.1:8799/`: a "What just happened" timeline from the event stream, per-quest status, cycle progress, current step or repair round, failing-VC evidence inline, flagged-for-review badges, durations and a rough ETA. Start it as a background process and open the URL in the browser pane; offer it whenever the user asks how to follow a running sweep. Avoid port 8765 — headless UE test runs try to bind it.
 
 `sweep-afk.py` is designed to be run from a **real terminal** the user owns. If it is ever launched from inside an agent instead, the same rule as Launch step 1 applies: use `--detach`, never a foreground tool call subject to a harness timeout.
 
@@ -225,13 +230,16 @@ This skill must never:
 
 - `sweep.py` — the multi-campaign orchestrator script. Co-located with this SKILL.md.
 - `sweep-preflight.py` — deep preflight (executor §2/§3 gates + pi runtime). Read-only; used in Phase 1 and by `sweep-afk.py`.
+- `sweep_health.py` — event stream, stall watchdog, failure diagnosis (via the core failure playbook) and desktop toast used by sweep.py and sweep-afk.py.
+- `sweep-watch.py` + `sweep-watch.html` — read-only live progress dashboard on localhost.
 - `sweep-afk.py` — unattended fire-and-AFK harness (preflight → sweep → p4 reconcile → report), with `--detach` (spawn detached + return), `--status` (read-only progress query), and a built-in supervisor that auto-resumes sweep.py on infra-level death. The skill's no-prompt entry point.
 - `requirements.txt` — Python dependencies (currently: `pyyaml>=6.0`).
 - `RUNBOOK-afk.md` — operator runbook for unattended sweeps.
 - `liang-quest-core/references/campaign/protocol.md` — campaign directory convention and § Archived Campaigns.
 - `liang-quest-core/references/campaign/manifest-schema.md` — `campaign_depends_on`, `manual`, and the status fields the sweep updates.
 - `liang-quest-core/references/execution/status-transitions.md` — § Manual Holds and § Sweep Retry-Reset.
-- `liang-quest-core/references/project/project-yaml.md` — `executor.campaign_timeout_seconds`, the one key the sweep reads.
+- `liang-quest-core/references/project/project-yaml.md` — `executor.campaign_timeout_seconds`, `stall_timeout_seconds`, `sweep_recovery_attempts` and `claude_permission_mode`, the keys the sweep reads.
+- `liang-quest-core/scripts/failure-playbook.yaml` — known-failure rules shared with the executor; add a rule the first time a new infra failure bites.
 
 If a listed core file is missing, stop and report it.
 

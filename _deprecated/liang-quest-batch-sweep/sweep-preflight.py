@@ -354,7 +354,30 @@ def check_governance_context(ws: Path) -> None:
                            f"{d / name} is loaded *instead of* CLAUDE.md in {d}")
 
 
-def check_campaigns(ws: Path) -> None:
+def resolve_scope(ws: Path, saga: str | None, only: str | None) -> set[str] | None:
+    """Mirror sweep.py's --saga/--only scope so campaigns the sweep will never
+    dispatch cannot block it. Returns None for an unscoped sweep."""
+    if not saga and not only:
+        return None
+    scope: set[str] = set()
+    if saga:
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        from sweep import resolve_saga_selection
+        try:
+            title, ids, warnings = resolve_saga_selection(ws, saga)
+        except ValueError as e:
+            record(FAIL, "saga scope resolves", str(e))
+            return set()
+        for w in warnings:
+            record(WARN, "saga scope", w)
+        record(PASS, "saga scope resolves", f"'{title}' -> {len(ids)} campaign(s)")
+        scope |= set(ids)
+    if only:
+        scope |= {t.strip() for t in only.split(",") if t.strip()}
+    return scope
+
+
+def check_campaigns(ws: Path, scope: set[str] | None = None) -> None:
     camp_root = ws / ".liang" / "campaigns"
     if not camp_root.is_dir():
         record(FAIL, "campaigns dir exists", str(camp_root))
@@ -373,7 +396,8 @@ def check_campaigns(ws: Path) -> None:
         try:
             m = yaml.safe_load(man.read_text(encoding="utf-8")) or {}
         except yaml.YAMLError as e:
-            record(FAIL, f"manifest parses [{entry.name}]", str(e))
+            in_scope = scope is None or entry.name in scope
+            record(FAIL if in_scope else WARN, f"manifest parses [{entry.name}]", str(e))
             continue
         cid = m.get("campaign_id", entry.name)
         camp_ids.add(cid)
@@ -394,6 +418,8 @@ def check_campaigns(ws: Path) -> None:
     # Phase 2: validate cross-campaign dependencies (uses the full camp_ids).
     for _dirname, (entry, m) in manifests.items():
         cid = m.get("campaign_id", entry.name)
+        if scope is not None and cid not in scope:
+            continue
         for dep in m.get("campaign_depends_on") or []:
             if dep not in camp_ids:
                 record(FAIL, f"campaign_depends_on resolves [{cid}]",
@@ -401,6 +427,8 @@ def check_campaigns(ws: Path) -> None:
     # Phase 3: validate non-terminal campaigns (quest-level gates).
     runnable = 0
     for _dirname, (entry, m) in manifests.items():
+        if scope is not None and m.get("campaign_id", entry.name) not in scope:
+            continue
         quests = m.get("quests") or []
         statuses = [q.get("status") for q in quests]
         if statuses and all(s in {"passed", "skipped"} for s in statuses):
@@ -507,6 +535,10 @@ def main(argv: list[str] | None = None) -> int:
                     help="child harness sweep.py will dispatch with (default: pi)")
     ap.add_argument("--probe", action="store_true",
                     help="make one live model call through the harness to confirm it round-trips")
+    ap.add_argument("--saga", type=str, default=None,
+                    help="validate only this saga's campaigns (same token sweep.py --saga takes)")
+    ap.add_argument("--only", type=str, default=None,
+                    help="validate only these comma-separated campaign_ids (unioned with --saga)")
     args = ap.parse_args(argv)
     ws = args.workspace.resolve()
     agent_dir = pi_agent_dir()
@@ -526,7 +558,7 @@ def main(argv: list[str] | None = None) -> int:
         check_launcher_spawnable(HARNESS_CLAUDE)
         check_claude_dispatch_capability()
     check_governance_context(ws)
-    check_campaigns(ws)
+    check_campaigns(ws, resolve_scope(ws, args.saga, args.only))
     if args.probe:
         if args.harness == HARNESS_PI:
             if cfg:

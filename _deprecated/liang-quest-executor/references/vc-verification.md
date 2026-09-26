@@ -23,7 +23,19 @@ Otherwise, for each VC checkbox in `## Victory Conditions`:
 ## Inline Result Aggregation
 
 - All Tier 1 VCs pass → quest passes provisionally (pending UAT for any Tier 2 VCs).
-- Any Tier 1 VC fails → quest fails. Mark `failed`. Extract a lesson with `failure_type: "vc_failed"` and `failed_criteria: [<VC text>]`. Proceed to §7e.
+- Any Tier 1 VC fails → run VC repair rounds (below). Still failing after the last round → quest fails. Mark `failed`. Extract a lesson with `failure_type: "vc_failed"` and `failed_criteria: [<VC text>]`; write `failed_vcs` to `complete.yaml`. Proceed to §7e.
 - **Tier 2 VCs are NOT verified inline.** They sit in the deferred queue. The quest's provisional pass survives or falls based on §8a UAT review.
+
+## VC Repair Rounds
+
+The steps already passed, so re-running them cannot help; a failed Tier 1 VC usually names the exact gap (a file:line, a missing call). Up to `executor.max_vc_repair_rounds` rounds (default 2; 0 restores fail-at-once):
+
+1. **Lesson.** Append a lesson with `failure_type: "vc_failed"`, `retry_tier: "vc_repair"`, `failed_criteria` and the verifier evidence.
+2. **Re-plan-child** (planning model), `failure_context.failure_type: "vc_failed"` with `failed_vcs` (VC text + evidence per failing VC), the quest's `## Purpose`, all step summaries and `files_changed`. It returns `revised_instructions` for one repair: the smallest code change that makes the failing VCs true, plus the quest's own build/test commands to re-run (taken from its steps). `resolvable: false` (the VC is wrong or contradicts the plan) ends the rounds: the quest fails and the VC goes to `## Decisions needed`.
+3. **Execute-child** applies the repair. Envelope `.run/<quest-id>/step-fix<r>.md`, title `Repair: <first failing VC, shortened>`; same Input/Output/Re-plan sections as a step.
+4. **Re-verify every Tier 1 VC**, not only the failed ones — a repair must not break a VC that passed. Record the results in the repair envelope's Verification block.
+5. **All pass** → quest passes; `complete.yaml` gets `vc_repair_rounds: <r>`. **Any fail** → next round, or fail the quest after the last.
+
+**Guardrails.** A repair may not delete or skip a test, loosen an assertion, or edit a quest `.md` or VC. When the only way to pass is to change a test's expected value or read a VC more loosely, the repair-child says so in `plan_contradictions` with `blocks_step: false`; the executor applies it, passes the quest, and adds the reason to `complete.yaml` `needs_review` — the batch sweep lists it under "Needs you" in its morning report and keeps going.
 
 Source: extracted from liang-quest-executor/SKILL.md § 7d. Quest-Level Victory Condition Verification

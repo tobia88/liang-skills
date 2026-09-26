@@ -5,7 +5,8 @@ Load when handling any failure or ambiguous error state.
 - **Child process fails to spawn (Pi CLI invocation error included):** record the exact command in the lesson, mark the step failed, enter the retry loop. No mid-run prompt.
 - **Child output malformed:** Treat as failure with `failure_type: "malformed_output"`.
 - **Child timeout (Pi CLI / batch only):** Kill, failure with `failure_type: "timeout"`. Claude mode has no kill mechanism — the executor waits for the subagent to return.
-- **Tier 1 VC fails inline:** Mark quest `failed` (no step retry — the steps already passed). Extract a lesson with `failure_type: "vc_failed"`.
+- **Tier 1 VC fails inline:** Run VC repair rounds (`references/vc-verification.md § VC Repair Rounds`) — no step retry, the steps already passed. Still failing after the last round → mark quest `failed`, lesson `failure_type: "vc_failed"`.
+- **Build/test log shows a known failure:** Classify with `liang-quest-core/scripts/failure_playbook.py` before retrying (SKILL.md §7c): `false_failure` passes the step, `retry` re-runs it for free (max 2), `blocker` fails the quest with `failure_type: "blocker"`, `hint` feeds the next attempt. New recurring failures get a rule in `failure-playbook.yaml`.
 - **Tier 1 verify-child returns malformed result:** Treat as VC failure with `failure_type: "verify_malformed"`. Mark quest `failed`.
 - **Tier 2 "no" answer in UAT batch §8a:** Quest status downgraded from `passed` to `failed`. Lesson extracted with `failure_type: "uat_rejected"`. Cascade-skip dependents not yet processed.
 - **Lesson-only retry fails (retry 1):** Expected for conceptual failures. Automatic escalation to re-plan-child on retry 2.

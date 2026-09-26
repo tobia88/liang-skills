@@ -73,6 +73,9 @@ from typing import Any
 
 import yaml
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from sweep_health import toast  # noqa: E402
+
 HERE = Path(__file__).resolve().parent
 
 
@@ -207,11 +210,18 @@ def collect_deferred_uat(ws: Path) -> list[tuple[str, str]]:
 
 # ---- phases --------------------------------------------------------------
 
-def run_preflight(preflight: Path, ws: Path, probe: bool, harness: str = "pi") -> int:
+def run_preflight(
+    preflight: Path, ws: Path, probe: bool, harness: str = "pi",
+    saga: str | None = None, only: str | None = None,
+) -> int:
     print("\n=== [1/4] PREFLIGHT " + "=" * 44)
     cmd = [sys.executable, str(preflight), "--workspace", str(ws), "--harness", harness]
     if probe:
         cmd.append("--probe")
+    if saga:
+        cmd.extend(["--saga", saga])
+    if only:
+        cmd.extend(["--only", only])
     return subprocess.run(cmd, check=False).returncode
 
 
@@ -635,7 +645,8 @@ def main(argv: list[str] | None = None) -> int:
         # have already run it — cheap re-validation beats trusting stale
         # state across a process boundary, especially for a detached child
         # that could start minutes after it was queued.
-        if run_preflight(preflight, ws, args.probe, harness=args.harness) != 0:
+        if run_preflight(preflight, ws, args.probe, harness=args.harness,
+                         saga=args.saga, only=args.only) != 0:
             print("\n[afk] preflight FAILED — aborting before launch. Fix the FAILs and re-run.",
                   file=sys.stderr)
             return 2
@@ -662,6 +673,12 @@ def main(argv: list[str] | None = None) -> int:
             final_rc = sweep_rc
 
         _log(f"AFK COMPLETE exit={final_rc} attempts={attempts}")
+        if not args.dry_run:
+            toast(
+                "Sweep finished" if final_rc == 0 else "Sweep finished with failures",
+                "All campaigns passed." if final_rc == 0
+                else f"Exit {final_rc}. Open the sweep report's Needs you section.",
+            )
         return final_rc
     finally:
         if keep_awake:
