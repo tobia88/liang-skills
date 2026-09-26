@@ -22,13 +22,11 @@ in Claude Code via links (see [Install](#install)).
 | `liang-game-prototyper` | Small playable HTML game prototypes in `.liang/prototypes/`, reusing a shared asset pool. |
 | `liang-ue-cpp-style` | UE5.5+ C++ coding conventions reference. |
 
-### Deprecated
+### Retired
 
-Retired skills live in [`_deprecated/`](_deprecated/): the quest and brainstorm
-families (replaced by the queue family), `liang-skill-blacksmith`,
-`liang-replica-forge`, `liang-video-sampler`, plus the `/goal` family-audit command
-and `_family-audit/`. The Claude Code installers only link top-level skill directories, so none of
-these load there; pi scans recursively and still sees them, tagged `DEPRECATED`. See [`_deprecated/README.md`](_deprecated/README.md).
+The quest and brainstorm families (replaced by the queue family), `liang-skill-blacksmith`,
+`liang-replica-forge`, `liang-video-sampler`, the `/goal` family-audit command and `_family-audit/`
+were deleted; their last state is tagged `quest-family-final`.
 
 ## Install
 
