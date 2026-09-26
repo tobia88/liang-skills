@@ -1,6 +1,7 @@
 ---
 name: liang-quest-executor
 description: |
+  DEPRECATED, use liang-queue-add / liang-queue-sweep instead.
   Planner-native executor for the JRPG quest family. Consumes liang-quest-planner campaign output (flat quest-NNN-*.md files plus manifest.yaml entries with status "ready") and runs quests to completion.
 
   Use when explicitly invoked as liang-quest-executor, asked to execute/run a planner-format campaign, or as the immediate follow-up after liang-quest-planner. Spawns child processes per executor-generated step envelope, routes models from project.yaml execution_by_difficulty, supports Pi CLI, Claude subagents (--claude), and batch mode (--batch), with tiered per-step retry, quest-level victory-condition verification, and deferred UAT gates.

@@ -1,6 +1,6 @@
 ---
 name: liang-quest-planner
-description: "Same-context campaign planner that consumes brainstorm output, in-session conversation, or both. Extracts locked decisions, fills gaps via adaptive Socratic questioning, writes a plan.md dossier plus lean quest markdown files, and renders an optional free-design plan.html from them when the project setting planner.html is true (body drafted by a configurable body-drafter subagent, CSS assembled by script), with open discussion held on that page. Four phases: decision extraction (with optional gap-fill), decomposition and plan files, open discussion, finalization."
+description: "DEPRECATED, use liang-queue-add / liang-queue-sweep instead. Same-context campaign planner that consumes brainstorm output, in-session conversation, or both. Extracts locked decisions, fills gaps via adaptive Socratic questioning, writes a plan.md dossier plus lean quest markdown files, and renders an optional free-design plan.html from them when the project setting planner.html is true (body drafted by a configurable body-drafter subagent, CSS assembled by script), with open discussion held on that page. Four phases: decision extraction (with optional gap-fill), decomposition and plan files, open discussion, finalization."
 ---
 
 # Liang Quest Planner

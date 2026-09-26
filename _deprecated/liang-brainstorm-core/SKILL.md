@@ -1,6 +1,6 @@
 ---
 name: liang-brainstorm-core
-description: Shared reference library for liang-brainstorm-* skills. Contains behavioral contracts for question cadence, terminology, VCS policy, and scout rules consumed via reference inclusion at activation time. Not directly invocable.
+description: DEPRECATED, use liang-queue-add / liang-queue-sweep instead. Shared reference library for liang-brainstorm-* skills. Contains behavioral contracts for question cadence, terminology, VCS policy, and scout rules consumed via reference inclusion at activation time. Not directly invocable.
 ---
 
 # Liang Brainstorm Core

@@ -1,6 +1,6 @@
 ---
 name: liang-brainstorm-relentless
-description: Relentless one-question-at-a-time brainstorming for software/project planning, game dev, skill creation, and general project decisions. Uses a functional JRPG strategy structure, challenges vague answers and risky choices, offers 4 options plus recommendation/tradeoff/confidence/manual input, and creates a polished final Markdown Strategy Report when brainstorming is complete.
+description: DEPRECATED, use liang-queue-add / liang-queue-sweep instead. Relentless one-question-at-a-time brainstorming for software/project planning, game dev, skill creation, and general project decisions. Uses a functional JRPG strategy structure, challenges vague answers and risky choices, offers 4 options plus recommendation/tradeoff/confidence/manual input, and creates a polished final Markdown Strategy Report when brainstorming is complete.
 ---
 
 # Liang Relentless Brainstorm

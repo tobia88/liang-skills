@@ -1,6 +1,6 @@
 ---
 name: liang-quest-status
-description: "Read-only, single-response campaign status dashboard. Scans .liang/campaigns/*/manifest.yaml files, computes derived stats (completion %, elapsed time), applies severity-tiered attention highlighting (ALERT/ACTIVE/INFO/PASSED), renders an adaptive self-compressing markdown view, and handles schema version drift with best-effort parsing. References field-registry.md, attention-tiers.md, and rendering-rules.md for display contracts."
+description: "DEPRECATED, use liang-queue-add / liang-queue-sweep instead. Read-only, single-response campaign status dashboard. Scans .liang/campaigns/*/manifest.yaml files, computes derived stats (completion %, elapsed time), applies severity-tiered attention highlighting (ALERT/ACTIVE/INFO/PASSED), renders an adaptive self-compressing markdown view, and handles schema version drift with best-effort parsing. References field-registry.md, attention-tiers.md, and rendering-rules.md for display contracts."
 ---
 
 # Liang Quest Status

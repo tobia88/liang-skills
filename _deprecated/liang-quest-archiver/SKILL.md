@@ -1,6 +1,6 @@
 ---
 name: liang-quest-archiver
-description: "Archives fully-terminal quest campaigns out of .liang/campaigns/ into .liang/campaigns/archive/ so the live pipeline stays small. Classification and moves are owned by the co-located archive_sweep.py (dry-run by default); this skill runs the script, presents the plan, gates execution on user confirmation, and verifies the result. Designed to run on the cheapest model tier — no judgment calls, only script operation and count verification."
+description: "DEPRECATED, use liang-queue-add / liang-queue-sweep instead. Archives fully-terminal quest campaigns out of .liang/campaigns/ into .liang/campaigns/archive/ so the live pipeline stays small. Classification and moves are owned by the co-located archive_sweep.py (dry-run by default); this skill runs the script, presents the plan, gates execution on user confirmation, and verifies the result. Designed to run on the cheapest model tier — no judgment calls, only script operation and count verification."
 ---
 
 # Liang Quest Archiver

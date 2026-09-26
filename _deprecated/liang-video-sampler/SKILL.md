@@ -1,6 +1,6 @@
 ---
 name: liang-video-sampler
-description: Extract timestamped screenshots from local video files and GIFs so the agent can visually understand and summarize gameplay clips, UI recordings, animations, trailers, or other local videos. Use when the user provides an mp4, mov, webm, mkv, avi, or gif and asks for visual analysis, video understanding, frame summaries, or "watch this video" on a local file.
+description: DEPRECATED, retired skill. Extract timestamped screenshots from local video files and GIFs so the agent can visually understand and summarize gameplay clips, UI recordings, animations, trailers, or other local videos. Use when the user provides an mp4, mov, webm, mkv, avi, or gif and asks for visual analysis, video understanding, frame summaries, or "watch this video" on a local file.
 ---
 
 # Liang Video Sampler

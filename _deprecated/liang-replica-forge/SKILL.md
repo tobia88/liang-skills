@@ -1,6 +1,7 @@
 ---
 name: liang-replica-forge
 description: >-
+  DEPRECATED, retired skill.
   Factory for verified, anonymized replication-benchmark prompts. Runs a
   research → synthesis → clean-context verify loop that turns any existing
   game (2D or 3D) or piece of software into one paste-ready prompt.md that an

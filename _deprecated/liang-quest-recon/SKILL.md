@@ -1,6 +1,7 @@
 ---
 name: liang-quest-recon
 description: |
+  DEPRECATED, use liang-queue-add / liang-queue-sweep instead.
   Prototype breakdown pipeline — the quest family's side scout and the only skill that
   reads a raw prototype. Turns one prototype/spec file into a folder of line-referenced
   breakdown docs; the full profile adds skeptic-verified gap analysis against the codebase

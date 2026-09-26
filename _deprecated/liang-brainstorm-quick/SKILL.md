@@ -1,6 +1,6 @@
 ---
 name: liang-brainstorm-quick
-description: Lite sibling of liang-brainstorm-relentless. 5 base questions + up to 2 budgeted pushback questions. Emits an in-chat Strategy Report only (zero files). Two same-session downstreams presented at finalization — apply immediately via a delegated executor (subagent or pi sub-process per § Next Move Prompt), or plan first via liang-quest-planner. Direct invocation only.
+description: DEPRECATED, use liang-queue-add / liang-queue-sweep instead. Lite sibling of liang-brainstorm-relentless. 5 base questions + up to 2 budgeted pushback questions. Emits an in-chat Strategy Report only (zero files). Two same-session downstreams presented at finalization — apply immediately via a delegated executor (subagent or pi sub-process per § Next Move Prompt), or plan first via liang-quest-planner. Direct invocation only.
 ---
 
 # Liang Quick Brainstorm

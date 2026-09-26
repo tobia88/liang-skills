@@ -1,6 +1,6 @@
 ---
 name: liang-skill-blacksmith
-description: "An iterative quality-refinement skill for Pi agent SKILL.md files. Runs a bundled mechanical checker script plus agent judgment checks against a layered rubric (structural, language, cross-skill consistency), plans before/after diffs for fixable findings, and applies the approved changeset in one batch with exact-match staleness protection. Two modes: inspect (scan + fix) and verify (post-application clean-state check). Reports inline as markdown; styled HTML Appraisal on request."
+description: "DEPRECATED, retired skill. An iterative quality-refinement skill for Pi agent SKILL.md files. Runs a bundled mechanical checker script plus agent judgment checks against a layered rubric (structural, language, cross-skill consistency), plans before/after diffs for fixable findings, and applies the approved changeset in one batch with exact-match staleness protection. Two modes: inspect (scan + fix) and verify (post-application clean-state check). Reports inline as markdown; styled HTML Appraisal on request."
 ---
 
 # Liang Skill Blacksmith

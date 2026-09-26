@@ -1,6 +1,6 @@
 ---
 name: liang-quest-core
-description: Shared reference foundation for the JRPG quest planning family. Contains campaign protocol, manifest schema, status transitions, child process contracts, run report format, the project.yaml contract, and the family's own rules (registry, topology, audit criteria, decision log). Every liang-quest-* skill reads the references it needs from here. This skill has no behavioral logic — it is a pure reference library.
+description: DEPRECATED, use liang-queue-add / liang-queue-sweep instead. Shared reference foundation for the JRPG quest planning family. Contains campaign protocol, manifest schema, status transitions, child process contracts, run report format, the project.yaml contract, and the family's own rules (registry, topology, audit criteria, decision log). Every liang-quest-* skill reads the references it needs from here. This skill has no behavioral logic — it is a pure reference library.
 ---
 
 # Liang Quest Core
