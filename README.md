@@ -20,6 +20,13 @@ in Claude Code via links (see [Install](#install)).
 | `liang-quest-status` | Read-only campaign dashboard scanned from `manifest.yaml` files, with tiered attention highlighting. |
 | `liang-quest-archiver` | Moves fully-terminal campaigns into `.liang/campaigns/archive/` via `archive_sweep.py` (dry-run by default). |
 
+### Queue family — park agreed work, run it unattended
+
+| Skill | What it does |
+| --- | --- |
+| `liang-queue-add` | Captures agreed work as `.liang/queue/YYYYMMDD_NN_TaskName/task.md` (goal, the user's decisions, done-when, boundaries — no step plan) and saves its assets. Owns the task format. |
+| `liang-queue-sweep` | Runs `ready` tasks in order while the user is away: pre-flight, one fresh child session per task, logged judgement calls, saved evidence, run summary and push. `--check` and `--status` modes. |
+
 ### Brainstorm family — structured planning dialogue
 
 | Skill | What it does |
