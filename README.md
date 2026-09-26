@@ -7,12 +7,15 @@ in Claude Code via links (see [Install](#install)).
 
 ## Skills
 
-### Queue family — park agreed work, run it unattended
+### Queue family — note feedback, park agreed work, run it unattended
 
 | Skill | What it does |
 | --- | --- |
-| `liang-queue-add` | Captures agreed work as `.liang/queue/YYYYMMDD_NN_TaskName/task.md` (goal, the user's decisions, done-when, boundaries — no step plan) and saves its assets. Owns the task format. |
-| `liang-queue-sweep` | Runs `ready` tasks in order while the user is away: pre-flight, one fresh child session per task, logged judgement calls, saved evidence, run summary and push. `--check` and `--status` modes. |
+| `liang-queue-core` | Shared contract: queue layout, task and feedback formats, status values, who writes what, family-wide rules. Read by the others, not run on its own. |
+| `liang-queue-feedback` | Writes the user's feedback into `.liang/queue/_feedback/` in their own words, quickly, before it becomes work. |
+| `liang-queue-add` | Captures agreed work, or promotes feedback, as `.liang/queue/YYYYMMDD_NN_TaskName/task.md` (goal, the user's decisions, done-when, boundaries — no step plan) and saves its assets. |
+| `liang-queue-sweep` | Runs `ready` tasks while the user is away: pre-flight and a run plan (inferred order, what runs together, cheapest model per task with one step-up), one fresh child session per task, logged judgement calls, saved evidence, run summary and push. `--check` and `--status` modes. |
+| `liang-queue-tidy` | Checks open feedback and unfinished tasks against the project as it is now, and closes the ones already done or no longer relevant, with evidence, once the user agrees. |
 
 ### Standalone tools
 

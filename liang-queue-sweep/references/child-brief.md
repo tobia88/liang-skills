@@ -15,6 +15,7 @@ You are running one queued task while the user is away. Nobody will answer quest
 - When you face a choice the task does not settle, pick the option most consistent with the Goal and Decisions, and record it as a judgement call.
 - Stop and mark the task `blocked` rather than do anything irreversible, anything that reaches outside the machine, or anything a Boundary or project rule forbids.
 - Never discard or overwrite the user's uncommitted work. If you need a file they have changed, block.
+- Other tasks may be running at the same time. Touch only what your task needs. If it needs a build, the editor or version control and your dispatch did not say it may use them, stop and log why in `Next:`.
 - Save proof for each Done When check in `evidence/` (screenshots, logs, build output) and name each file after its check.
 
-**Finish:** append one Log entry to `task.md` in the shape given by the task format, including `Next:` if anything is unfinished. Set `status` to `done` only if every check passed with evidence; otherwise `blocked`, with what the user must do.
+**Finish:** append one Log entry to `task.md` in the shape given by `liang-queue-core/references/format.md`, including `Next:` if anything is unfinished. Set `status` to `done` only if every check passed with evidence; otherwise `blocked`, with what the user must do.
