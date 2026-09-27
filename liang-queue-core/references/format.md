@@ -7,10 +7,14 @@ The files every `liang-queue-*` skill reads and writes. Change the format here o
 ```text
 .liang/queue/
   _rules.md                  optional: project rules for unattended runs, such as what cannot run at once and minimum models
-  _runs/YYYYMMDD_HHMM.md     one summary per sweep
+  _runs/YYYYMMDD_HHMM/       one folder per sweep
+    report.md                the run summary
+    sweep-data.js            the sweep's live data, read by dashboard.html
+    dashboard.html           the sweep's quest board
   .lock                      present only while a sweep runs
   YYYYMMDD_NN_TaskName/      one folder per task
     task.md
+    result.json              written by the child that ran it: the sweep's structured copy of its Log entry
     assets/                  inputs the task needs: files, values, reference code
     evidence/                proof saved by whoever closed it: screenshots, logs, build output
   _done/                     closed tasks (done or dropped)
@@ -78,6 +82,7 @@ Appended, never rewritten. A sweep entry:
 
 ```markdown
 ### 2026-09-26 22:40 — sweep 20260926_2230
+- Ran: <HH:MM start>–<HH:MM end>; blocked <HH:MM>–<HH:MM> for <reason>, if it waited on something mid-run
 - Model: <model that ran it; if stepped up, from which and why>
 - Did: <what changed, with paths>
 - Judgement calls: <each decision made without the user, and why>
@@ -94,6 +99,42 @@ A tidy entry:
 - Evidence: <paths, changelists, or evidence/<file>>
 - Result: done | dropped | open — <reason>
 ```
+
+## Sweep Data
+
+The one fixed shape behind the dashboard. The page is free to change; this is not.
+
+A child writes `result.json` in its task folder when it finishes or blocks, as a JSON object with:
+
+| Field | Meaning |
+| --- | --- |
+| `status` | `done` or `blocked` |
+| `model` | model that ran it |
+| `cl` | changelist or branch holding the work, or `null` |
+| `spans` | `[{from, to, state: "running" \| "blocked", note?, approx?}]`, ISO local times `YYYY-MM-DDTHH:MM` |
+| `checks` | one per Done When line: `{text, pass, note, evidence: ["evidence/<file>", ...]}` |
+| `calls` | judgement calls: `{call, why}` |
+| `rootCauses` | causes found, one line each |
+| `forYou` | what the user should know or do, one line each |
+| `needsYou` | `{kind: "do" \| "decide" \| "review", text, detail?}` |
+| `changed` | `{inCl: [paths], otherCls: [{cl, paths}], assets: [paths]}` |
+| `next` | the Log's `Next:` line |
+
+The orchestrator merges every `result.json`, plus each task's id, name, `after` and Goal, into `_runs/<sweep>/sweep-data.js`:
+
+```js
+window.SWEEP = {
+  id, started, ended, running,           // running: true until wrap-up
+  howItWent: [lines],
+  needsYou: [{id, kind, text, detail, task}],   // every child's needsYou plus the sweep's own
+  tasks: [{id, name, status, after, goal, ...result.json fields}],  // calls gain ids: t<NN>c<n>
+  events: [{t, task, type, note}]        // sweep_start, task_start, blocked, resumed, done, sweep_end
+};
+```
+
+- It is a script, not JSON, because a page opened from disk cannot fetch JSON.
+- A task not yet started has status `waiting` and no spans. A task in progress has status `running` and one open span with no `to`.
+- Ids never change within a sweep: the dashboard keys the user's review marks to `needsYou` and call ids.
 
 ## Feedback Item
 
@@ -131,5 +172,7 @@ Written when the item closes: what closed it, with evidence. Leave empty when ca
 | Task Goal, Decisions, Done When, Boundaries, `after`, `from` | `liang-queue-add` |
 | Task `status` | `liang-queue-add` (`pending` → `ready` on the user's word), `liang-queue-sweep`, `liang-queue-tidy` |
 | Task Log | `liang-queue-sweep`, `liang-queue-tidy` |
+| Task `result.json` | `liang-queue-sweep` (the child that ran it) |
+| `_runs/<sweep>/` | `liang-queue-sweep` (the orchestrator) |
 | Feedback title, Feedback, Context | `liang-queue-feedback` |
 | Feedback `status` and Resolution | `liang-queue-add` (promoted), `liang-queue-sweep` (done via `from`), `liang-queue-tidy` |

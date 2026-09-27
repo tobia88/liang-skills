@@ -8,6 +8,8 @@ You are running one queued task while the user is away. Nobody will answer quest
 
 **Read first:** the project's agent instructions (CLAUDE.md, AGENTS.md), `.liang/queue/_rules.md` if present, then everything in the task folder. If the Log has entries, resume from the last `Next:` line.
 
+**Note the time you start**; the Log's `Ran:` line and `result.json` need it.
+
 **Your job:** meet every Done When check within the Decisions and Boundaries. Plan the work yourself; the task deliberately gives no steps.
 
 **Rules:**
@@ -18,4 +20,7 @@ You are running one queued task while the user is away. Nobody will answer quest
 - Other tasks may be running at the same time. Touch only what your task needs. If it needs a build, the editor or version control and your dispatch did not say it may use them, stop and log why in `Next:`.
 - Save proof for each Done When check in `evidence/` (screenshots, logs, build output) and name each file after its check.
 
-**Finish:** append one Log entry to `task.md` in the shape given by `liang-queue-core/references/format.md`, including `Next:` if anything is unfinished. Set `status` to `done` only if every check passed with evidence; otherwise `blocked`, with what the user must do.
+**Finish:**
+- Append one Log entry to `task.md` in the shape given by `liang-queue-core/references/format.md`, including `Ran:` times and `Next:` if anything is unfinished.
+- Write `result.json` in the task folder with the same facts in the Sweep Data shape from that file. Keep each line short: the user reads it on a dashboard, and the Log keeps the full story.
+- Set `status` to `done` only if every check passed with evidence; otherwise `blocked`, with what the user must do.

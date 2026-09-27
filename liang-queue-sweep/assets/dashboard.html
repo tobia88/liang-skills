@@ -1,0 +1,666 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Quest Board</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #070a1c; --win-a: #26358f; --win-b: #0c1450; --win-edge: #e9ebf5; --win-in: #141a52;
+  --well: #0a103d; --line: #34449e;
+  --text: #f4f5ff; --dim: #b4bce6; --faint: #7d88c4;
+  --gold: #ffd35a; --run: #5fe0ff; --block: #ff5d6c; --wait: #b9b9c9; --revisit: #ff9d3c; --ok: #7dff9c;
+  --pixel: "Press Start 2P", ui-monospace, monospace;
+  --sans: "Segoe UI", system-ui, sans-serif;
+  --mono: ui-monospace, "Cascadia Mono", Consolas, monospace;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0; color: var(--text); font: 14px/1.55 var(--sans);
+  background:
+    radial-gradient(1px 1px at 12% 18%, #fff8 50%, transparent 51%),
+    radial-gradient(1px 1px at 64% 9%, #fff6 50%, transparent 51%),
+    radial-gradient(1px 1px at 83% 61%, #fff5 50%, transparent 51%),
+    radial-gradient(1px 1px at 31% 82%, #fff5 50%, transparent 51%),
+    radial-gradient(ellipse at 50% -20%, #1b2470 0%, var(--bg) 60%) fixed;
+  background-color: var(--bg);
+  text-shadow: 1px 1px 0 #0008;
+}
+button { font: inherit; color: inherit; }
+.win {
+  background: linear-gradient(180deg, var(--win-a), var(--win-b));
+  border: 3px solid var(--win-edge); border-radius: 8px;
+  box-shadow: inset 0 0 0 2px var(--win-in), 0 0 0 2px #000, 0 6px 18px #0009;
+}
+.px { font-family: var(--pixel); letter-spacing: .04em; }
+
+.shell { max-width: 1240px; margin: 0 auto; padding: 18px 16px 90px; display: grid; gap: 16px; }
+
+.top { display: flex; align-items: center; gap: 18px; padding: 12px 18px; flex-wrap: wrap; }
+.top h1 { margin: 0; font: 15px/1.2 var(--pixel); color: var(--gold); text-shadow: 2px 2px 0 #7a4b00; }
+.top .when { color: var(--dim); font: 12px var(--mono); }
+.live { font: 9px var(--pixel); color: var(--run); }
+.live::before { content: "● "; animation: pulse 1.4s infinite; }
+@keyframes pulse { 50% { opacity: .25; } }
+.tally { display: flex; gap: 18px; margin-left: auto; }
+.tally div { display: flex; align-items: baseline; gap: 7px; }
+.tally b { font: 14px var(--pixel); }
+.tally span { font: 8px var(--pixel); color: var(--dim); }
+
+.board { display: grid; grid-template-columns: 290px 1fr; gap: 16px; align-items: start; }
+
+.menu { padding: 10px 8px; position: sticky; top: 16px; }
+.menu .group { font: 8px var(--pixel); color: var(--faint); padding: 14px 12px 6px; }
+.mi {
+  position: relative; display: flex; align-items: center; gap: 10px; width: 100%;
+  background: none; border: 0; border-radius: 4px; padding: 9px 12px 9px 26px; cursor: pointer; text-align: left;
+}
+.mi:hover { background: #ffffff10; }
+.mi.sel { background: #ffffff1c; }
+.mi.sel::before, .mi:hover::before {
+  content: "▶"; position: absolute; left: 7px; color: #fff; font-size: 11px; text-shadow: 1px 1px 0 #000;
+}
+.mi.sel::before { animation: nudge .6s steps(2) infinite; }
+@keyframes nudge { 50% { transform: translateX(-2px); } }
+.mi .label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mi .label.px { font-size: 9px; }
+.mi .num { font: 8px var(--pixel); color: var(--faint); }
+.dot { width: 8px; height: 8px; border-radius: 2px; flex: none; }
+.dot.done { background: var(--gold); } .dot.running { background: var(--run); }
+.dot.blocked { background: var(--block); } .dot.waiting { background: var(--wait); }
+.badge { font: 8px var(--pixel); padding: 3px 6px; border-radius: 3px; background: var(--well); color: var(--dim); border: 1px solid var(--line); }
+.badge.hot { color: var(--revisit); border-color: var(--revisit); }
+.badge.clear { color: var(--ok); border-color: transparent; background: none; }
+
+.pane { padding: 22px 26px 26px; min-height: 520px; }
+.pane h2 { margin: 0; font: 12px/1.5 var(--pixel); color: var(--gold); }
+.lede { color: var(--dim); margin: 8px 0 0; }
+
+.stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 18px 0 4px; }
+.stat { background: var(--well); border: 1px solid var(--line); border-radius: 6px; padding: 10px 14px; }
+.stat b { display: block; font: 13px/1.6 var(--pixel); }
+.stat span { font: 8px var(--pixel); color: var(--faint); }
+
+.tabs { display: flex; gap: 4px; margin: 20px 0 0; border-bottom: 2px solid var(--line); flex-wrap: wrap; }
+.tab { background: none; border: 0; border-bottom: 3px solid transparent; margin-bottom: -2px; padding: 9px 12px; font: 8px var(--pixel); color: var(--faint); cursor: pointer; }
+.tab:hover { color: var(--text); }
+.tab.sel { color: var(--gold); border-bottom-color: var(--gold); }
+.tab em { font-style: normal; color: var(--revisit); margin-left: 4px; }
+
+.list { margin-top: 6px; }
+.row { padding: 14px 0; border-bottom: 1px dashed var(--line); }
+.row:last-child { border-bottom: 0; }
+.row .main { display: flex; gap: 12px; align-items: flex-start; }
+.row .ico { width: 16px; flex: none; color: var(--gold); line-height: 1.5; }
+.row .ico.fail { color: var(--block); }
+.row .body { flex: 1; min-width: 0; }
+.row .sub { color: var(--dim); font-size: 13px; margin-top: 2px; }
+.row .tag { font: 11px var(--mono); color: var(--faint); margin-top: 4px; }
+
+.proof { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0 0 28px; align-items: center; }
+.proof img { height: 52px; width: 88px; object-fit: cover; border: 2px solid var(--win-edge); border-radius: 3px; cursor: zoom-in; background: var(--well); box-shadow: 0 0 0 1px #000; }
+.proof img:hover { border-color: var(--gold); }
+.proof .more, .proof a { font: 11px var(--mono); color: var(--faint); text-decoration: none; background: var(--well); border: 1px solid var(--line); border-radius: 3px; padding: 3px 8px; cursor: pointer; }
+.proof a:hover, .proof .more:hover { color: var(--text); }
+
+.orders-group { margin-top: 22px; }
+.orders-group h3 { margin: 0 0 2px; font: 9px var(--pixel); color: var(--gold); }
+.orders-group h3 span { font: 12px var(--sans); color: var(--faint); margin-left: 8px; }
+.need .body { cursor: pointer; }
+.need input { appearance: none; flex: none; width: 14px; height: 14px; margin: 4px 0 0; border: 2px solid var(--win-edge); background: var(--well); cursor: pointer; }
+.need input:checked { background: var(--ok); box-shadow: inset 0 0 0 2px var(--well); }
+.need.done .ntext { color: var(--faint); text-decoration: line-through; }
+.need .chev { color: var(--faint); font-size: 11px; margin-left: 6px; }
+.need .sub { display: none; }
+.need.open .sub { display: block; }
+
+.call .n { font: 8px var(--pixel); color: var(--faint); width: 22px; flex: none; padding-top: 4px; }
+.call .btns { display: flex; gap: 6px; flex: none; }
+.call .btns button { font: 8px var(--pixel); background: var(--well); border: 2px solid var(--line); color: var(--dim); border-radius: 3px; padding: 6px 8px; cursor: pointer; }
+.call .btns button:hover { border-color: var(--win-edge); color: var(--text); }
+.call .btns button.ok.on { background: var(--ok); color: #06210f; border-color: var(--ok); text-shadow: none; }
+.call .btns button.rv.on { background: var(--revisit); color: #2a1400; border-color: var(--revisit); text-shadow: none; }
+.call.ok .ctext { color: var(--dim); }
+.call textarea { display: none; width: calc(100% - 34px); margin: 10px 0 0 34px; background: var(--well); color: var(--text); border: 2px solid var(--revisit); border-radius: 3px; font: 13px var(--sans); padding: 6px 8px; min-height: 42px; resize: vertical; }
+.call.rv textarea { display: block; }
+.bulk { display: flex; justify-content: flex-end; margin-top: 12px; }
+.bulk button, .copy { font: 8px var(--pixel); background: var(--well); border: 2px solid var(--win-edge); border-radius: 4px; padding: 8px 10px; cursor: pointer; }
+.bulk button:hover, .copy:hover:not(:disabled) { background: var(--gold); color: #2a1a00; text-shadow: none; }
+
+.notes h3 { margin: 22px 0 6px; font: 9px var(--pixel); color: var(--gold); }
+.notes ul { margin: 0; padding-left: 20px; list-style: "✦  "; }
+.notes li { margin: 6px 0; }
+.notes li::marker { color: var(--gold); }
+.next { margin-top: 22px; padding: 10px 14px; background: var(--well); border-left: 3px solid var(--run); color: var(--dim); }
+.next b { font: 8px var(--pixel); color: var(--run); margin-right: 8px; }
+.paths h3 { margin: 20px 0 6px; font: 9px var(--pixel); color: var(--gold); }
+.paths ul { margin: 0; padding-left: 18px; font: 12px/1.7 var(--mono); color: var(--dim); }
+
+.timeline { margin-top: 18px; overflow-x: auto; }
+.timeline svg { display: block; min-width: 640px; width: 100%; }
+.legend { display: flex; flex-wrap: wrap; gap: 16px; font-size: 12px; color: var(--dim); margin-top: 8px; }
+.legend i { display: inline-block; width: 12px; height: 8px; margin-right: 5px; vertical-align: 1px; }
+
+.stamp { display: inline-block; font: 8px var(--pixel); padding: 5px 7px; border: 2px solid currentColor; border-radius: 3px; transform: rotate(-4deg); background: #0006; margin-right: 12px; vertical-align: 2px; }
+.stamp.done { color: var(--gold); } .stamp.running { color: var(--run); } .stamp.blocked { color: var(--block); } .stamp.waiting { color: var(--wait); }
+.qname { font: 700 19px var(--sans); color: var(--text); letter-spacing: 0; vertical-align: middle; }
+.qmeta { font: 12px var(--mono); color: var(--faint); margin-top: 10px; }
+
+.debrief { position: fixed; left: 0; right: 0; bottom: 0; background: linear-gradient(180deg, var(--win-a), var(--win-b)); border-top: 3px solid var(--win-edge); box-shadow: 0 -2px 0 #000; }
+.debrief .in { max-width: 1240px; margin: 0 auto; display: flex; align-items: center; gap: 16px; padding: 10px 16px; flex-wrap: wrap; }
+.debrief .lbl { font: 9px/1.6 var(--pixel); }
+.xp { flex: 1; min-width: 140px; max-width: 360px; height: 12px; background: var(--well); border: 2px solid var(--win-edge); display: flex; box-shadow: 0 0 0 1px #000; }
+.xp i { display: block; height: 100%; }
+.copy:disabled { color: var(--faint); border-color: var(--line); cursor: default; }
+.toast { color: var(--ok); font-size: 12px; }
+.sp { flex: 1; }
+
+.lightbox { position: fixed; inset: 0; background: #000d; display: none; align-items: center; justify-content: center; flex-direction: column; gap: 10px; z-index: 10; cursor: zoom-out; }
+.lightbox.on { display: flex; }
+.lightbox img { max-width: 94vw; max-height: 86vh; border: 3px solid var(--win-edge); box-shadow: 0 0 0 2px #000; }
+.lightbox div { color: var(--dim); font: 12px var(--mono); }
+
+@media (max-width: 860px) {
+  .board { grid-template-columns: 1fr; }
+  .menu { position: static; }
+  .tally { margin-left: 0; }
+  .stats { grid-template-columns: 1fr; }
+  .pane { padding: 18px 16px; }
+}
+</style>
+</head>
+<body>
+<div class="shell">
+  <div class="win top" id="top"></div>
+  <div class="board">
+    <nav class="win menu" id="menu"></nav>
+    <main class="win pane" id="pane"></main>
+  </div>
+</div>
+<div class="debrief"><div class="in" id="debrief"></div></div>
+<div class="lightbox" id="lightbox"><img alt=""><div></div></div>
+
+<script>
+const STORE_PREFIX = "sweep-review:";
+const REFRESH_MS = 30000;
+const PROOF_SHOWN = 5;
+const STATUS_LABEL = { done: "Cleared", running: "In progress", blocked: "Stalled", waiting: "Waiting" };
+const STATUS_COLOR = { done: "gold", running: "run", blocked: "block", waiting: "wait" };
+const ORDER_GROUPS = [
+  ["do", "ERRANDS", "hands-on steps"],
+  ["decide", "CROSSROADS", "your call"],
+  ["review", "INSPECTION", "look it over"],
+];
+const QUEST_TABS = [
+  ["objectives", "OBJECTIVES"],
+  ["decisions", "DECISIONS"],
+  ["notes", "FIELD NOTES"],
+  ["inventory", "INVENTORY"],
+];
+
+let sweep = null;
+let review = { needs: {}, calls: {}, notes: {}, view: "", tabs: {}, openNeed: {}, openProof: {} };
+
+function loadReview() {
+  try {
+    const raw = localStorage.getItem(STORE_PREFIX + sweep.id);
+    if (raw) {
+      review = Object.assign(review, JSON.parse(raw));
+    }
+  } catch (e) { }
+}
+
+function saveReview() {
+  try {
+    localStorage.setItem(STORE_PREFIX + sweep.id, JSON.stringify(review));
+  } catch (e) { }
+}
+
+function esc(s) {
+  return String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+}
+
+function shortId(id) {
+  return id.split("_")[1];
+}
+
+function hhmm(iso) {
+  return iso ? iso.slice(11, 16) : "—";
+}
+
+function localIso(date) {
+  return new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+}
+
+function minutesBetween(a, b) {
+  return (new Date(b) - new Date(a)) / 60000;
+}
+
+function duration(a, b) {
+  const m = Math.round(minutesBetween(a, b));
+  return m >= 60 ? `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, "0")}m` : `${m}m`;
+}
+
+function isImage(file) {
+  return /\.(png|jpe?g|gif|webp)$/i.test(file);
+}
+
+function taskFolder(task) {
+  return task.status === "done" ? `../../_done/${task.id}/` : `../../${task.id}/`;
+}
+
+function findTask(id) {
+  return sweep.tasks.find(t => t.id === id);
+}
+
+function allCalls() {
+  return sweep.tasks.flatMap(t => (t.calls || []).map(c => ({ ...c, task: t })));
+}
+
+function unreviewedCalls(task) {
+  return (task.calls || []).filter(c => !review.calls[c.id]);
+}
+
+function openOrders() {
+  return sweep.needsYou.filter(n => !review.needs[n.id]);
+}
+
+function defaultView() {
+  return openOrders().length ? "orders" : "task:" + sweep.tasks[0].id;
+}
+
+function renderTop() {
+  const counts = { done: 0, running: 0, blocked: 0, waiting: 0 };
+  sweep.tasks.forEach(t => counts[t.status]++);
+  const end = sweep.running ? localIso(new Date()) : sweep.ended;
+  const tally = Object.entries(counts)
+    .map(([k, v]) => `<div><b style="color:var(--${STATUS_COLOR[k]})">${v}</b><span>${STATUS_LABEL[k].toUpperCase()}</span></div>`)
+    .join("");
+  document.getElementById("top").innerHTML = `
+    <h1>QUEST BOARD</h1>
+    <span class="when">sweep ${esc(sweep.id)} · ${hhmm(sweep.started)} → ${sweep.running ? "now" : hhmm(sweep.ended)} · ${duration(sweep.started, end)}</span>
+    ${sweep.running ? `<span class="live">ON THE ROAD</span>` : ""}
+    <div class="tally">${tally}</div>`;
+}
+
+function menuItem(view, inner) {
+  return `<button class="mi ${review.view === view ? "sel" : ""}" data-view="${esc(view)}">${inner}</button>`;
+}
+
+function questBadge(t) {
+  const failed = (t.checks || []).filter(c => !c.pass).length;
+  if (failed) {
+    return `<span class="badge hot" title="objectives failed">✗${failed}</span>`;
+  }
+  const left = unreviewedCalls(t).length;
+  return left ? `<span class="badge hot" title="decisions to review">${left}</span>` : `<span class="badge clear">✓</span>`;
+}
+
+function renderMenu() {
+  const orders = openOrders().length;
+  const quests = sweep.tasks.map(t => menuItem("task:" + t.id,
+    `<span class="dot ${t.status}"></span><span class="num">${shortId(t.id)}</span><span class="label">${esc(t.name)}</span>${questBadge(t)}`)).join("");
+  document.getElementById("menu").innerHTML = `
+    ${menuItem("orders", `<span class="label px">PARTY ORDERS</span>${orders ? `<span class="badge hot">${orders}</span>` : `<span class="badge clear">✓</span>`}`)}
+    ${menuItem("chronicle", `<span class="label px">CHRONICLE</span>`)}
+    <div class="group">QUESTS · ${sweep.tasks.length}</div>
+    ${quests}`;
+}
+
+function renderNeed(n) {
+  const done = !!review.needs[n.id];
+  const open = !!review.openNeed[n.id];
+  const task = n.task ? findTask(n.task) : null;
+  return `<div class="row need ${done ? "done" : ""} ${open ? "open" : ""}">
+    <div class="main">
+      <input type="checkbox" data-need="${esc(n.id)}" ${done ? "checked" : ""}>
+      <div class="body" data-open-need="${esc(n.id)}">
+        <span class="ntext">${esc(n.text)}</span>${n.detail ? `<span class="chev">${open ? "▾" : "▸"}</span>` : ""}
+        ${n.detail ? `<div class="sub">${esc(n.detail)}</div>` : ""}
+        ${task ? `<div class="tag">from quest ${shortId(task.id)} · ${esc(task.name)}</div>` : ""}
+      </div>
+    </div>
+  </div>`;
+}
+
+function renderOrders() {
+  const byDone = (a, b) => !!review.needs[a.id] - !!review.needs[b.id];
+  const groups = ORDER_GROUPS.map(([kind, title, hint]) => {
+    const items = sweep.needsYou.filter(n => n.kind === kind).sort(byDone);
+    if (!items.length) {
+      return "";
+    }
+    const left = items.filter(n => !review.needs[n.id]).length;
+    return `<div class="orders-group"><h3>${title}<span>${left} of ${items.length} open · ${hint}</span></h3>
+      <div class="list">${items.map(renderNeed).join("")}</div></div>`;
+  }).join("");
+  return `<h2>PARTY ORDERS</h2>
+    <p class="lede">What the guild needs from you after this sweep. Tick them off as you go; click a line for details.</p>
+    ${groups}`;
+}
+
+function renderTimeline() {
+  const t1 = sweep.running ? new Date() : new Date(sweep.ended);
+  const total = Math.max(1, minutesBetween(sweep.started, localIso(t1)));
+  const labelW = 170, W = 900, laneH = 26, top = 22;
+  const H = top + sweep.tasks.length * laneH + 6;
+  const x = iso => labelW + (minutesBetween(sweep.started, iso) / total) * (W - labelW - 10);
+
+  const ticks = [];
+  const hour = new Date(sweep.started); hour.setMinutes(0, 0, 0); hour.setHours(hour.getHours() + 1);
+  for (let h = hour; h <= t1; h = new Date(h.getTime() + 3600000)) {
+    const px = x(localIso(h));
+    ticks.push(`<line x1="${px}" x2="${px}" y1="${top - 6}" y2="${H}" stroke="var(--line)"/>
+      <text x="${px}" y="12" fill="var(--faint)" font-size="11" text-anchor="middle">${localIso(h).slice(11, 16)}</text>`);
+  }
+
+  const lanes = sweep.tasks.map((t, i) => {
+    const y = top + i * laneH;
+    const bars = (t.spans || []).map(s => {
+      const color = s.state === "blocked" ? "var(--block)" : `var(--${STATUS_COLOR[t.status]})`;
+      const x0 = x(s.from), x1 = x(s.to || localIso(t1));
+      const tip = `${s.state} ${hhmm(s.from)}–${hhmm(s.to)}${s.approx ? " (estimated)" : ""}${s.note ? " — " + s.note : ""}`;
+      return `<rect x="${x0}" y="${y + 6}" width="${Math.max(2, x1 - x0)}" height="12" rx="1" fill="${color}" opacity="${s.approx ? 0.55 : 0.95}"><title>${esc(tip)}</title></rect>`;
+    }).join("");
+    return `<text x="0" y="${y + 16}" fill="var(--text)" font-size="12.5" data-view="task:${esc(t.id)}" style="cursor:pointer"><tspan fill="var(--faint)">${shortId(t.id)}</tspan> ${esc(t.name)}</text>${bars}`;
+  }).join("");
+
+  return `<div class="timeline"><svg viewBox="0 0 ${W} ${H}">${ticks.join("")}${lanes}</svg></div>
+    <div class="legend"><span><i style="background:var(--gold)"></i>cleared</span><span><i style="background:var(--run)"></i>in progress</span><span><i style="background:var(--block)"></i>stalled</span><span><i style="background:var(--gold);opacity:.55"></i>time estimated</span></div>`;
+}
+
+function renderChronicle() {
+  return `<h2>CHRONICLE</h2>
+    <p class="lede">How the night went. Hover a bar for its times; click a quest name to open it.</p>
+    ${renderTimeline()}
+    ${bulletSection("TALES FROM THE ROAD", sweep.howItWent)}`;
+}
+
+function renderProof(task, check, key) {
+  const files = check.evidence || [];
+  if (!files.length) {
+    return "";
+  }
+  const base = taskFolder(task);
+  const images = files.filter(isImage);
+  const logs = files.filter(f => !isImage(f));
+  const shown = review.openProof[key] ? images : images.slice(0, PROOF_SHOWN);
+  const hidden = images.length - shown.length;
+  return `<div class="proof">
+    ${shown.map(f => `<img loading="lazy" src="${esc(base + f)}" data-full="${esc(base + f)}" title="${esc(f)}">`).join("")}
+    ${hidden ? `<span class="more" data-proof="${esc(key)}">+${hidden} more</span>` : ""}
+    ${logs.map(f => `<a href="${esc(base + f)}" target="_blank" title="${esc(f)}">${esc(f.replace(/^evidence\//, ""))}</a>`).join("")}
+  </div>`;
+}
+
+function renderObjectives(t) {
+  return `<div class="list">${(t.checks || []).map((c, i) => `<div class="row">
+    <div class="main"><span class="ico ${c.pass ? "" : "fail"}">${c.pass ? "★" : "✗"}</span>
+      <div class="body">${esc(c.text)}${c.note ? `<div class="sub">${esc(c.note)}</div>` : ""}</div></div>
+    ${renderProof(t, c, t.id + ":" + i)}
+  </div>`).join("")}</div>`;
+}
+
+function renderDecision(c, i) {
+  const state = review.calls[c.id] || "";
+  return `<div class="row call ${state}" data-call="${esc(c.id)}">
+    <div class="main"><span class="n">${i + 1}</span>
+      <div class="body"><div class="ctext">${esc(c.call)}</div><div class="sub">${esc(c.why)}</div></div>
+      <div class="btns"><button class="ok ${state === "ok" ? "on" : ""}" data-set="ok">APPROVE</button><button class="rv ${state === "rv" ? "on" : ""}" data-set="rv">REVISIT</button></div>
+    </div>
+    <textarea placeholder="What should change?" data-note="${esc(c.id)}">${esc(review.notes[c.id] || "")}</textarea>
+  </div>`;
+}
+
+function renderDecisions(t) {
+  const calls = t.calls || [];
+  if (!calls.length) {
+    return `<p class="lede">No decisions were made without you.</p>`;
+  }
+  const left = unreviewedCalls(t).length;
+  return `<p class="lede">Calls the party made while you were away. Approve them, or mark one to revisit and say what should change.</p>
+    <div class="list">${calls.map(renderDecision).join("")}</div>
+    ${left ? `<div class="bulk"><button data-approve-rest="${esc(t.id)}">APPROVE THE OTHER ${left}</button></div>` : ""}`;
+}
+
+function bulletSection(title, items) {
+  return items?.length ? `<div class="notes"><h3>${title}</h3><ul>${items.map(i => `<li>${esc(i)}</li>`).join("")}</ul></div>` : "";
+}
+
+function renderNotes(t) {
+  const next = (t.next || "").replace(/^Next:\s*/, "");
+  return `${bulletSection("WORD FROM THE FIELD", t.forYou)}
+    ${bulletSection("DISCOVERIES", t.rootCauses)}
+    ${next ? `<div class="next"><b>NEXT</b>${esc(next)}</div>` : ""}`;
+}
+
+function pathSection(title, paths) {
+  return paths?.length ? `<h3>${title}</h3><ul>${paths.map(p => `<li>${esc(p)}</li>`).join("")}</ul>` : "";
+}
+
+function renderInventory(t) {
+  const changed = t.changed || {};
+  return `<div class="paths">
+    ${pathSection(`IN CL ${esc(t.cl || "?")}`, changed.inCl)}
+    ${(changed.otherCls || []).map(o => pathSection(`LEFT IN CL ${esc(o.cl)}`, o.paths)).join("")}
+    ${pathSection("ASSETS", changed.assets)}
+  </div>`;
+}
+
+function questTab(t) {
+  return review.tabs[t.id] || (unreviewedCalls(t).length ? "decisions" : "objectives");
+}
+
+function renderQuestStats(t) {
+  const checks = t.checks || [], calls = t.calls || [];
+  const passed = checks.filter(c => c.pass).length;
+  const left = unreviewedCalls(t).length;
+  const files = checks.flatMap(c => c.evidence || []);
+  const shots = files.filter(isImage).length;
+  return `<div class="stats">
+    <div class="stat"><b style="color:var(--${passed === checks.length ? "gold" : "block"})">${passed}/${checks.length}</b><span>OBJECTIVES MET</span></div>
+    <div class="stat"><b style="color:var(--${left ? "revisit" : "ok"})">${calls.length - left}/${calls.length}</b><span>DECISIONS REVIEWED</span></div>
+    <div class="stat"><b>${shots}</b><span>SCREENSHOTS · ${files.length - shots} LOGS</span></div>
+  </div>`;
+}
+
+function renderQuest(t) {
+  const span = t.spans?.length ? `${hhmm(t.spans[0].from)}–${hhmm(t.spans[t.spans.length - 1].to)}` : "not started";
+  const tab = questTab(t);
+  const left = unreviewedCalls(t).length;
+  const tabs = QUEST_TABS.map(([key, label]) =>
+    `<button class="tab ${tab === key ? "sel" : ""}" data-tab="${key}">${label}${key === "decisions" && left ? `<em>${left}</em>` : ""}</button>`).join("");
+  const body = { objectives: renderObjectives, decisions: renderDecisions, notes: renderNotes, inventory: renderInventory }[tab](t);
+
+  return `<h2><span class="stamp ${t.status}">${STATUS_LABEL[t.status].toUpperCase()}</span><span class="qname">${esc(t.name)}</span></h2>
+    <div class="qmeta">quest ${shortId(t.id)} · ${span} · CL ${esc(t.cl || "—")}${t.model ? " · " + esc(t.model) : ""}${t.after && t.after !== "none" ? " · after " + shortId(t.after) : ""}</div>
+    <p class="lede">${esc(t.goal)}</p>
+    ${renderQuestStats(t)}
+    <div class="tabs">${tabs}</div>
+    ${body}`;
+}
+
+function renderPane() {
+  const pane = document.getElementById("pane");
+  if (review.view === "orders") {
+    pane.innerHTML = renderOrders();
+    return;
+  }
+  if (review.view === "chronicle") {
+    pane.innerHTML = renderChronicle();
+    return;
+  }
+  pane.innerHTML = renderQuest(findTask(review.view.slice(5)));
+}
+
+function renderDebrief() {
+  const calls = allCalls();
+  const ok = calls.filter(c => review.calls[c.id] === "ok").length;
+  const rv = calls.filter(c => review.calls[c.id] === "rv").length;
+  const pct = n => calls.length ? (n / calls.length) * 100 : 0;
+  document.getElementById("debrief").innerHTML = `
+    <span class="lbl">DEBRIEF ${ok + rv}/${calls.length}${rv ? ` <span style="color:var(--revisit)">· ${rv} REVISIT</span>` : ""}</span>
+    <div class="xp"><i style="width:${pct(ok)}%;background:linear-gradient(180deg,#b6ffc8,var(--ok))"></i><i style="width:${pct(rv)}%;background:var(--revisit)"></i></div>
+    <span class="sp"></span><span class="toast" id="toast"></span>
+    <button class="copy" id="copy" ${rv ? "" : "disabled"}>▶ COPY REVISITS AS FEEDBACK</button>`;
+}
+
+function render() {
+  const staleQuest = review.view.startsWith("task:") && !findTask(review.view.slice(5));
+  if (!review.view || staleQuest) {
+    review.view = defaultView();
+  }
+  renderTop();
+  renderMenu();
+  renderPane();
+  renderDebrief();
+}
+
+function feedbackMarkdown() {
+  const lines = allCalls().filter(c => review.calls[c.id] === "rv").map(c =>
+    `- **${c.task.name}** (${c.task.id}): ${c.call}\n  - Sweep's reason: ${c.why}\n  - Liang: ${review.notes[c.id] || "(no note)"}`);
+  return `# Revisit decisions from sweep ${sweep.id}\n\n## Feedback\n${lines.join("\n")}\n\n## Context\nReviewed on the quest board, _runs/${sweep.id}/dashboard.html.\n`;
+}
+
+async function copyFeedback() {
+  const text = feedbackMarkdown();
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch (e) {
+    const ta = document.createElement("textarea");
+    ta.value = text; document.body.appendChild(ta); ta.select(); document.execCommand("copy"); ta.remove();
+  }
+  document.getElementById("toast").textContent = "Copied. Paste it to liang-queue-feedback.";
+}
+
+function commit() {
+  saveReview();
+  render();
+}
+
+function selectView(view) {
+  review.view = view;
+  commit();
+}
+
+function moveSelection(step) {
+  const views = ["orders", "chronicle", ...sweep.tasks.map(t => "task:" + t.id)];
+  const i = views.indexOf(review.view);
+  selectView(views[(i + step + views.length) % views.length]);
+}
+
+function openLightbox(img) {
+  const box = document.getElementById("lightbox");
+  box.querySelector("img").src = img.dataset.full;
+  box.querySelector("div").textContent = img.title;
+  box.classList.add("on");
+}
+
+function closeLightbox() {
+  document.getElementById("lightbox").classList.remove("on");
+}
+
+function onClick(e) {
+  const el = e.target;
+  if (el.id === "copy") {
+    return copyFeedback();
+  }
+  if (el.closest("#lightbox")) {
+    return closeLightbox();
+  }
+  if (el.matches(".proof img")) {
+    return openLightbox(el);
+  }
+  const viewEl = el.closest("[data-view]");
+  if (viewEl) {
+    return selectView(viewEl.dataset.view);
+  }
+  if (el.dataset.tab) {
+    review.tabs[review.view.slice(5)] = el.dataset.tab;
+    return commit();
+  }
+  if (el.dataset.proof) {
+    review.openProof[el.dataset.proof] = true;
+    return commit();
+  }
+  if (el.dataset.set) {
+    const id = el.closest(".call").dataset.call;
+    review.calls[id] = review.calls[id] === el.dataset.set ? "" : el.dataset.set;
+    return commit();
+  }
+  if (el.dataset.approveRest) {
+    unreviewedCalls(findTask(el.dataset.approveRest)).forEach(c => review.calls[c.id] = "ok");
+    return commit();
+  }
+  const needBody = el.closest("[data-open-need]");
+  if (needBody) {
+    const id = needBody.dataset.openNeed;
+    review.openNeed[id] = !review.openNeed[id];
+    return commit();
+  }
+}
+
+function onChange(e) {
+  if (e.target.dataset.need) {
+    review.needs[e.target.dataset.need] = e.target.checked;
+    commit();
+  }
+}
+
+function onInput(e) {
+  if (e.target.dataset.note) {
+    review.notes[e.target.dataset.note] = e.target.value;
+    saveReview();
+  }
+}
+
+function onKey(e) {
+  if (["TEXTAREA", "INPUT"].includes(document.activeElement?.tagName)) {
+    return;
+  }
+  if (e.key === "Escape") {
+    return closeLightbox();
+  }
+  if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+    e.preventDefault();
+    moveSelection(e.key === "ArrowDown" ? 1 : -1);
+  }
+}
+
+// file:// pages cannot fetch JSON, so live data comes from re-injecting the data script.
+function reloadData() {
+  const s = document.createElement("script");
+  s.src = "sweep-data.js?t=" + Date.now();
+  s.onload = () => {
+    s.remove();
+    if (document.activeElement?.tagName === "TEXTAREA") {
+      return;
+    }
+    sweep = window.SWEEP;
+    render();
+  };
+  document.head.appendChild(s);
+}
+
+function start() {
+  sweep = window.SWEEP;
+  if (!sweep) {
+    document.getElementById("pane").textContent = "sweep-data.js not found next to this page.";
+    return;
+  }
+  loadReview();
+  render();
+  document.addEventListener("click", onClick);
+  document.addEventListener("change", onChange);
+  document.addEventListener("input", onInput);
+  document.addEventListener("keydown", onKey);
+  setInterval(() => sweep.running && reloadData(), REFRESH_MS);
+}
+</script>
+<script src="sweep-data.js"></script>
+<script>start();</script>
+</body>
+</html>

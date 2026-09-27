@@ -1,6 +1,6 @@
 ---
 name: liang-queue-sweep
-description: "Run the project's ready tasks from .liang/queue/ unattended: pre-flight check and a run plan (order, what runs together, model per task), one fresh child session per task, judgement calls logged instead of asked, evidence saved, a run summary written and pushed to the user. Also --check (pre-flight only) and --status (list tasks). Use when the user says \"sweep the queue\", \"run the queue\", \"go queue\", \"run my pending tasks\", is about to go AFK, or starts it headless. Not for capturing tasks (liang-queue-add) or closing work already done (liang-queue-tidy)."
+description: "Run the project's ready tasks from .liang/queue/ unattended: pre-flight check and a run plan (order, what runs together, model per task), one fresh child session per task, judgement calls logged instead of asked, evidence saved, a live JRPG quest-board dashboard per sweep, a run summary written and pushed to the user. Also --check (pre-flight only) and --status (list tasks). Use when the user says \"sweep the queue\", \"run the queue\", \"go queue\", \"run my pending tasks\", is about to go AFK, or starts it headless. Not for capturing tasks (liang-queue-add) or closing work already done (liang-queue-tidy)."
 ---
 
 # Liang Queue Sweep
@@ -11,7 +11,7 @@ Work through the queue while the user is away, and leave a record they can revie
 
 - **Only `ready` runs:** skip every other status. The user's "go" for this sweep approves every `ready` task, and nothing else.
 - **Plan first:** decide order, what runs together and each task's model per `references/run-plan.md`. No task runs before its `after:` task, or a dependency the plan found, is `done`.
-- **One child session per task:** give each task a fresh context holding the task folder, the project rules and `references/child-brief.md`. The orchestrator only plans, dispatches, reads the Log and writes the run summary. Without child sessions, run tasks one by one on the default model and re-read only the task folder at each start.
+- **One child session per task:** give each task a fresh context holding the task folder, the project rules and `references/child-brief.md`. The orchestrator only plans, dispatches, reads the Log, keeps the dashboard data current and writes the run summary. Without child sessions, run tasks one by one on the default model and re-read only the task folder at each start.
 - **Decide, don't ask:** the user is away. Make each judgement call, record it and its reason in the Log, and continue.
 - **Stop only for:** an action that is irreversible or reaches outside the machine, a hard blocker, or a Boundary. Mark the task `blocked` with what the user must do, then continue with tasks that do not depend on it.
 - **Project rules first:** read the project's agent instructions (CLAUDE.md, AGENTS.md) and `.liang/queue/_rules.md` before anything else.
@@ -42,14 +42,16 @@ With pi, pass the same request as the prompt. Either can also start from a sched
    - List anything that needs the user's hands.
    - Make the run plan.
    - In `--check` mode, report the plan and what would block, and stop here.
+   - Open the sweep's folder `_runs/YYYYMMDD_HHMM/`: write `sweep-data.js` with `running: true` and every planned task as `waiting`, and build `dashboard.html` per `references/run-report.md`. Tell the user its path.
 3. **Run**, per the plan:
    - Set `status: running` and dispatch the child session on the planned model.
-   - The child plans and does the work, saves evidence and appends one Log entry.
+   - The child plans and does the work, saves evidence, appends one Log entry and writes `result.json`.
    - Read the entry. Set `done` and move the folder to `_done/`, or set `blocked`.
+   - Rewrite `sweep-data.js` whenever a task starts, blocks, resumes or finishes, so the open dashboard follows the sweep.
    - When a task is `done`, close the feedback named in its `from:` as `done`, pointing its Resolution at the task.
 4. **Resume:** each task found `running` at startup was left by a sweep that died. Continue it from the Log's `Next:` line; do not start it over.
 5. **Wrap up:**
-   - Write `_runs/YYYYMMDD_HHMM.md` per `references/run-report.md`.
+   - Write `report.md` per `references/run-report.md`, set `running: false` in `sweep-data.js`, and re-check the dashboard renders.
    - Remove the lock.
    - Push a short summary to the user: done, blocked, and what needs them. Send it the moment a task blocks, too, if a push channel exists.
 
@@ -71,7 +73,8 @@ With pi, pass the same request as the prompt. Either can also start from a sched
 
 ## Visual Tone
 
-Terse, scannable, phone-friendly. The run summary leads with counts (done / blocked / waiting / skipped), then "needs you" items, then one line per task.
+- **Dashboard:** a JRPG quest board, layered so the summary shows first and detail waits behind a click; `references/run-report.md` holds the contract.
+- **Text summary and push:** terse and scannable. Lead with counts (done / blocked / waiting / skipped), then "needs you" items, then one line per task.
 
 ## Relationship to Other Skills
 
@@ -82,5 +85,6 @@ Terse, scannable, phone-friendly. The run summary leads with counts (done / bloc
 
 - `references/run-plan.md`: how to plan order, what runs together, and the model per task.
 - `references/child-brief.md`: the brief handed to each task's child session.
-- `references/run-report.md`: the `_runs/` summary shape and the push message.
+- `references/run-report.md`: the dashboard contract, the `report.md` shape and the push message.
+- `assets/dashboard.html`: the first quest board, the starting point for a project's first sweep.
 - `../liang-queue-core/references/format.md`: queue layout, task and feedback formats.
