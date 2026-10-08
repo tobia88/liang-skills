@@ -7,29 +7,17 @@ in Claude Code via links (see [Install](#install)).
 
 ## Skills
 
-### Queue family — note feedback, park agreed work, run it unattended
-
 | Skill | What it does |
 | --- | --- |
-| `liang-queue-core` | Shared contract: queue layout, task and feedback formats, status values, who writes what, family-wide rules. Read by the others, not run on its own. |
-| `liang-queue-feedback` | Writes the user's feedback into `.liang/queue/_feedback/` in their own words, quickly, before it becomes work. |
-| `liang-queue-add` | Captures agreed work, or promotes feedback, as `.liang/queue/YYYYMMDD_NN_TaskName/task.md` (goal, the user's decisions, done-when, boundaries — no step plan) and saves its assets. |
-| `liang-queue-sweep` | Runs `ready` tasks while the user is away: pre-flight and a run plan (inferred order, what runs together, cheapest model per task with one step-up), one fresh child session per task, logged judgement calls, saved evidence, run summary and push. `--check` and `--status` modes. |
-| `liang-queue-tidy` | Checks open feedback and unfinished tasks against the project as it is now, and closes the ones already done or no longer relevant, with evidence, once the user agrees. |
-
-### Standalone tools
-
-| Skill | What it does |
-| --- | --- |
-| `liang-code-cleanup` | Behavior-preserving readability pass (renames, dead code, why-comments) with recon and a no-logic-change attestation. |
-| `liang-game-prototyper` | Small playable HTML game prototypes in `.liang/prototypes/`, reusing a shared asset pool. |
 | `liang-ue-cpp-style` | UE5.5+ C++ coding conventions reference. |
+| `liang-ue-angelscript-style` | Unreal Engine AngelScript coding conventions reference. |
 
 ### Retired
 
-The quest and brainstorm families (replaced by the queue family), `liang-skill-blacksmith`,
-`liang-replica-forge`, `liang-video-sampler`, the `/goal` family-audit command and `_family-audit/`
-were deleted; their last state is tagged `quest-family-final`.
+The quest, brainstorm and queue families, `liang-code-cleanup`, `liang-game-prototyper`,
+`liang-guide-forge`, `liang-skill-blacksmith`, `liang-replica-forge`, `liang-video-sampler`,
+the `/goal` family-audit command and `_family-audit/` were deleted. The quest and brainstorm
+families' last state is tagged `quest-family-final`.
 
 ## Install
 
